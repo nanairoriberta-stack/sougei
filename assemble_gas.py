@@ -5,7 +5,11 @@ GUARD = '''<script>(function(){var n=0;function show(m){if(n++>4)return;var d=do
 window.addEventListener("error",function(e){var t=e.target;if(t&&t.tagName==="SCRIPT"&&t.src){show("読み込めませんでした: "+t.src);return}if(t&&t!==window)return;show((e.message||"")+(e.filename?"\\n"+String(e.filename).split("/").pop()+":"+e.lineno:""))},true);
 window.addEventListener("unhandledrejection",function(e){var r=e.reason;if(r instanceof Error)show("（あとで起きたエラー）"+r.message)})})();</script>'''
 rd=lambda p: open(p,encoding='utf-8').read()
-def js(p): return rd(p).replace('</script>','<\\/script>')
+def js(p): return ev(rd(p))
+# Googleは画面をいったん自分の仕組みで読み直してから書き出す。そのとき、プログラムの中の「タグに見える文字」（<form や </div> など）で
+# プログラムを途中で切ってしまうことがある（2026-10-28 実機で「Unexpected end of input」）。そこで、プログラムは「<」を1つも含まない
+# 文字列にして渡し、画面の中で実行する（中身は同じ。読み込みの速さもほぼ変わらない）
+def ev(code): return '(0,eval)(' + json.dumps(code, ensure_ascii=False).replace('<', '\\u003c').replace('\u2028', '\\u2028').replace('\u2029', '\\u2029') + ')'
 cal_html = f'''<!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">

@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.27j',
+  VERSION: '2026.10.27k',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -60,7 +60,7 @@ function checkPage_() {
     'body{margin:0;background:#f3f5f4;color:#18201d;font:15px/1.6 system-ui,sans-serif}main{max-width:720px;margin:0 auto;padding:16px}' +
     'h1{font-size:20px;margin:8px 0}li{list-style:none;background:#fff;border:1px solid #dde3e0;border-radius:8px;padding:10px 12px;margin:8px 0}' +
     'ul{padding:0}b.ok{color:#13795b}b.ng{color:#c23a32}b.wait{color:#9a6a00}small{color:#5f6b66;display:block;word-break:break-all}</style></head><body><main>' +
-    '<h1>動作の確認（版 ' + APP.VERSION + '）</h1><p>この画面の写真を担当者に送ってください。1分ほどで全部の結果が出ます。</p><ul id="r"></ul></main><script>' + checkScript_() + '</script></body></html>';
+    '<h1>動作の確認（版 ' + APP.VERSION + '）</h1><p>この画面の写真を担当者に送ってください。1分ほどで全部の結果が出ます。</p><ul id="r"></ul></main><script>(0,eval)(' + JSON.stringify(checkScript_()).replace(/</g, '\\u003c') + ')</script></body></html>';
   return HtmlService.createHtmlOutput(html).setTitle('動作の確認').addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 function checkScript_() {

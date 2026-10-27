@@ -281,6 +281,19 @@ async function bootstrap() {
     return `sougei ${r.files.sougei.len}文字・calendar ${r.files.calendar.len}文字、シート${Object.keys(r.sheets).length}枚`;
   });
 
+  await test("画面のプログラムに「<」を含めない（Googleが画面を書き出すとき、タグに見える文字でプログラムを途中で切るため）", async () => {
+    const { g } = await bootstrap();
+    const pages = { calendar: g.ctx.doGet({ parameter: {} }).getContent(), sougei: g.ctx.doGet({ parameter: { page: "sougei" } }).getContent(), check: g.ctx.doGet({ parameter: { page: "check" } }).getContent() };
+    const out = [];
+    for (const [n, h] of Object.entries(pages)) {
+      const scripts = [...h.matchAll(/<script(?: [^>]*)?>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+      assert.ok(scripts.length >= 1, n);
+      scripts.forEach((x, i) => assert.ok(!x.includes("<"), `${n} の ${i + 1}番目のプログラムに < がある`));
+      out.push(`${n} ${scripts.length}個`);
+    }
+    return out.join("・");
+  });
+
   await test("大きなマスタ（セル上限5万字を超える）も分割して保存・読み込み", async () => {
     const { g, admin } = await bootstrap();
     const raw = g.sheets.get("_docs").data.find((r) => r[0] === "kv/master");
