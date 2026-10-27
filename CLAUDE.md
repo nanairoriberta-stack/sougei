@@ -56,7 +56,7 @@ bash build.sh        # → gas/out/ ができる
 bash test.sh         # Nodeのテスト全部
 bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ```
-- テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎の変更/迎え先・送り先/休日出勤/勤務時間変更）、`test-agent.js`（AIと相談の適用 10件）、
+- テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-excel.js`（送迎表のExcel出力に版が入る）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎の変更/迎え先・送り先/休日出勤/勤務時間変更）、`test-agent.js`（AIと相談の適用 10件）、
   `gas/test-gas.js`（サーバー 22件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
   `mcp/test-mcp.js`（公式MCPクライアントで35件。Googleの302転送も再現）、`pw/gas_ui.js`・`pw/agent_ui.js`（画面）
 - `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
@@ -68,6 +68,10 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 `setup` が `職員ID` シートを作り、職員番号（3桁、自動）と初期PINを振る。管理者は `000`。
 暗証番号の再発行：`職員ID` のF列（備考）に「再発行」と書いて、エディタで `resetPins` を実行 → D列に新しい初期番号、前のログインは切れる（キャッシュで最長10分）。
 運用開始までの手順書（依頼者向け）は会話で Artifact として渡した（ファイルの貼り方・setup・デプロイ・データ移行・権限・試運転・職員への配布・日々の運用）。
+
+## 送迎表のExcel出力に入る版
+`appVerLabel()`（sougei.jsx）＝ `Ver293(2026.10.27f)`：Ver＋`SEED_VERSION`、括弧内はGoogle版の `APP.VERSION`（ログイン時に `SGHost.me.version` で届く）。
+ファイル名 `送迎表_11月2日(月)_Ver293(2026.10.27f).xlsx`、表の一番下の行、印刷の右上に入る。**ファイルを直して出すたびに `gas/Code.gs` の `APP.VERSION`（と `calendar_app.js` の `APP_VERSION`）を上げる**（`SEED_VERSION` は上げるとマスタの初期データが入り直るので、版の区別のために上げない）。
 
 ## データの置き方（スプレッドシート）
 - `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）

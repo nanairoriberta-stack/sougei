@@ -17,6 +17,11 @@ const GRID_START = 6 * 60;
 const GRID_END = 22 * 60;
 const HOLD_ID = "__hold__";
 const SEED_VERSION = 293; // マスタ初期データの版。上げると次回起動時に自動で最新seedへ更新
+// Excelに書き出す「どの版で出したか」。Ver293=送迎表の版、括弧内=Google版のファイルの版（gas/Code.gs の APP.VERSION。ログイン時に届く）
+const appVerLabel = () => {
+  const b = typeof window !== "undefined" && window.SGHost && window.SGHost.me && window.SGHost.me.version;
+  return `Ver${SEED_VERSION}${b ? `(${b})` : ""}`;
+};
 
 // ===== 版(体制)の設定 =====
 // このファイルがどの版かを決める。v1=現体制版 / v2=新体制版(11/1〜) / v3=りんく・ぷれいす版
@@ -2290,7 +2295,7 @@ function buildExcelHtml(master, sheet, date) {
 
   let rows = "";
   // タイトル行
-  rows += `<tr><td colspan="${totalCols}" style="border:none;font-size:12pt;font-weight:bold">送迎表　${esc(date)}(${DAYS[wd]})</td></tr>`;
+  rows += `<tr><td colspan="${totalCols}" style="border:none;font-size:12pt;font-weight:bold">送迎表　${esc(date)}(${DAYS[wd]})　<span style="font-size:9pt;font-weight:normal;color:#78716c">${esc(appVerLabel())}</span></td></tr>`;
   // 部署行
   rows += `<tr><td class="h">部署</td>`;
   cols.forEach((s) => { rows += `<td class="h" style="background:${hexOf(s.deptId)}">${esc(deptName(s.deptId))}</td>`; });
@@ -2389,7 +2394,7 @@ function downloadExcel(master, sheet, date) {
   const blob = new Blob(["\ufeff" + html], { type: "application/vnd.ms-excel" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `送迎表_${dateWithDay(date)}.xls`;
+  a.download = `送迎表_${dateWithDay(date)}_${appVerLabel()}.xls`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -3836,6 +3841,18 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   const anyMoved = cols.some((s) => s.baseDeptId);
   // ◆印はExcelでは使用しない(列の部署帯で当日の勤務先が分かるため)
 
+  // ---- どの版で出したか(表の一番下と、印刷したときの右上) ----
+  {
+    const ver = appVerLabel();
+    const vr = ws.rowCount + 2;
+    ws.mergeCells(vr, 1, vr, nCols);
+    const vc = ws.getCell(vr, 1);
+    vc.value = `出力: 送迎表 ${ver}　${EDITION_LABEL}　${date}(${DAYS[wd]})`;
+    vc.font = { name: "Yu Gothic", size: 9, color: { argb: "FF78716C" } };
+    vc.alignment = { horizontal: "right", vertical: "middle" };
+    ws.headerFooter = { oddHeader: `&R&8送迎表 ${ver.replace(/&/g, "&&")}` };
+  }
+
   // ---- 第2シート: 車両の動き(各部署にどの車がいつ残っているか) ----
   // ※ ヘルプ車なしシートを作る2回目の呼び出しでは作らない(同じシートが二重にできるため)
   if (!opts.gridOnly) {
@@ -3890,7 +3907,7 @@ async function exportExcel(master, sheet, date) {
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `送迎表_${dateWithDay(date)}.xlsx`;
+    a.download = `送迎表_${dateWithDay(date)}_${appVerLabel()}.xlsx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
