@@ -44,10 +44,11 @@ const D = path.join(__dirname, "../gas/out");
   await pg.locator(".sgbox").screenshot({ path: "g_sgbox.png" });
   const self = await pg.locator(".sgbox .sgchip").innerText(); assert.ok(self.includes("余村慎"));
   assert.strictEqual(await pg.locator("#f-sgq-staff").count(), 0, "他人を選ぶ欄は出ない");
+  await pg.fill("#f-start", "09:00"); await pg.fill("#f-end", "17:00");      // 休日出勤は時間を入れる
   await pg.click("[data-save]"); await pg.waitForTimeout(2500);
   console.log("一般職員が選べないラベル:", dis.join("/"), "/ 休日出勤の職員:", self);
   const m = api(t, "kv.get", ["master"]).data.value, s = api(t, "kv.get", ["sheet:" + date]).data.value; const sid = m.staff.find((x) => x.name === "余村慎").id;
-  assert.ok(s.staffOv[sid].start && s.staffOv[sid].workToday, "AM休と休日出勤が送迎表に");
+  assert.ok(s.staffOv[sid].workToday && s.staffOv[sid].start === "9:00" && s.staffOv[sid].end === "17:00", "休日出勤（時間）が送迎表に");
   console.log("スマホでAM休＋休日出勤 → 送迎表:", JSON.stringify(s.staffOv[sid]), "/ 画面エラー:", errs);
   const real = (a) => a.filter((x) => !/Failed to load resource/.test(x));   // 外部への通信はテストでは止めている（フォント・画像）
   assert.deepStrictEqual(real(errs), []);
@@ -57,46 +58,53 @@ const D = path.join(__dirname, "../gas/out");
   await P.pg.screenshot({ path: "g_sougei.png" });
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);
-  // 管理者がカレンダーで「送迎」「ヘルプ」「利用者休み（迎えなし）」を入れる → 送迎表に便・ヘルプ・迎えなし
+  // 管理者がカレンダーで「送迎」「ヘルプ」「利用者休み」「勤務時間変更」「その他予定」を入れる → 送迎表に反映
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
-  const veh = m.vehicles[0].name;
-  await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-ride"); await A.pg.waitForTimeout(300);
-  await A.pg.check('input[name="w-kind"][value="other_run"]'); await A.pg.waitForTimeout(200);
-  await pick("users", "森"); await pick("staff", "白戸"); await pick("staff", "吉岡");
-  await A.pg.selectOption("#w-vehicle", veh); await A.pg.click('[data-fill="w-note"][data-v="通院"]');
-  await A.pg.fill("#f-start", "09:30"); await A.pg.fill("#f-end", "10:30");
-  await A.pg.locator(".sheet").screenshot({ path: "g_ride.png" });
-  await A.pg.click("[data-save]"); await A.pg.waitForTimeout(1500);
-  await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-help"); await A.pg.waitForTimeout(300);
-  await pick("users", "中村"); await A.pg.click('[data-fill="w-note"][data-v="入浴"]'); await A.pg.fill("#f-start", "14:00"); await A.pg.fill("#f-end", "15:00");
-  await A.pg.click("[data-save]"); await A.pg.waitForTimeout(1500);
-  await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-user"); await A.pg.waitForTimeout(300);
-  await pick("users", "森"); await A.pg.check('input[name="w-ukind"][value="change"]'); await A.pg.waitForTimeout(200);
-  await A.pg.check('input[name="w-meet"][value="none"]'); await A.pg.waitForTimeout(200); await A.pg.click('[data-fill="w-reason"][data-v="受診"]');
-  await A.pg.locator(".sheet").screenshot({ path: "g_user.png" });
-  await A.pg.click("[data-save]"); await A.pg.waitForTimeout(1500);
-  await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-shift"); await A.pg.waitForTimeout(300);
-  await pick("staff", "八壁"); await A.pg.check('input[name="w-we"][value="time"]'); await A.pg.waitForTimeout(200);
+  const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-" + label); await A.pg.waitForTimeout(300); };
+  const save = async (ms) => { await A.pg.click("[data-save]"); await A.pg.waitForTimeout(ms || 1500); };
+  // 送迎：迎えは「受診後送り」、送りは時間変更
+  await add("ride"); await pick("users", "森");
+  const meetOpts = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
+  const sendOpts = await A.pg.$$eval('input[name="w-send"]', (o) => o.map((x) => x.parentElement.innerText));
+  assert.deepStrictEqual(meetOpts, ["いつもどおり", "時間変更", "家族送り", "受診後送り"]); assert.deepStrictEqual(sendOpts, ["いつもどおり", "時間変更", "家族迎え"]);
+  await A.pg.check('input[name="w-meet"][value="clinic"]'); await A.pg.waitForTimeout(200);
+  await A.pg.check('input[name="w-send"][value="time"]'); await A.pg.waitForTimeout(200); await A.pg.fill("#w-sendt", "15:30");
+  await A.pg.locator(".sheet").screenshot({ path: "g_ride.png" }); await save();
+  // ヘルプ：担当・開始時刻・行き先（終了の時刻は出ない）
+  await add("help"); await pick("staff", "白戸"); await A.pg.fill("#w-dest", "中村"); await A.pg.fill("#f-start", "14:00");
+  assert.ok(await A.pg.locator("#w-end").isHidden(), "ヘルプは開始時刻だけ");
+  await A.pg.locator(".sheet").screenshot({ path: "g_help.png" }); await save();
+  // 利用者休み：欠席（理由つき）
+  const absent = m.users.find((u) => !["森", "中村"].includes(u.name) && u.name.length >= 2).name;
+  await add("user"); await pick("users", absent); await A.pg.click('[data-fill="w-reason"][data-v="体調不良"]'); await save();
+  // 職員休みは理由の欄なし
+  await add("leave"); assert.strictEqual(await A.pg.locator("#w-reason").count(), 0, "職員休みに理由の欄はない"); await A.pg.click("[data-close]"); await A.pg.waitForTimeout(300);
+  // 勤務時間変更
+  await add("shift"); await pick("staff", "八壁"); await A.pg.check('input[name="w-we"][value="time"]'); await A.pg.waitForTimeout(200);
   await A.pg.fill("#w-wet", "19:00"); await A.pg.click('[data-fill="w-reason"][data-v="残業"]');
-  await A.pg.locator(".sheet").screenshot({ path: "g_shift.png" });
-  await A.pg.click("[data-save]"); await A.pg.waitForTimeout(2500);
+  await A.pg.locator(".sheet").screenshot({ path: "g_shift.png" }); await save();
+  // その他予定：時間・場所・担当
+  await add("other"); await A.pg.fill("#f-title", "会議"); await A.pg.fill("#f-start", "13:00"); await A.pg.fill("#f-end", "14:00"); await A.pg.fill("#f-place", "2階"); await pick("staff", "日野");
+  await A.pg.locator(".sheet").screenshot({ path: "g_other.png" }); await save(2500);
   const s2 = api(t, "kv.get", ["sheet:" + date]).data.value; const S = (n) => m.staff.find((x) => x.name === n).id, U = (n) => m.users.find((x) => x.name === n).id;
-  const run = s2.runs.find((r) => r.calId);
-  assert.ok(run && run.kind === "other_run" && run.time === "9:30" && run.staffId === S("白戸") && run.staffRiderIds[0] === S("吉岡") && run.vehicleId === m.vehicles[0].id && run.note === "通院", JSON.stringify(run));
-  const hb = s2.blocks.find((x) => x.calId && x.kind === "help"); assert.ok(hb && hb.staffId === "__hold__" && hb.note === "入浴" && hb.time === "14:00");
-  assert.strictEqual(s2.noRide[U("森")].meet, "受診");
+  assert.strictEqual(s2.noRide[U("森")].meet, "受診後送り"); assert.strictEqual(s2.userTime[U("森")].send, "15:30");
+  const hb = s2.blocks.find((x) => x.calId && x.kind === "help"); assert.ok(hb && hb.staffId === S("白戸") && hb.label === "中村" && hb.time === "14:00", JSON.stringify(hb));
+  assert.strictEqual(s2.userAbsent[U(absent)], true, "欠席");
   assert.strictEqual(s2.staffOv[S("八壁")].end, "19:00", "勤務時間変更");
-  const titles = A.pg.locator(".ev-row .t"); const tl = await titles.allInnerTexts();
-  assert.ok(tl.includes("森 送迎（通院）") && tl.includes("中村 ヘルプ（入浴）") && tl.includes("森 迎えなし（受診）") && tl.includes("八壁 退勤19:00（残業）"), tl.join(","));
-  console.log("管理者が入力 →", tl.filter((x) => /送迎|ヘルプ|迎えなし|退勤/.test(x)).join(" / "), "→ 送迎表: 便", run.time, "・ヘルプ(保留欄)", hb.time, "・迎えなし", s2.noRide[U("森")].meet, "・八壁の退勤", s2.staffOv[S("八壁")].end, "/ 画面エラー:", A.errs);
+  const evs = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {}));
+  const mt = evs.find((e) => e.title === "会議"); assert.ok(mt && mt.place === "2階" && mt.tanto[0] === "日野" && !mt.sg, "その他予定：場所・担当（送迎表には載せない）");
+  const tl = await A.pg.locator(".ev-row .t").allInnerTexts();
+  for (const x of ["森 受診後送り・送り15:30", "白戸 ヘルプ（中村）", `${absent} 欠席（体調不良）`, "八壁 退勤19:00（残業）", "会議"]) assert.ok(tl.includes(x), x + " / " + tl.join(","));
+  assert.ok((await A.pg.locator(".ev-row", { hasText: "会議" }).innerText()).includes("担当：日野"), "一覧に担当");
+  console.log("管理者が入力 →", tl.join(" / "), "→ 送迎表: 迎え", s2.noRide[U("森")].meet, "・送り", s2.userTime[U("森")].send, "・ヘルプ(白戸)", hb.time, "・欠席", absent, "・八壁の退勤", s2.staffOv[S("八壁")].end, "/ 画面エラー:", real(A.errs));
   assert.deepStrictEqual(real(A.errs), []);
   // 送迎表を開き直す → カレンダーから入った便・ヘルプが表に出る（画面エラーなし）
   P.errs.length = 0; await P.pg.reload(); await P.pg.waitForTimeout(5000);   // ログインは端末に残っている
   await P.pg.screenshot({ path: "g_sougei_after.png", fullPage: true });
-  const body = await P.pg.locator("#root").innerText(); assert.ok(body.includes("通院") && body.includes("入浴"), "送迎表に便・ヘルプが出る");
-  console.log("送迎表を開き直す → 便（通院）・ヘルプ（入浴）が表に出る / 画面エラー:", real(P.errs));
+  const body = await P.pg.locator("#root").innerText(); assert.ok(body.includes("受診後送り") && body.includes("中村"), "送迎表に受診後送り・ヘルプが出る");
+  console.log("送迎表を開き直す → 森(受診後送り)・ヘルプ（中村）が表に出る / 画面エラー:", real(P.errs));
   assert.deepStrictEqual(real(P.errs), []);
   await b.close();
 })();
