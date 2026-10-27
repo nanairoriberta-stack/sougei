@@ -58,6 +58,30 @@ function setup() {
   Logger.log('初期設定が完了しました。「職員ID」シートの000の初期暗証番号でログインできます。');
 }
 
+/* ================= 暗証番号の再発行（管理者がエディタから実行） =================
+   「職員ID」シートの備考（F列）に「再発行」と書いた人だけ、新しい初期暗証番号をD列に出す。
+   その人のログインは解除され（最長10分で切れる）、新しい番号でログイン → 自分の番号に変更、になる */
+function resetPins() {
+  var n = withLock_(function () {
+    var sh = sheet_(APP.SH.ids), r = rows_(APP.SH.ids), done = [];
+    r.forEach(function (x, i) {
+      var memo = String(x[5] || '');
+      if (!/再発行/.test(memo) || /再発行済み/.test(memo)) return;
+      var no = normNo_(x[0]); if (!no) return;
+      sh.getRange(i + 2, 4).setValue(txt_(randomPin_()));
+      sh.getRange(i + 2, 6).setValue(safe_('再発行済み ' + today_()));
+      setAuth_(no, { salt: '', hash: '', fails: 0, lockUntil: 0, changed: false });
+      var ss = sheet_(APP.SH.sess), sr = rows_(APP.SH.sess);
+      for (var j = 0; j < sr.length; j++) if (normNo_(sr[j][1]) === no) ss.getRange(j + 2, 3).setValue(new Date(0));
+      done.push(no + ' ' + String(x[1]).trim());
+    });
+    if (done.length) log_({ no: '', name: '管理者（エディタ）' }, '暗証番号', '再発行', done.join('、'));
+    return done.length;
+  });
+  Logger.log(n ? n + '人の暗証番号を再発行しました。「職員ID」シートD列の新しい番号を本人に伝えてください。' : '備考（F列）に「再発行」と書いた人がいません。');
+  return n;
+}
+
 /* ================= 入口：すべての呼び出しはここを通る ================= */
 function api(token, method, args) {
   try {

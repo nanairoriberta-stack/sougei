@@ -231,6 +231,25 @@ async function bootstrap() {
     return `家族送り・家族迎え→迎えなし・送りなし、迎え先→便の行き先、ヘルプ→保留欄10:00、休日出勤→9:00〜（津田）・勤務時間変更→退勤15:00、その他予定の担当。一般職員のヘルプ・送迎・他人の休日出勤/勤務時間変更は拒否`;
   });
 
+  await test("暗証番号の再発行：備考に「再発行」と書いて resetPins → 新しい番号でだけログインでき、前のログインは切れる", async () => {
+    const { g } = await bootstrap();
+    const d = device(g); const no = noOf(g, "日野"); await d.login(no, pinOf(g, "日野")); await d.call("auth.changePin", pinOf(g, "日野"), "4826");
+    await d.call("auth.me");
+    const row = idRows(g).findIndex((r) => r[1] === "日野"); const ids = g.sheets.get("職員ID").data;
+    ids[row + 1][5] = "暗証番号を忘れた 再発行";
+    assert.strictEqual(g.ctx.resetPins(), 1);
+    assert.strictEqual(g.ctx.resetPins(), 0, "2回実行しても同じ人を再発行しない");
+    const fresh = pinOf(g, "日野"); assert.ok(/^\d{4}$/.test(fresh), "新しい初期番号");
+    for (const k of [...g.cache.keys()]) if (k.startsWith("s:")) g.cache.delete(k);   // 10分のログイン記憶が切れた後
+    await d.call("auth.me").then(() => assert.fail("前のログインは切れる"), (e) => assert.strictEqual(e.code, "auth"));
+    const d2 = device(g);
+    await d2.login(no, "4826").then(() => assert.fail("前の番号"), (e) => assert.strictEqual(e.code, "login"));
+    const me = await d2.login(no, fresh); assert.ok(me.mustChange, "ログイン後に自分の番号への変更を求める");
+    const log = g.sheets.get("変更履歴").data.slice(1).map((r) => r.join(" | "));
+    assert.ok(log.some((l) => l.includes("再発行") && l.includes("日野")));
+    return "前の番号は使えず、新しい初期番号でログイン → 変更を求める。変更履歴に記録";
+  });
+
   await test("大きなマスタ（セル上限5万字を超える）も分割して保存・読み込み", async () => {
     const { g, admin } = await bootstrap();
     const raw = g.sheets.get("_docs").data.find((r) => r[0] === "kv/master");
