@@ -1,7 +1,7 @@
 import json, os
 O='gas/out/'
 # 画面の部品でエラーが出たり、インターネットから読み込む部品が届かなかったら、画面の下に出す（F12を使わなくても原因が分かるように）
-GUARD = '''<script>(function(){var n=0;function show(m){if(n++>4)return;var d=document.createElement("div");d.style.cssText="position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:8px;padding:8px 10px;font:12px/1.5 system-ui,sans-serif;white-space:pre-wrap;word-break:break-all";d.textContent="画面でエラーが出ました（この写真を担当者に送ってください）\\n"+m;(document.body||document.documentElement).appendChild(d)}
+GUARD = '''<script>(function(){var n=0;function show(m){if(n++>4)return;var d=document.createElement("div");d.style.cssText="position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:8px;padding:8px 10px;font:12px/1.5 system-ui,sans-serif;white-space:pre-wrap;word-break:break-all";d.textContent="画面でエラーが出ました（この写真を担当者に送ってください。押すと消えます）\\n"+m;d.onclick=function(){d.remove()};(document.body||document.documentElement).appendChild(d)}
 window.addEventListener("error",function(e){var t=e.target;if(t&&t.tagName==="SCRIPT"&&t.src){show("読み込めませんでした: "+t.src);return}if(t&&t!==window)return;show((e.message||"")+(e.filename?"\\n"+String(e.filename).split("/").pop()+":"+e.lineno:""))},true);
 window.addEventListener("unhandledrejection",function(e){var r=e.reason;if(r instanceof Error)show("（あとで起きたエラー）"+r.message)})})();</script>'''
 rd=lambda p: open(p,encoding='utf-8').read()

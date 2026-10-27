@@ -63,6 +63,8 @@ const st = document.createElement("style"); st.textContent = css; document.head.
 let readyResolve; const ready = new Promise((r) => (readyResolve = r));
 let ov = null;
 function showOverlay(html) { if (!ov) { ov = document.createElement("div"); ov.className = "sgh-ov"; document.body.appendChild(ov); } ov.innerHTML = html; ov.hidden = false; }
+/* ログイン・暗証番号の画面のお知らせ。画面がもう閉じていたら何もしない（2回押しで遅れて届いた返事など） */
+function setErr(m) { const e = document.getElementById("sghErr"); if (e) e.textContent = m; }
 function hideOverlay() { if (ov) ov.remove(); ov = null; }
 function needLogin(msg) {
   showOverlay(`<form class="sgh-card" id="sghLogin" autocomplete="off">
@@ -74,13 +76,13 @@ function needLogin(msg) {
   setTimeout(() => document.getElementById("sghNo").focus(), 50);
   f.onsubmit = async (e) => {
     e.preventDefault();
-    const b = document.getElementById("sghGo"); b.disabled = true; document.getElementById("sghErr").textContent = "";
+    const b = document.getElementById("sghGo"); if (b.disabled) return; b.disabled = true; setErr("");
     try {
       const r = await rawCall("auth.login", [document.getElementById("sghNo").value, document.getElementById("sghPin").value, (navigator.userAgent || "").slice(0, 60)]);
       token = r.token; store.set(TK, token); setMe(r.me);
       if (r.me.mustChange) return askNewPin(true);
       done();
-    } catch (err) { document.getElementById("sghErr").textContent = (err && err.message) || "ログインできませんでした。通信を確認してください"; b.disabled = false; }
+    } catch (err) { setErr((err && err.message) || "ログインできませんでした。通信を確認してください"); b.disabled = false; }
   };
 }
 function askNewPin(first, oldPin) {
@@ -94,10 +96,12 @@ function askNewPin(first, oldPin) {
   const c = document.getElementById("sghCancel"); if (c) c.onclick = () => hideOverlay();
   document.getElementById("sghPinF").onsubmit = async (e) => {
     e.preventDefault();
+    const go = document.querySelector("#sghPinF .go"); if (go.disabled) return;   // 2回押し（Enterとクリック）で2回送らない
     const n1 = document.getElementById("sghNew").value, n2 = document.getElementById("sghNew2").value;
-    if (n1 !== n2) { document.getElementById("sghErr").textContent = "新しい暗証番号が一致しません"; return; }
+    if (n1 !== n2) { setErr("新しい暗証番号が一致しません"); return; }
+    go.disabled = true;
     try { await call("auth.changePin", document.getElementById("sghOld").value, n1); setMe(Object.assign({}, me, { mustChange: false })); if (first) done(); else { hideOverlay(); toastHost("暗証番号を変更しました"); } }
-    catch (err) { document.getElementById("sghErr").textContent = (err && err.message) || "変更できませんでした"; }
+    catch (err) { setErr((err && err.message) || "変更できませんでした"); go.disabled = false; }
   };
 }
 function setMe(m) { me = m; store.set(MK, JSON.stringify(m)); renderChip(); }

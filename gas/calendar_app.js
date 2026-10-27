@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.27k";
+const APP_VERSION="2026.10.27l";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"leave",n:"職員休み"},{k:"user",n:"利用者休み"},{k:"other",n:"その他予定"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"勤務時間変更"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -303,6 +303,7 @@ function quickHtml(){
   const me=window.SGHost&&window.SGHost.me;if(!me||!core)return"";
   const isStaff=SGN.staff.some(s=>s.name===me.name);
   if(!isStaff&&!me.admin)return"";
+  if(SGN.loaded&&!SGN.staff.length)return`<div class="quick"><b>休みを入れる</b><span class="by">送迎表のデータ（職員）を入れると、ここで職員を選んで休みを入れられます。</span></div>`;
   const opts=me.admin?`<select class="input" id="qStaff">${(isStaff?[{name:me.name}]:[]).concat(SGN.staff.filter(s=>s.name!==me.name)).map(s=>`<option ${s.name===S.qStaff?"selected":""}>${esc(s.name)}</option>`).join("")}</select>`:"";
   return`<div class="quick"><b>${me.admin?"休みを入れる":"自分の休みを入れる"}（この日）</b>${opts}<div class="qrow"><select class="input" id="qKind" aria-label="休みの種類">${[["","休み（1日）"],["am","AM休"],["pm","PM休"]].map(([k,l])=>`<option value="${k}" ${String(S.qKind||"")===k?"selected":""}>${l}</option>`).join("")}</select><button class="primary" data-quick>入れる</button></div><span class="by">送迎表にも自動で反映されます。</span></div>`;
 }
