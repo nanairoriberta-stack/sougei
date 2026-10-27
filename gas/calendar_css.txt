@@ -4,7 +4,7 @@
   --bg:#f3f5f4; --surface:#ffffff; --sunken:#eaeeec; --ink:#18201d; --muted:#5f6b66; --line:#dde3e0;
   --accent:#13795b; --accent-ink:#ffffff; --accent-soft:#dff1ea;
   --sun:#c93838; --sat:#2a62c4; --danger:#c23a32; --warn:#9a6a00; --warn-soft:#fbf1d6; --ok:#13795b;
-  --l-meeting:#3f63cf; --l-visit:#11897a; --l-deadline:#d0443a; --l-leave:#b8901a; --l-event:#8352c9; --l-user:#c2410c; --l-help:#3f63cf; --l-ride:#11897a; --l-hwork:#8352c9; --l-shift:#0e7490; --l-other:#6f7c86;
+  --l-meeting:#3f63cf; --l-visit:#11897a; --l-deadline:#d0443a; --l-leave:#b8901a; --l-event:#8352c9; --l-user:#c2410c; --l-help:#3f63cf; --l-ride:#11897a; --l-hwork:#8352c9; --l-shift:#0e7490; --l-monitor:#be185d; --l-shien:#4d7c0f; --l-other:#6f7c86;
   --font:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
   --mono:"DM Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
   --radius:10px;
@@ -13,13 +13,13 @@
   --bg:#111614; --surface:#18201d; --sunken:#1f2925; --ink:#e6ece9; --muted:#97a49e; --line:#2b3632;
   --accent:#43c08f; --accent-ink:#0b1a14; --accent-soft:#1d3a2f;
   --sun:#ff8282; --sat:#86afff; --danger:#ff7d73; --warn:#f0c252; --warn-soft:#3a2f12; --ok:#43c08f;
-  --l-meeting:#7d9bff; --l-visit:#3fc7b2; --l-deadline:#ff7d70; --l-leave:#e2bd4a; --l-event:#b58cf2; --l-user:#fb923c; --l-help:#7d9bff; --l-ride:#3fc7b2; --l-hwork:#b58cf2; --l-shift:#22b8cf; --l-other:#9aa7b0;
+  --l-meeting:#7d9bff; --l-visit:#3fc7b2; --l-deadline:#ff7d70; --l-leave:#e2bd4a; --l-event:#b58cf2; --l-user:#fb923c; --l-help:#7d9bff; --l-ride:#3fc7b2; --l-hwork:#b58cf2; --l-shift:#22b8cf; --l-monitor:#f472b6; --l-shien:#a3d65c; --l-other:#9aa7b0;
   color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#111614; --surface:#18201d; --sunken:#1f2925; --ink:#e6ece9; --muted:#97a49e; --line:#2b3632;
   --accent:#43c08f; --accent-ink:#0b1a14; --accent-soft:#1d3a2f;
   --sun:#ff8282; --sat:#86afff; --danger:#ff7d73; --warn:#f0c252; --warn-soft:#3a2f12; --ok:#43c08f;
-  --l-meeting:#7d9bff; --l-visit:#3fc7b2; --l-deadline:#ff7d70; --l-leave:#e2bd4a; --l-event:#b58cf2; --l-user:#fb923c; --l-help:#7d9bff; --l-ride:#3fc7b2; --l-hwork:#b58cf2; --l-shift:#22b8cf; --l-other:#9aa7b0;
+  --l-meeting:#7d9bff; --l-visit:#3fc7b2; --l-deadline:#ff7d70; --l-leave:#e2bd4a; --l-event:#b58cf2; --l-user:#fb923c; --l-help:#7d9bff; --l-ride:#3fc7b2; --l-hwork:#b58cf2; --l-shift:#22b8cf; --l-monitor:#f472b6; --l-shien:#a3d65c; --l-other:#9aa7b0;
   color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.55}

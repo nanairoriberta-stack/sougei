@@ -90,6 +90,9 @@ const D = path.join(__dirname, "../gas/out");
   // その他予定：時間・場所・担当
   await add("other"); await A.pg.fill("#f-title", "会議"); await A.pg.fill("#f-start", "13:00"); await A.pg.fill("#f-end", "14:00"); await A.pg.fill("#f-place", "2階"); await pick("staff", "日野");
   await A.pg.locator(".sheet").screenshot({ path: "g_other.png" }); await save(2500);
+  // モニタリング：利用者・時間・場所・対応者
+  await add("monitor"); await pick("users", "森"); await pick("staff", "日野"); await A.pg.fill("#f-start", "13:30"); await A.pg.fill("#f-end", "14:30"); await A.pg.fill("#f-place", "自宅");
+  await A.pg.locator(".sheet").screenshot({ path: "g_monitor.png" }); await save(2500);
   const s2 = api(t, "kv.get", ["sheet:" + date]).data.value; const S = (n) => m.staff.find((x) => x.name === n).id, U = (n) => m.users.find((x) => x.name === n).id;
   assert.strictEqual(s2.noRide[U("森")].meet, "受診後送り"); assert.strictEqual(s2.userTime[U("森")].send, "15:30");
   { const sr = s2.runs.find((r) => r.kind === "send" && r.userIds.includes(U("森"))); assert.ok(!sr || sr.places[U("森")] === "病院", "送り先（便に入っていれば）"); console.log("送り先:", sr ? sr.places[U("森")] : "（まだ便なし）"); }
@@ -98,8 +101,9 @@ const D = path.join(__dirname, "../gas/out");
   assert.strictEqual(s2.staffOv[S("八壁")].end, "19:00", "勤務時間変更");
   const evs = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {}));
   const mt = evs.find((e) => e.title === "会議"); assert.ok(mt && mt.place === "2階" && mt.tanto[0] === "日野" && !mt.sg, "その他予定：場所・担当（送迎表には載せない）");
+  assert.ok(s2.blocks.some((x) => x.calId && x.kind === "block" && x.staffId === S("日野") && x.label === "モニタリング（森）" && x.time === "13:30"), "モニタリング → 対応者の予定");
   const tl = await A.pg.locator(".ev-row .t").allInnerTexts();
-  for (const x of ["森 受診後送り・送り15:30・送り先病院", "白戸 ヘルプ（中村）", `${absent} 欠席（体調不良）`, "八壁 退勤19:00（残業）", "会議"]) assert.ok(tl.includes(x), x + " / " + tl.join(","));
+  for (const x of ["森 受診後送り・送り15:30・送り先病院", "白戸 ヘルプ（中村）", `${absent} 欠席（体調不良）`, "八壁 退勤19:00（残業）", "会議", "モニタリング（森）"]) assert.ok(tl.includes(x), x + " / " + tl.join(","));
   assert.ok((await A.pg.locator(".ev-row", { hasText: "会議" }).innerText()).includes("担当：日野"), "一覧に担当");
   console.log("管理者が入力 →", tl.join(" / "), "→ 送迎表: 迎え", s2.noRide[U("森")].meet, "・送り", s2.userTime[U("森")].send, "・ヘルプ(白戸)", hb.time, "・欠席", absent, "・八壁の退勤", s2.staffOv[S("八壁")].end, "/ 画面エラー:", real(A.errs));
   assert.deepStrictEqual(real(A.errs), []);

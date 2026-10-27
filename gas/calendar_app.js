@@ -1,8 +1,8 @@
 
 "use strict";
-const APP_VERSION="2026.10.27f";
+const APP_VERSION="2026.10.27g";
 const C=window.TCCore;
-const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"leave",n:"職員休み"},{k:"user",n:"利用者休み"},{k:"other",n:"その他予定"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"勤務時間変更"}];
+const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"leave",n:"職員休み"},{k:"user",n:"利用者休み"},{k:"other",n:"その他予定"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"勤務時間変更"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
 const HOL={
 "2026-01-01":"元日","2026-01-12":"成人の日","2026-02-11":"建国記念の日","2026-02-23":"天皇誕生日","2026-03-20":"春分の日","2026-04-29":"昭和の日","2026-05-03":"憲法記念日","2026-05-04":"みどりの日","2026-05-05":"こどもの日","2026-05-06":"振替休日","2026-07-20":"海の日","2026-08-11":"山の日","2026-09-21":"敬老の日","2026-09-22":"国民の休日","2026-09-23":"秋分の日","2026-10-12":"スポーツの日","2026-11-03":"文化の日","2026-11-23":"勤労感謝の日",
@@ -147,13 +147,15 @@ function draftDrop(){clearTimeout(dT);store.del(DKEY)}
    ・利用者休み … 利用者・理由（任意） → 欠席
    ・その他予定 … 時間・場所・担当（職員の予定として送迎表に載せることもできる）
    ・休日出勤 … 職員・時間・その日の部署 → 送迎表の出勤者に入る
-   ・勤務時間変更 … 職員・出勤／退勤（いつもどおり or 時刻を変える）・その日の部署・理由 → その日の勤務時間 */
+   ・勤務時間変更 … 職員・出勤／退勤（いつもどおり or 時刻を変える）・その日の部署・理由 → その日の勤務時間
+   ・モニタリング／支援会議 … 利用者・時間・場所・対応者 → 対応者の予定（その時間は送迎と重なると注意が出る） */
 const HALF={am:"AM休",pm:"PM休"};
 const SGT_SHORT={staff_off:"職員の休み",staff_plan:"職員の予定",user_absent:"欠席",user_time:"送迎の変更",help:"ヘルプ",hwork:"休日出勤",shift:"勤務時間変更"};
 const PICK={user:["体調不良","受診","家族の用事","ショートステイ"],shift:["早出","遅出","残業","遅刻・早退"]};
 const NO_MEET={fam:"家族送り",clinic:"受診後送り"},NO_SEND={fam:"家族迎え"};   // 送迎表の「迎えなし・送りなし」の理由としてそのまま出る
 const LABEL_OF_SG={staff_off:"leave",user_absent:"user",user_time:"ride",help:"help",hwork:"hwork",shift:"shift",staff_plan:"other"};
 const USER_LABELS=["help","ride","user"];          // 利用者が関わるラベル（送迎表の担当者だけが入力できる）
+const PLAN_LABELS=["monitor","shien"];             // モニタリング・支援会議：利用者・時間・場所・対応者。対応者の予定として送迎表に入る
 let SGN={staff:[],users:[],depts:[],places:[],loaded:false};
 async function loadNames(){
   const H=window.SGHost;if(!H)return;
@@ -184,6 +186,7 @@ function sgOf(label,w){
   if(label==="help"){const dest=w.dest.trim();return Object.assign(base,{type:"help",users:SGN.users.some(u=>u.name===dest)?[dest]:[],note:dest})}
   if(label==="hwork")return Object.assign(base,{type:"hwork",users:[],dept:w.dept});
   if(label==="shift")return Object.assign(base,{type:"shift",users:[],dept:w.dept,reason:w.reason,wstart:w.wsM==="time"?w.wstart:"",wend:w.weM==="time"?w.wend:""});
+  if(PLAN_LABELS.includes(label))return Object.assign(base,{type:"staff_plan"});
   if(label==="other"&&w.plan)return Object.assign(base,{type:"staff_plan",users:[]});
   return null;
 }
@@ -194,7 +197,7 @@ function fixTimes(d){
   if(d.label==="leave")d.allDay=w.leave!=="time";
   else if(d.label==="user"||d.label==="ride"||d.label==="shift")d.allDay=true;
   else if(d.label==="help"){d.allDay=false;d.endDate=d.date;if(d.start)d.end=addMin(d.start,60)}   // ヘルプは開始時刻だけ（長さは送迎表の決まり）
-  else if(d.label==="hwork")d.allDay=false;
+  else if(d.label==="hwork"||PLAN_LABELS.includes(d.label))d.allDay=false;
   if(d.label==="leave"&&w.leave!=="time"&&w.leave!=="day")d.endDate=d.date;
 }
 const staffSelf=d=>selfOnly()&&(d.label==="leave"||d.label==="hwork"||d.label==="shift");
@@ -235,6 +238,8 @@ function drawSg(){
     +tm("w-ws",w.wsM,"w-wst",w.wstart,"出勤",[["same","いつもどおり"],["time","時刻を変える"]])+tm("w-we",w.weM,"w-wet",w.wend,"退勤",[["same","いつもどおり"],["time","時刻を変える"]])
     +dept()+text("w-reason",w.reason,"例：送迎の応援",PICK.shift,"理由（任意）")
     +hint("送迎表のその日の勤務時間（出勤・退勤）が変わります。何日も続くときは終了日を変えてください。");
+  else if(PLAN_LABELS.includes(L))h=who("users","利用者","利用者の名前で検索")+who("staff","対応者","職員の名前で検索")
+    +hint("対応者の予定として、送迎表のその時間に入ります（送迎と重なると注意が出ます）。")+(!meInfo().canSougei?hint("対応者に自分以外を入れるときは、送迎表の担当者か管理者に入れてもらってください。"):"");
   else h=who("staff","担当","職員の名前で検索","なし")
     +`<label class="check"><input type="checkbox" id="w-plan" ${w.plan?"checked":""} ${dis}>担当の職員の予定として送迎表にも載せる（会議・研修・外出など）</label>`
     +(w.plan?hint("その時間の予定として担当の職員の欄に入り、送迎と重なると注意が出ます。"):"");
@@ -258,6 +263,7 @@ function readSg(){
 function autoTitle(label,sg,w){
   const nm=a=>a.slice(0,3).join("・")+(a.length>3?"他":"");
   if(!sg)return"";
+  if(PLAN_LABELS.includes(label))return`${LMAP[label].n}（${nm(sg.users)||"利用者"}）`;
   const r=sg.reason?`（${sg.reason}）`:"";
   if(sg.type==="staff_off")return`${nm(sg.staff)} ${sg.half?HALF[sg.half]:"休み"}`;
   if(sg.type==="user_absent")return`${nm(sg.users)} 欠席${r}`;
@@ -273,6 +279,10 @@ function checkSg(d,sg){
   if(!sg)return"";
   const w=d.w;
   if((sg.type==="staff_off"||sg.type==="hwork"||sg.type==="shift")&&!sg.staff.length)return"職員を選んでください。";
+  if(sg.type==="staff_plan"&&PLAN_LABELS.includes(d.label)){
+    if(!sg.users.length)return"利用者を選んでください。";
+    if(!sg.staff.length)return"対応者を選んでください。";
+    if(!meInfo().canSougei&&!(sg.staff.length===1&&sg.staff[0]===meInfo().name))return"対応者に自分以外を入れられるのは、送迎表の担当者と管理者だけです。対応者を自分だけにしてください。";}
   if(sg.type==="staff_plan"){
     if(!sg.staff.length)return"送迎表に載せるときは、担当の職員を選んでください。";
     if(selfOnly()&&!(sg.staff.length===1&&sg.staff[0]===meInfo().name))return"送迎表に載せられるのは自分の予定だけです。担当を自分だけにするか、チェックを外してください。";}
@@ -311,7 +321,7 @@ function openEditor(ev,day,draft){
   const ro=!(db&&S.canWrite&&core);
   const base=ev||null;
   const d=draft?draft.form:ev?{...ev,members:[...ev.members]}:{title:"",date:day||S.sel,endDate:day||S.sel,allDay:false,start:"10:00",end:"11:00",label:"other",place:"",memo:"",members:S.me?[S.me]:[],sg:null};
-  if(d.sg&&LABEL_OF_SG[d.sg.type])d.label=LABEL_OF_SG[d.sg.type];
+  if(d.sg&&LABEL_OF_SG[d.sg.type]&&!(d.sg.type==="staff_plan"&&PLAN_LABELS.includes(d.label)))d.label=LABEL_OF_SG[d.sg.type];
   if(!d.w)d.w=workOf(d);
   ed={id:draft?draft.id:ev?.id||null,base:draft?draft.base:base,d,ro:ro||(!!ev&&!canLabel(d.label)),confirmDel:false,comments:[],err:"",changed:false};
   if(!SGN.loaded)loadNames().then(()=>{if(ed)drawSg()});
@@ -350,7 +360,7 @@ function drawSheet(){
       <div class="field" ${d.label==="help"?"hidden":""}><label for="f-enddate">終了日</label><input class="input" type="date" id="f-enddate" value="${esc(d.endDate)}" ${v()}></div>
       <div class="field" ${d.allDay||d.label==="help"?"hidden":""} id="w-end"><label for="f-end">${d.label==="hwork"?"退勤の時刻":"終了時刻"}</label><input class="input" type="time" id="f-end" value="${esc(d.end||"11:00")}" step="300" ${v()}></div>
     </div>
-    ${d.label==="other"?`<div class="field"><label for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="会議室A / オンライン など" ${v()}></div>`:""}
+    ${d.label==="other"||PLAN_LABELS.includes(d.label)?`<div class="field"><label for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="会議室A / オンライン など" ${v()}></div>`:""}
     ${d.label==="other"?box:""}
     <div class="field"><label for="f-memo">メモ</label><textarea class="input" id="f-memo" maxlength="2000" placeholder="${d.label==="other"?"議題、持ち物、URL など":"伝えたいこと（送迎表には出ません）"}" ${v()}>${esc(d.memo)}</textarea></div>
     <p class="err" id="f-err" ${ed.err?"":"hidden"}>${esc(ed.err)}</p>

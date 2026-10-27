@@ -218,6 +218,15 @@ async function bootstrap() {
     assert.deepStrictEqual(s.staffOv[S("八壁")], { workToday: true, start: "9:00", end: "15:00", deptId: m.departments.find((d) => d.name === "津田").id }, "休日出勤（時間）＋勤務時間変更（退勤）");
     assert.strictEqual(s.runs.length, p.runs.length, "便はそのまま");
     const names = await sg.call("names.list"); assert.ok(names.depts.includes("津田") && names.users.length, "部署・利用者の一覧");
+    // モニタリング・支援会議：送迎表の担当者は他の職員を対応者にできる。一般職員は自分だけ。その他予定は今までどおり
+    const mon = (who, extra) => ev("モニタリング（森）", "monitor", { type: "staff_plan", staff: who, users: ["森"] }, ["13:30", "14:30"], Object.assign({ place: "自宅" }, extra));
+    await sg.call("cal.apply", { kind: "upsert", opId: "op_mon00001", id: "ev_mon00001", baseRev: null, ev: mon(["日野"]) });
+    await sg.call("cal.apply", { kind: "upsert", opId: "op_mon00002", id: "ev_mon00002", baseRev: null, ev: Object.assign(mon(["日野"]), { label: "other", title: "その他" }) }).then(() => assert.fail("その他予定で他人"), (x) => assert.strictEqual(x.code, "invalid_argument"));
+    await ip.call("cal.apply", { kind: "upsert", opId: "op_mon00003", id: "ev_mon00003", baseRev: null, ev: mon(["日野"]) }).then(() => assert.fail("一般が他人を対応者に"), (x) => assert.strictEqual(x.code, "invalid_argument"));
+    await ip.call("cal.apply", { kind: "upsert", opId: "op_mon00004", id: "ev_mon00004", baseRev: null, ev: Object.assign(mon(["八壁"]), { title: "支援会議（森）", label: "shien" }) });
+    const sm = (await admin.call("kv.get", "sheet:" + date)).value;
+    assert.ok(sm.blocks.some((b) => b.calId === "ev_mon00001" && b.staffId === S("日野") && b.time === "13:30"), "モニタリング → 対応者の予定");
+    assert.ok(sm.blocks.some((b) => b.calId === "ev_mon00004" && b.staffId === S("八壁")), "支援会議 → 自分の予定");
     const evs = Object.values(TC.mergeDays(await sg.call("docs.query", { col: "days", from: date, to: date })));
     const mt = evs.find((e) => e.title === "会議"); assert.deepStrictEqual([mt.place, mt.tanto, mt.sg], ["2階", ["日野", "八壁"], null], "その他予定：場所・担当");
     const log = g.sheets.get("変更履歴").data.slice(1).map((r) => r.join(" | "));

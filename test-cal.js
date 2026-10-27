@@ -153,3 +153,17 @@ console.log('shift OK');
  const T=require('./calcore.js'); assert.strictEqual(T.normSg({type:'user_absent',users:['x'],meetPlace:'a'}).meetPlace,'','欠席に迎え先は持たない');
 }
 console.log('place OK');
+// ===== モニタリング・支援会議：対応者の予定として入る =====
+{
+ const D='2026-11-02';
+ const L=[{id:'mo1',rev:1,date:D,endDate:D,allDay:false,start:'13:30',end:'14:30',label:'monitor',place:'自宅',title:'モニタリング（森）',sg:{type:'staff_plan',staff:['日野'],users:['森']}}];
+ const x=C.reconcile(m,sheet,L,D);
+ const b=x.blocks.find(b=>b.id===`cal_mo1_${S('日野').id}`);
+ assert.ok(b&&b.kind==='block'&&b.time==='13:30'&&b.durMin===60&&b.label==='モニタリング（森）','対応者の欄に予定');
+ assert.deepStrictEqual(C.summary(m,x,L,D)[0].who,['日野','森']);
+ assert.ok(!C.reconcile(m,x,[],D).blocks.some(b=>b.id.startsWith('cal_mo1')),'消すと外れる');
+ const T=require('./calcore.js');
+ assert.strictEqual(T.normEvent({date:D,title:'支援会議',label:'shien'},'abcdef12',0).label,'shien');
+ assert.strictEqual(T.normEvent({date:D,title:'会議',label:'meeting'},'abcdef13',0).label,'other','以前の「会議」は支援会議にならない');
+}
+console.log('monitor OK');
