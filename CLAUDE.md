@@ -56,8 +56,8 @@ bash build.sh        # → gas/out/ ができる
 bash test.sh         # Nodeのテスト全部
 bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ```
-- テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-cal.js`（反映・AM/PM休）、`test-agent.js`（AIと相談の適用 10件）、
-  `gas/test-gas.js`（サーバー 20件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
+- テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎/休日出勤）、`test-agent.js`（AIと相談の適用 10件）、
+  `gas/test-gas.js`（サーバー 21件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
   `mcp/test-mcp.js`（公式MCPクライアントで35件。Googleの302転送も再現）、`pw/gas_ui.js`・`pw/agent_ui.js`（画面）
 - `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
 - `sougei.jsx` の関数をテスト/サーバーで使うときは `build.sh` の `EXP` と `mcp/engine_entry.js` に名前を足す
@@ -77,18 +77,36 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - CacheService は1値100KBまで（日本語はUTF-8で数える `utf8len_`）
 
 ## カレンダー → 送迎表の反映
-予定に `sg:{type, staff[], users[], meet, send, noMeet, noSend, half}` を付けると、その日の送迎表に自動反映（`calsync.js`）。
+予定に `sg:{type, staff[], users[], meet, send, noMeet, noSend, half, reason, note, kind, vehicle, dept}` を付けると、その日の送迎表に自動反映（`calsync.js`）。
+職員・利用者・車両・部署は**送迎表の名前**で持ち、各版のマスタで名前から探す（見つからない名前は「反映されていません」と表示）。
 - `staff_off`：職員の休み・不在。`half:"am"|"pm"` は**その職員のその曜日の勤務時間の真ん中**で区切る（夜勤の日またぎ対応）
 - `staff_plan`：職員の予定（送迎表の「予定」欄へ）
 - `user_absent`：利用者の欠席 / `user_time`：利用者の時間変更・迎えなし/送りなし（受診後来所など）
-- 一般職員は自分の `staff_*` だけ。`user_*` は送迎表権限のみ（サーバーでも `calApply_` で検査）
+- `help`：ヘルプ → `blocks` に `kind:"help"`（ID `cal_<予定ID>_<職員ID>`、担当未定は保留欄 `__hold__`、`label`=利用者名、`note`=内容）
+- `ride`：送迎 → `runs` に1本（ID `cal_<予定ID>`、`kind`=meet/send/other_run、1人目が運転・2人目から `staffRiderIds`、車両は名前→ID、運転未定は保留欄）。
+  手で運転・車を変えた便は同じIDのまま残す。予定を変更/削除すると作り直し/外す
+- `hwork`：休日出勤 → `staffOv` に `workToday:true`（＋時間指定なら start/end、部署を選んだら deptId）
+- ヘルプ・送迎は**その版の利用者が1人もいなければ、その版には入れない**（他の事業所の予定で保留欄が埋まらないように）
+- 一般職員は自分の `staff_off` / `staff_plan` / `hwork` だけ。`user_*`・`help`・`ride` は送迎表権限のみ（サーバーでも `calApply_` で検査）
 - 反映済みの記録（calApplied: prev/mine）を持ち、予定を消したら項目単位で元に戻す。パターン読込などで消えた分は heal で戻す
 - カレンダーの「休みを入れる」：プルダウン（休み（1日）/AM休/PM休）＋入れるボタン
 
-### カレンダーのラベル（2026-10-27 変更）
+### カレンダーのラベルと入力項目（2026-10-27）
 `help`=ヘルプ、`ride`=送迎、`leave`=職員休み、`user`=利用者休み、`other`=その他予定、`hwork`=休日出勤。
-以前の `meeting/visit/deadline/event` は `normEvent` で `other` 扱い。
-**各ラベルで入力してもらう項目は依頼者から後で届く（未対応）**。ヘルプ・送迎・休日出勤はまだ送迎表に反映しない。
+以前の `meeting/visit/deadline/event` は `normEvent` で `other` 扱い。編集画面はラベルが一番上で、選んだラベルの項目だけが出る（`calendar_app.js` の `drawSg`）。
+ラベルが反映の種類を決める（`sgOf`）。開いた予定の `sg.type` からラベルを合わせる（`LABEL_OF_SG`）。タイトルは空欄なら自動（`autoTitle`）。
+
+| ラベル | 入力項目 | 送迎表へ |
+|---|---|---|
+| ヘルプ | 利用者・担当職員（未定可）・内容（家事/入浴/通院付き添い/買い物＋自由入力）・開始〜終了 | 【ヘルプ】 |
+| 送迎 | 迎え/送り/その他・利用者・運転する職員（2人目から同乗、未定可）・車両・行き先・出発〜戻り | 便 |
+| 職員休み | 職員・1日/AM休/PM休/時間で・理由（有給/公休・希望休/研修・出張/体調不良＋自由入力） | 休み・半休・不在 |
+| 利用者休み | 利用者・欠席 or 送迎の変更（迎え・送りそれぞれ いつもどおり/時刻を変える/なし）・理由 | 欠席・時刻・迎え/送りなし |
+| その他予定 | タイトル・時間・場所・参加者・メモ・「職員の予定として送迎表にも載せる」 | （載せるときだけ）予定 |
+| 休日出勤 | 職員・いつもの勤務時間 or 時間指定・その日の部署 | 出勤（休出） |
+
+一般職員にはヘルプ・送迎・利用者休みのラベルは押せない（灰色）。職員休み・休日出勤・職員の予定は自分の分だけ。
+車両・部署の選択肢はサーバーの `names.list`（キャッシュ名 `names2`）から。
 
 ## AI
 1. **🤖 AI調整・💬 AIと相談**（送迎表画面）：サーバー `ai.messages` が Anthropic API を呼ぶ（スクリプトプロパティ `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL` 既定 `claude-sonnet-5-5`）。
@@ -100,7 +118,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
    手順は `gas/Claude接続の手順.txt`
 
 ## まだ確かめていない／残っていること
-- [ ] 各ラベルの入力項目（依頼者待ち）と、ヘルプ・送迎・休日出勤の送迎表への反映
+- [x] 各ラベルの入力項目と、ヘルプ・送迎・休日出勤の送迎表への反映（依頼者の確認待ち：理由・内容の選択肢は仮）
 - [ ] 本物のGoogle上での動作（ここまでは `fakegas.js` の再現環境でのみ検証）
 - [ ] 本物の claude.ai からカスタムコネクタでつながるか、Cloudflare中継の実地確認
 - [ ] AIボタン（API版）を隠すかどうか

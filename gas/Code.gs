@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.27b',
+  VERSION: '2026.10.27c',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -199,16 +199,19 @@ function staffList_() {
 }
 /* カレンダーで選ぶ利用者名（3つの版の合計）。マスタ全体（住所などのメモ）は配らない */
 function namesList_() {
-  var c = CacheService.getScriptCache(), hit = c.get('names');
+  var c = CacheService.getScriptCache(), hit = c.get('names2');
   if (hit) return JSON.parse(hit);
-  var users = [], seen = {}, idx = docIndex_();
+  var users = [], seen = {}, idx = docIndex_(), vehicles = [], depts = [], seenV = {}, seenD = {};
   ['v1', 'v2', 'v3'].forEach(function (ed) {
     var d = docGet_(kvPath_(APP.EDITIONS[ed] + 'master'), idx); var m = d ? d.value.v : null; if (!m) return;
     var dn = function (id) { var x = (m.departments || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ''; };
     (m.users || []).forEach(function (u) { if (u && u.name && !seen[u.name]) { seen[u.name] = 1; users.push({ name: u.name, dept: dn(u.deptId) }); } });
+    // 送迎の車両・休日出勤の部署を選ぶための名前（送迎表の名前で持ち、各版で名前から探す）
+    (m.vehicles || []).forEach(function (v) { if (v && v.name && !seenV[v.name]) { seenV[v.name] = 1; vehicles.push(v.name); } });
+    (m.departments || []).forEach(function (d) { if (d && d.name && !seenD[d.name]) { seenD[d.name] = 1; depts.push(d.name); } });
   });
-  var out = { users: users };
-  try { c.put('names', JSON.stringify(out), 300); } catch (e) {}
+  var out = { users: users, vehicles: vehicles, depts: depts };
+  try { c.put('names2', JSON.stringify(out), 300); } catch (e) {}
   return out;
 }
 /* 送迎表の職員マスタ（3つの版）から職員番号を自動で振る。既にある名前は番号を変えない */
@@ -349,7 +352,7 @@ function kvMerge_(me, a) {
       rev = rev + 1;
       docSet_(path, { k: key, v: merged, by: me.no }, rev, { k: key }, idx);
       log_(me, '送迎表', kvLabel_(key), diffSummary_(cur, merged) + (conflicts.length ? '（同じ箇所の同時変更 ' + conflicts.length + 'か所：この変更を優先）' : ''));
-      if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names'); } catch (e) {} }
+      if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names2'); } catch (e) {} }
     }
     return { rev: rev, value: merged, conflicts: conflicts.length };
   });
@@ -366,7 +369,7 @@ function kvImportMany_(me, items) {
       docSet_(path, { k: key, v: v, by: me.no }, (cur ? cur.rev : 0) + 1, { k: key }, idx); n++;
     });
     log_(me, '送迎表', 'バックアップから復元', n + '件');
-    syncStaffIds_(); try { CacheService.getScriptCache().remove('names'); } catch (e) {}
+    syncStaffIds_(); try { CacheService.getScriptCache().remove('names2'); } catch (e) {}
     return { written: n };
   });
 }
@@ -381,7 +384,7 @@ function kvCas_(me, a) {
     a.value = reconcileSheetValue_(key, a.value, idx);
     docSet_(path, { k: key, v: a.value, by: me.no }, rev + 1, { k: key }, idx);
     log_(me, '送迎表', kvLabel_(key), '初期データの取り込み');
-    if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names'); } catch (e) {} }
+    if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names2'); } catch (e) {} }
     return { conflict: false, rev: rev + 1, value: a.value };
   });
 }
@@ -419,13 +422,13 @@ function calApply_(me, op) {
   op = sanitizeOp_(op);
   op.by = me.no;                                   // 誰の操作かはサーバーが決める（端末の申告は使わない）
   if (op.comment) op.comment.by = me.no;
-  // 職員の休み・予定は本人の分だけ（管理者は全員分）。利用者の欠席・時間変更は送迎表の担当以上
+  // 職員の休み・予定・休日出勤は本人の分だけ（管理者は全員分）。利用者が関わるもの（利用者休み・ヘルプ・送迎）は送迎表の担当以上
   var sg = op.kind === 'upsert' ? op.ev.sg : null;
   if (sg) {
-    if ((sg.type === 'staff_off' || sg.type === 'staff_plan') && me.role !== '管理者' && !(sg.staff.length === 1 && sg.staff[0] === me.name))
-      throw { code: 'invalid_argument', message: '他の職員の休み・予定は管理者だけが入力できます' };
-    if ((sg.type === 'user_absent' || sg.type === 'user_time') && me.role === '一般')
-      throw { code: 'invalid_argument', message: '利用者の欠席・時間変更は送迎表の担当者だけが入力できます' };
+    if ((sg.type === 'staff_off' || sg.type === 'staff_plan' || sg.type === 'hwork') && me.role !== '管理者' && !(sg.staff.length === 1 && sg.staff[0] === me.name))
+      throw { code: 'invalid_argument', message: '他の職員の休み・予定・休日出勤は管理者だけが入力できます' };
+    if ((sg.type === 'user_absent' || sg.type === 'user_time' || sg.type === 'help' || sg.type === 'ride') && me.role === '一般')
+      throw { code: 'invalid_argument', message: '利用者休み・ヘルプ・送迎は送迎表の担当者だけが入力できます' };
   }
   return withLock_(function () {
     var idx = docIndex_();
@@ -451,8 +454,9 @@ function calApply_(me, op) {
   });
 }
 function sgText_(sg) {
-  var t = { staff_off: sg.half === 'am' ? 'AM休' : sg.half === 'pm' ? 'PM休' : '休み・不在', staff_plan: '職員の予定', user_absent: '欠席', user_time: '時間変更' }[sg.type];
-  return t + ' ' + sg.staff.concat(sg.users).join('・');
+  var t = { staff_off: sg.half === 'am' ? 'AM休' : sg.half === 'pm' ? 'PM休' : '休み・不在', staff_plan: '職員の予定', user_absent: '欠席', user_time: '時間変更',
+    help: 'ヘルプ', ride: { meet: '迎え', send: '送り' }[sg.kind] || '送迎', hwork: '休日出勤' }[sg.type];
+  return t + ' ' + sg.staff.concat(sg.users).join('・') + (sg.reason || sg.note ? '（' + (sg.reason || sg.note) + '）' : '');
 }
 function sanitizeOp_(op) {
   if (!op || typeof op !== 'object') throw { code: 'invalid_argument', message: '' };

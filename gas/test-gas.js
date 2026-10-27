@@ -187,6 +187,41 @@ async function bootstrap() {
     return "他の職員は消せない、本人が消すと送迎表から外れる";
   });
 
+  await test("ラベルごとの項目：ヘルプ・送迎・休日出勤が送迎表に反映される（権限つき・消すと外れる）", async () => {
+    const { g, admin } = await bootstrap();
+    const date = "2026-11-02"; const E = engFor("v1"); const m = await admin.kv().get("master"); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.mon);
+    admin.kv().put("sheet:" + date, Object.assign(E.emptySheet(), { runs: p.runs, blocks: p.blocks })); await settleKV([admin]);
+    const ev = (title, label, sg, t) => Object.assign({ title, date, endDate: date, allDay: !t, start: t ? t[0] : "", end: t ? t[1] : "", label, place: "", memo: "", members: [], sg }, {});
+    const help = ev("中村 ヘルプ（入浴）", "help", { type: "help", staff: [], users: ["中村"], note: "入浴" }, ["10:00", "11:00"]);
+    const ride = ev("森 送迎（通院）", "ride", { type: "ride", kind: "other_run", staff: ["白戸"], users: ["森"], vehicle: m.vehicles[0].name, note: "○○医院" }, ["09:30", "10:30"]);
+    // 一般職員：利用者が関わるヘルプ・送迎は入れられない。休日出勤は自分の分だけ
+    const ip = device(g); await ip.login(noOf(g, "八壁"), pinOf(g, "八壁"));
+    for (const [i, e] of [help, ride, ev("日野 休日出勤", "hwork", { type: "hwork", staff: ["日野"] })].entries())
+      await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl0000" + i, id: "ev_lbl0000" + i, baseRev: null, ev: e }).then(() => assert.fail("入れられないはず " + e.title), (x) => assert.strictEqual(x.code, "invalid_argument"));
+    await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl00010", id: "ev_lbl00010", baseRev: null, ev: ev("八壁 休日出勤", "hwork", { type: "hwork", staff: ["八壁"], dept: "津田" }) });
+    // 送迎表の担当者：ヘルプ・送迎を入れる
+    const row = idRows(g).find((r) => r[1] === "白戸"); row[2] = "送迎表";
+    const sg = device(g); const me = await sg.login(noOf(g, "白戸"), pinOf(g, "白戸"));
+    const cal = sg.cal(me.no); cal.save(help, null); cal.save(ride, null); await settleCal([sg]);
+    const s = (await admin.call("kv.get", "sheet:" + date)).value;
+    const S = (n) => m.staff.find((x) => x.name === n).id, U = (n) => m.users.find((x) => x.name === n).id;
+    const run = s.runs.find((r) => r.calId && r.userIds[0] === U("森"));
+    assert.ok(run && run.staffId === S("白戸") && run.time === "9:30" && run.vehicleId === m.vehicles[0].id && run.note === "○○医院", "送迎は便として入る");
+    const hb = s.blocks.find((b) => b.calId && b.kind === "help");
+    assert.ok(hb && hb.staffId === "__hold__" && hb.label === "中村" && hb.note === "入浴" && hb.durMin === 60, "担当未定のヘルプは保留欄");
+    assert.deepStrictEqual(s.staffOv[S("八壁")], { workToday: true, deptId: m.departments.find((d) => d.name === "津田").id }, "休日出勤");
+    assert.strictEqual(s.runs.length, p.runs.length + 1, "いつもの便はそのまま");
+    const names = await sg.call("names.list"); assert.ok(names.vehicles.includes(m.vehicles[0].name) && names.depts.includes("津田"), "車両・部署の一覧");
+    const log = g.sheets.get("変更履歴").data.slice(1).map((r) => r.join(" | "));
+    assert.ok(log.some((l) => l.includes("白戸") && l.includes("送迎表：送迎 白戸・森（○○医院）")), "変更履歴に内容つきで記録");
+    // 送迎の予定を消す → 便が外れる
+    const evs = Object.values(TC.mergeDays(await sg.call("docs.query", { col: "days", from: date, to: date })));
+    cal.remove(evs.find((e) => e.sg && e.sg.type === "ride")); await settleCal([sg]);
+    const s2 = (await admin.call("kv.get", "sheet:" + date)).value;
+    assert.ok(!s2.runs.some((r) => r.calId) && s2.blocks.some((b) => b.calId && b.kind === "help"), "送迎だけ外れる");
+    return `送迎→${run.time}の便（運転 白戸）・ヘルプ→保留欄・休日出勤→出勤（津田）。一般職員のヘルプ・送迎・他人の休日出勤は拒否`;
+  });
+
   await test("大きなマスタ（セル上限5万字を超える）も分割して保存・読み込み", async () => {
     const { g, admin } = await bootstrap();
     const raw = g.sheets.get("_docs").data.find((r) => r[0] === "kv/master");

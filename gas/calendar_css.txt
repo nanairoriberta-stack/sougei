@@ -179,9 +179,15 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:8px;font-size:13px;z-index:30;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(12px);opacity:.6}}}
 
-.sgbox{border:1px solid color-mix(in srgb,var(--l-user) 35%,var(--line));border-radius:10px;padding:12px;background:color-mix(in srgb,var(--l-user) 5%,var(--surface))}
-.sgbox .lbl{color:var(--l-user)!important;font-weight:700}
+.sgbox{--sc:var(--l-user);border:1px solid color-mix(in srgb,var(--sc) 35%,var(--line));border-radius:10px;padding:12px;background:color-mix(in srgb,var(--sc) 5%,var(--surface))}
+.sgbox .lbl{color:var(--sc)!important;font-weight:700}
 .sgsub{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.sgsub .lbl2{font-size:12px;font-weight:700;color:var(--muted,inherit)}
+.sgchip small{margin-left:4px;font-size:10px;opacity:.7}
+.fills{display:flex;flex-wrap:wrap;gap:6px}
+.fill{height:28px;padding:0 10px;border-radius:999px;border:1px dashed var(--line);background:transparent;font-size:12px;cursor:pointer;color:inherit}
+.fill.on{border-style:solid;border-color:var(--accent);font-weight:700}
+.sghint{margin:8px 0 0}
 .sgchips{display:flex;flex-wrap:wrap;gap:6px}
 .sgchip{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 4px 0 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12px}
 .sgchip button{border:0;background:none;width:22px;height:22px;border-radius:50%;color:var(--muted)}

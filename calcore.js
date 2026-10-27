@@ -13,7 +13,8 @@ const MAX_BYTES = 240000;      // 1文書の上限（基盤は256KiB）
 const MAX_COMMENTS = 100;
 const TRASH_DAYS = 30;
 const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork"];  // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
-const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time"];
+const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "help", "ride", "hwork"];
+const RIDE_KINDS = ["meet", "send", "other_run"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 const PERM = ["invalid_argument", "quota_exceeded", "transform_error", "full", "outdated_client"];
@@ -81,7 +82,10 @@ function normSg(x) {
   if (!x || typeof x !== "object" || !SG_TYPES.includes(x.type)) return null;
   const names = (a) => Array.isArray(a) ? [...new Set(a.filter((v) => typeof v === "string" && v && v.length <= 40))].slice(0, 80) : [];
   const t = (v) => (TIME_RE.test(v) ? v : "");
-  return { type: x.type, staff: names(x.staff), users: names(x.users), meet: t(x.meet), send: t(x.send), noMeet: str(x.noMeet, 40), noSend: str(x.noSend, 40), half: x.type === "staff_off" && (x.half === "am" || x.half === "pm") ? x.half : "" };
+  return { type: x.type, staff: names(x.staff), users: names(x.users), meet: t(x.meet), send: t(x.send), noMeet: str(x.noMeet, 40), noSend: str(x.noSend, 40), half: x.type === "staff_off" && (x.half === "am" || x.half === "pm") ? x.half : "",
+    reason: str(x.reason, 40), note: str(x.note, 40),                            // 理由（休み）／内容・行き先（ヘルプ・送迎）
+    kind: x.type === "ride" ? (RIDE_KINDS.includes(x.kind) ? x.kind : "other_run") : "",   // 送迎：迎え／送り／その他の便
+    vehicle: x.type === "ride" ? str(x.vehicle, 40) : "", dept: x.type === "hwork" ? str(x.dept, 40) : "" };  // 車両・その日の部署は送迎表の名前で持つ
 }
 const strip = e => { const x = clone(e); x.prev = null; return x; };
 
@@ -346,6 +350,6 @@ function createCore(o) {
   return api;
 }
 
-const API = { normSg, SG_TYPES, createCore, makeStore, normEvent, normDay, normCm, mergeDays, applyOp, targetsOf, dayPath, cmPath, shardOf, buildDay, SCHEMA, SHARDS, LEASE_MS, MAX_BYTES, MAX_COMMENTS };
+const API = { normSg, SG_TYPES, RIDE_KINDS, createCore, makeStore, normEvent, normDay, normCm, mergeDays, applyOp, targetsOf, dayPath, cmPath, shardOf, buildDay, SCHEMA, SHARDS, LEASE_MS, MAX_BYTES, MAX_COMMENTS };
 if (typeof module !== "undefined" && module.exports) module.exports = API; else G.TCCore = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);

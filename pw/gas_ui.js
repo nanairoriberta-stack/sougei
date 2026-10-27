@@ -1,5 +1,6 @@
 // ブラウザでGoogle版の画面を動かす：google.script.run を Node 側の模擬サーバーにつなぐ
 const { chromium } = require("playwright");
+const assert = require("assert");
 const path = require("path"), fs = require("fs");
 const { makeGas } = require("../gas/fakegas.js");
 global.window = {}; global.SGKV = require("../kvsync.js");
@@ -36,17 +37,60 @@ const D = path.join(__dirname, "../gas/out");
   await pg.selectOption('#qKind', 'am'); await pg.locator('.quick').screenshot({ path: 'g_quick.png' }); await pg.click('[data-quick]'); await pg.waitForTimeout(2500);
   await pg.screenshot({ path: "g_cal_after.png" });
   await pg.click("#addBtn"); await pg.waitForTimeout(400); await pg.screenshot({ path: "g_editor.png" });
-  const opts = await pg.$$eval("#f-sgtype option", (o) => o.map((x) => x.textContent));
-  await pg.selectOption("#f-sgtype", "staff_off"); await pg.waitForTimeout(400);
+  // 一般職員：利用者が関わるラベル（ヘルプ・送迎・利用者休み）は選べない。休日出勤は自分の分だけ
+  const dis = await pg.$$eval('input[name="f-label"]', (o) => o.filter((x) => x.disabled).map((x) => x.value));
+  assert.deepStrictEqual(dis.sort(), ["help", "ride", "user"]);
+  await pg.check("#f-label-hwork"); await pg.waitForTimeout(400);
   await pg.locator(".sgbox").screenshot({ path: "g_sgbox.png" });
-  console.log("一般職員の選択肢:", opts.join(" / "), "/ 他人を選ぶ欄:", await pg.locator("#f-sgq-staff").count());
+  const self = await pg.locator(".sgbox .sgchip").innerText(); assert.ok(self.includes("余村慎"));
+  assert.strictEqual(await pg.locator("#f-sgq-staff").count(), 0, "他人を選ぶ欄は出ない");
+  await pg.click("[data-save]"); await pg.waitForTimeout(2500);
+  console.log("一般職員が選べないラベル:", dis.join("/"), "/ 休日出勤の職員:", self);
   const m = api(t, "kv.get", ["master"]).data.value, s = api(t, "kv.get", ["sheet:" + date]).data.value; const sid = m.staff.find((x) => x.name === "余村慎").id;
-  console.log("スマホでAM休 → 送迎表:", JSON.stringify(s.staffOv[sid]), "/ 画面エラー:", errs);
+  assert.ok(s.staffOv[sid].start && s.staffOv[sid].workToday, "AM休と休日出勤が送迎表に");
+  console.log("スマホでAM休＋休日出勤 → 送迎表:", JSON.stringify(s.staffOv[sid]), "/ 画面エラー:", errs);
+  const real = (a) => a.filter((x) => !/Failed to load resource/.test(x));   // 外部への通信はテストでは止めている（フォント・画像）
+  assert.deepStrictEqual(real(errs), []);
   // 事務所PC：管理者が送迎表（現体制版）を開く
   const P = await open("sougei.html", { width: 1400, height: 900 }, boot);
   await P.pg.waitForTimeout(500); await P.pg.fill("#sghNo", "000"); await P.pg.fill("#sghPin", "5829"); await P.pg.click("#sghGo"); await P.pg.waitForTimeout(5000);
   await P.pg.screenshot({ path: "g_sougei.png" });
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);
+  // 管理者がカレンダーで「送迎」「ヘルプ」「利用者休み（迎えなし）」を入れる → 送迎表に便・ヘルプ・迎えなし
+  const A = await open("calendar.html", { width: 390, height: 844 }, boot);
+  await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
+  const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
+  const veh = m.vehicles[0].name;
+  await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-ride"); await A.pg.waitForTimeout(300);
+  await A.pg.check('input[name="w-kind"][value="other_run"]'); await A.pg.waitForTimeout(200);
+  await pick("users", "森"); await pick("staff", "白戸"); await pick("staff", "吉岡");
+  await A.pg.selectOption("#w-vehicle", veh); await A.pg.click('[data-fill="w-note"][data-v="通院"]');
+  await A.pg.fill("#f-start", "09:30"); await A.pg.fill("#f-end", "10:30");
+  await A.pg.locator(".sheet").screenshot({ path: "g_ride.png" });
+  await A.pg.click("[data-save]"); await A.pg.waitForTimeout(1500);
+  await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-help"); await A.pg.waitForTimeout(300);
+  await pick("users", "中村"); await A.pg.click('[data-fill="w-note"][data-v="入浴"]'); await A.pg.fill("#f-start", "14:00"); await A.pg.fill("#f-end", "15:00");
+  await A.pg.click("[data-save]"); await A.pg.waitForTimeout(1500);
+  await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-user"); await A.pg.waitForTimeout(300);
+  await pick("users", "森"); await A.pg.check('input[name="w-ukind"][value="change"]'); await A.pg.waitForTimeout(200);
+  await A.pg.check('input[name="w-meet"][value="none"]'); await A.pg.waitForTimeout(200); await A.pg.click('[data-fill="w-reason"][data-v="受診"]');
+  await A.pg.locator(".sheet").screenshot({ path: "g_user.png" });
+  await A.pg.click("[data-save]"); await A.pg.waitForTimeout(2500);
+  const s2 = api(t, "kv.get", ["sheet:" + date]).data.value; const S = (n) => m.staff.find((x) => x.name === n).id, U = (n) => m.users.find((x) => x.name === n).id;
+  const run = s2.runs.find((r) => r.calId);
+  assert.ok(run && run.kind === "other_run" && run.time === "9:30" && run.staffId === S("白戸") && run.staffRiderIds[0] === S("吉岡") && run.vehicleId === m.vehicles[0].id && run.note === "通院", JSON.stringify(run));
+  const hb = s2.blocks.find((x) => x.calId && x.kind === "help"); assert.ok(hb && hb.staffId === "__hold__" && hb.note === "入浴" && hb.time === "14:00");
+  assert.strictEqual(s2.noRide[U("森")].meet, "受診");
+  const titles = A.pg.locator(".ev-row .t"); const tl = await titles.allInnerTexts();
+  assert.ok(tl.includes("森 送迎（通院）") && tl.includes("中村 ヘルプ（入浴）") && tl.includes("森 迎えなし（受診）"), tl.join(","));
+  console.log("管理者が入力 →", tl.filter((x) => /送迎|ヘルプ|迎えなし/.test(x)).join(" / "), "→ 送迎表: 便", run.time, "・ヘルプ(保留欄)", hb.time, "・迎えなし", s2.noRide[U("森")].meet, "/ 画面エラー:", A.errs);
+  assert.deepStrictEqual(real(A.errs), []);
+  // 送迎表を開き直す → カレンダーから入った便・ヘルプが表に出る（画面エラーなし）
+  P.errs.length = 0; await P.pg.reload(); await P.pg.waitForTimeout(5000);   // ログインは端末に残っている
+  await P.pg.screenshot({ path: "g_sougei_after.png", fullPage: true });
+  const body = await P.pg.locator("#root").innerText(); assert.ok(body.includes("通院") && body.includes("入浴"), "送迎表に便・ヘルプが出る");
+  console.log("送迎表を開き直す → 便（通院）・ヘルプ（入浴）が表に出る / 画面エラー:", real(P.errs));
+  assert.deepStrictEqual(real(P.errs), []);
   await b.close();
 })();
