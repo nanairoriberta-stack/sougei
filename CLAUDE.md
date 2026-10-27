@@ -44,7 +44,7 @@ Claudeアプリ ─(カスタムコネクタ/MCP)─▶ Cloudflare中継 ─▶ 
 | `kvsync.js` | merge3・eq・encKey（→ `Lib2_merge.gs`） | ◯ |
 | `calsync.js` | カレンダー→送迎表の反映 `SGCal.reconcile`（→ `Lib3_calsync.gs`） | ◯ |
 | `mcp/engine.js` | `sougei.jsx` の計算部分をサーバー用に束ねたもの（→ `Lib4_engine.gs`、グローバル `SGEngine`） | ✕ 生成物 |
-| `mcp/relay-worker.mjs` | Cloudflare Worker の中継（→ `gas/out/中継_Cloudflare.js`） | ◯ |
+| `mcp/relay-worker.mjs` | Cloudflare Worker の中継（→ `gas/out/relay_cloudflare.js`） | ◯ |
 | `gas/out/` | **Googleに貼るファイル一式**（生成物） | ✕ |
 | `build/` | 画面の束ね（esbuild＋Tailwind）。`build/shims` で React/three をグローバル（CDN）に向ける | shimsのみ |
 | `history/` | 以前の作り方（元のv1/v2/v3 → パッチを順に当てて作っていた）。参考用。**使わない** | ✕ |
@@ -129,7 +129,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
    Claudeは `propose` で「案」を置くだけ → 送迎表画面の「🤖 Claudeの案」で担当者が反映（サーバーで3者マージ）。
    接続URLは `issueConnectorUrls()` で職員ごとに発行（`AI接続` シート、権限 管理者/送迎表のみ）。
    **Googleは POST に必ず302転送で返し、公式MCPクライアント(1.32)は既定でそれを辿らない** → Cloudflare Worker 中継（`/mcp/<鍵>`）経由が前提。
-   手順は `gas/Claude接続の手順.txt`
+   手順は `gas/Claude接続の手順.txt`（gas/out では `Claude_connect.txt`）
 
 ## まだ確かめていない／残っていること
 - [x] 各ラベルの入力項目と、ヘルプ・送迎・休日出勤の送迎表への反映（依頼者の確認待ち：理由・内容の選択肢は仮）
