@@ -3,6 +3,7 @@
 <header class="bar"><div class="bar-in gutter">
   <div class="brand"><i></i>カレンダー <span class="ver" id="ver"></span></div>
   <button class="sync" id="syncBtn" data-s="busy"><i></i><span id="syncText">接続中…</span></button>
+  <span id="sghChipSlot"></span>
   <div class="nav">
     <button class="icon-btn" id="prev" aria-label="前の月">‹</button>
     <div class="month-label" id="monthLabel"></div>

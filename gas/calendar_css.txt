@@ -195,7 +195,7 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
 .sghits button{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;background:none;padding:8px 10px;text-align:left;font-size:14px}
 .sghits button:hover,.sghits button:focus-visible{background:var(--sunken)}
 .sghits small{color:var(--muted)}
-.tag-sg{font-size:11px;font-weight:700;color:var(--l-user)}
+.tag-sg{font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 8px}
 .quick{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:10px;background:color-mix(in srgb,var(--l-leave) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--l-leave) 35%,var(--line))}
 .quick b{font-size:13px}
 .quick .qrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
@@ -203,3 +203,30 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
 .quick .qrow .primary{height:48px;padding:0 22px;font-size:16px}
 .quick select{height:36px}
 @media (max-width:560px){.bar-in .seg{order:5}.bar-in #addBtn{order:6}}
+/* スマホ：上の帯は流れるように（固定すると画面の3分の1を取る）、ラベルの絞り込みは横に流す、入力欄は16px（iPhoneで拡大されない） */
+@media (max-width:560px){
+  .bar{position:static}
+  .bar-in{gap:8px 8px;padding-block:8px}
+  .brand{font-size:16px}
+  .ver{display:none}
+  .nav{flex:1 1 100%}
+  .nav .month-label{flex:none;min-width:7.2em}
+  .nav #todayBtn{margin-left:auto}
+  .seg{flex:1 1 auto} .seg button{flex:1;padding:0 8px}
+  #addBtn{flex:1 1 auto;height:36px}
+  .filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+  .filters::-webkit-scrollbar{display:none}
+  .chip{flex:none}
+  .app{padding-block:10px 24px;gap:12px}
+  .panel{padding:14px}
+  .panel-date{font-size:20px}
+  .input,select.input,textarea.input{font-size:16px}
+  .title-input{font-size:18px}
+  .overlay{padding:0;align-items:flex-end;padding-top:env(safe-area-inset-top,0px)}
+  .sheet{width:100%;max-height:100%;height:100%;border-radius:14px 14px 0 0}
+  .sheet-body{padding:14px 16px}
+  .sheet-foot{padding:10px 16px max(10px,env(safe-area-inset-bottom,0px))}
+  .sheet-foot .primary,.sheet-foot .ghost,.sheet-foot .danger{height:42px;font-size:15px}
+  .lblpick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+  .lblpick label span{width:100%;justify-content:center;padding:0 4px;height:36px;font-size:12px}
+}

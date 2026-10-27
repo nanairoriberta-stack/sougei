@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.27g";
+const APP_VERSION="2026.10.27h";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"leave",n:"職員休み"},{k:"user",n:"利用者休み"},{k:"other",n:"その他予定"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"勤務時間変更"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -105,7 +105,7 @@ function renderPanel(vis,ps){
   else if(!evs.length)body=`<div class="empty">この日の予定はまだありません。${can?"<br>「この日に追加」から登録できます。":""}</div>`;
   else body=`<ul class="ev-list">${evs.map(e=>evRow(e,ps)).join("")}</ul>`;
   const q=quickHtml();
-  $("panel").innerHTML=q+`<div class="panel-head"><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${body}`;
+  $("panel").innerHTML=`<div class="panel-head"><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${q}${body}`;
 }
 function renderList(vis,ps){
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
@@ -348,7 +348,7 @@ function drawSheet(){
   <div class="sheet-head"><h2 id="sh-t">${ed.id?"予定の詳細":"新しい予定"}</h2><button class="icon-btn" data-close aria-label="閉じる">×</button></div>
   <form class="sheet-body" id="evForm" novalidate>
     <div class="note warn" id="liveNote" ${ed.changed?"":"hidden"}><p>この予定は、開いている間に他の人が変更または削除しました。このまま保存すると、どちらを残すか確認する画面が出ます。</p></div>
-    <div class="field"><span class="lbl">ラベル</span><div class="labels">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
+    <div class="field"><span class="lbl">ラベル</span><div class="labels lblpick">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
     ${d.label==="other"?"":box}
     <div class="field"><label for="f-title">タイトル${d.label==="other"?"":"（空欄なら自動で付きます）"}</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="${d.label==="other"?"例：週次定例":"例："+esc(autoTitle(d.label,sgOf(d.label,Object.assign({},d.w,{staff:d.w.staff.length?d.w.staff:["○○"],users:d.w.users.length?d.w.users:["○○"]})))||"")}" ${v()}></div>
     <label class="check" ${d.label==="other"?"":"hidden"}><input type="checkbox" id="f-allday" ${d.allDay?"checked":""} ${ro?"disabled":""}>終日</label>

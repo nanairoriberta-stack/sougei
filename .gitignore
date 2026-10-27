@@ -9,3 +9,4 @@ pw/*.png
 *.png
 mcp/dev.json
 mcp/dev.log
+pw/m_*.html

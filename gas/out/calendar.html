@@ -201,7 +201,7 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
 .sghits button{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;background:none;padding:8px 10px;text-align:left;font-size:14px}
 .sghits button:hover,.sghits button:focus-visible{background:var(--sunken)}
 .sghits small{color:var(--muted)}
-.tag-sg{font-size:11px;font-weight:700;color:var(--l-user)}
+.tag-sg{font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 8px}
 .quick{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:10px;background:color-mix(in srgb,var(--l-leave) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--l-leave) 35%,var(--line))}
 .quick b{font-size:13px}
 .quick .qrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
@@ -209,6 +209,33 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
 .quick .qrow .primary{height:48px;padding:0 22px;font-size:16px}
 .quick select{height:36px}
 @media (max-width:560px){.bar-in .seg{order:5}.bar-in #addBtn{order:6}}
+/* スマホ：上の帯は流れるように（固定すると画面の3分の1を取る）、ラベルの絞り込みは横に流す、入力欄は16px（iPhoneで拡大されない） */
+@media (max-width:560px){
+  .bar{position:static}
+  .bar-in{gap:8px 8px;padding-block:8px}
+  .brand{font-size:16px}
+  .ver{display:none}
+  .nav{flex:1 1 100%}
+  .nav .month-label{flex:none;min-width:7.2em}
+  .nav #todayBtn{margin-left:auto}
+  .seg{flex:1 1 auto} .seg button{flex:1;padding:0 8px}
+  #addBtn{flex:1 1 auto;height:36px}
+  .filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+  .filters::-webkit-scrollbar{display:none}
+  .chip{flex:none}
+  .app{padding-block:10px 24px;gap:12px}
+  .panel{padding:14px}
+  .panel-date{font-size:20px}
+  .input,select.input,textarea.input{font-size:16px}
+  .title-input{font-size:18px}
+  .overlay{padding:0;align-items:flex-end;padding-top:env(safe-area-inset-top,0px)}
+  .sheet{width:100%;max-height:100%;height:100%;border-radius:14px 14px 0 0}
+  .sheet-body{padding:14px 16px}
+  .sheet-foot{padding:10px 16px max(10px,env(safe-area-inset-bottom,0px))}
+  .sheet-foot .primary,.sheet-foot .ghost,.sheet-foot .danger{height:42px;font-size:15px}
+  .lblpick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+  .lblpick label span{width:100%;justify-content:center;padding:0 4px;height:36px;font-size:12px}
+}
 </style>
 </head><body>
 
@@ -216,6 +243,7 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
 <header class="bar"><div class="bar-in gutter">
   <div class="brand"><i></i>カレンダー <span class="ver" id="ver"></span></div>
   <button class="sync" id="syncBtn" data-s="busy"><i></i><span id="syncText">接続中…</span></button>
+  <span id="sghChipSlot"></span>
   <div class="nav">
     <button class="icon-btn" id="prev" aria-label="前の月">‹</button>
     <div class="month-label" id="monthLabel"></div>
@@ -653,6 +681,8 @@ const css = `
 .sgh-menu button,.sgh-menu a{border:0;background:none;text-align:left;padding:10px 12px;border-radius:8px;color:inherit;text-decoration:none;font:inherit;cursor:pointer}
 .sgh-menu button:hover,.sgh-menu a:hover{background:#eef3f1}
 .sgh-menu small{display:block;padding:8px 12px 4px;color:#5f6b66}
+.sgh-chip.in-slot{position:static;box-shadow:none;padding:0 12px;height:30px;font-size:12px;white-space:nowrap;max-width:9em;overflow:hidden;text-overflow:ellipsis}
+.sgh-menu.top{bottom:auto;top:calc(56px + env(safe-area-inset-top,0px));max-width:calc(100vw - 20px)}
 .sgh-log{max-height:70vh;overflow:auto;font-size:12px}
 .sgh-log table{border-collapse:collapse;width:100%} .sgh-log td{border-bottom:1px solid #e5ebe8;padding:6px;vertical-align:top}
 `;
@@ -706,12 +736,16 @@ let chip = null, menu = null;
 function url(q) { return BASE + q; }
 function renderChip() {
   if (!me) { if (chip) chip.remove(); chip = null; return; }
-  if (!chip) { chip = document.createElement("button"); chip.className = "sgh-chip"; chip.onclick = toggleMenu; document.body.appendChild(chip); }
+  if (!chip) {
+    chip = document.createElement("button"); chip.className = "sgh-chip"; chip.onclick = toggleMenu;
+    const slot = document.getElementById("sghChipSlot");   // カレンダーは上の帯の中に置く
+    if (slot) { chip.classList.add("in-slot"); slot.appendChild(chip); } else document.body.appendChild(chip);
+  }
   chip.textContent = `${me.no} ${me.name}`;
 }
 function toggleMenu() {
   if (menu) { menu.remove(); menu = null; return; }
-  menu = document.createElement("div"); menu.className = "sgh-menu";
+  menu = document.createElement("div"); menu.className = "sgh-menu" + (chip && chip.classList.contains("in-slot") ? " top" : "");
   const page = G.__SG_PAGE || "calendar";
   const links = [];
   if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar"))}" target="_top">📅 カレンダー</a>`);
@@ -813,7 +847,7 @@ if (document.readyState === "loading") document.addEventListener("DOMContentLoad
 </script>
 <script>
 "use strict";
-const APP_VERSION="2026.10.27g";
+const APP_VERSION="2026.10.27h";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"leave",n:"職員休み"},{k:"user",n:"利用者休み"},{k:"other",n:"その他予定"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"勤務時間変更"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -918,7 +952,7 @@ function renderPanel(vis,ps){
   else if(!evs.length)body=`<div class="empty">この日の予定はまだありません。${can?"<br>「この日に追加」から登録できます。":""}</div>`;
   else body=`<ul class="ev-list">${evs.map(e=>evRow(e,ps)).join("")}</ul>`;
   const q=quickHtml();
-  $("panel").innerHTML=q+`<div class="panel-head"><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${body}`;
+  $("panel").innerHTML=`<div class="panel-head"><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${q}${body}`;
 }
 function renderList(vis,ps){
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
@@ -1161,7 +1195,7 @@ function drawSheet(){
   <div class="sheet-head"><h2 id="sh-t">${ed.id?"予定の詳細":"新しい予定"}</h2><button class="icon-btn" data-close aria-label="閉じる">×</button></div>
   <form class="sheet-body" id="evForm" novalidate>
     <div class="note warn" id="liveNote" ${ed.changed?"":"hidden"}><p>この予定は、開いている間に他の人が変更または削除しました。このまま保存すると、どちらを残すか確認する画面が出ます。</p></div>
-    <div class="field"><span class="lbl">ラベル</span><div class="labels">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
+    <div class="field"><span class="lbl">ラベル</span><div class="labels lblpick">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
     ${d.label==="other"?"":box}
     <div class="field"><label for="f-title">タイトル${d.label==="other"?"":"（空欄なら自動で付きます）"}</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="${d.label==="other"?"例：週次定例":"例："+esc(autoTitle(d.label,sgOf(d.label,Object.assign({},d.w,{staff:d.w.staff.length?d.w.staff:["○○"],users:d.w.users.length?d.w.users:["○○"]})))||"")}" ${v()}></div>
     <label class="check" ${d.label==="other"?"":"hidden"}><input type="checkbox" id="f-allday" ${d.allDay?"checked":""} ${ro?"disabled":""}>終日</label>
