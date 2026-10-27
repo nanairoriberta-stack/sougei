@@ -259,6 +259,15 @@ async function bootstrap() {
     return "前の番号は使えず、新しい初期番号でログイン → 変更を求める。変更履歴に記録";
   });
 
+  await test("画面への返事に日付が混ざっても空にならない（本物のGoogleは日付入りの返事を空で届けるため、JSONの形にそろえる）", async () => {
+    const { g } = await bootstrap();
+    const r = g.ctx.ok_({ at: new Date(Date.UTC(2026, 10, 2)), list: [new Date(0)], none: undefined });
+    assert.strictEqual(typeof r.data.at, "string"); assert.strictEqual(r.data.list[0], "1970-01-01T00:00:00.000Z");
+    assert.ok(!Object.prototype.toString.call(r.data.at).includes("Date"));
+    assert.strictEqual(g.ctx.ok_(undefined).data, null);
+    return "日付は文字に、undefined は null に";
+  });
+
   await test("大きなマスタ（セル上限5万字を超える）も分割して保存・読み込み", async () => {
     const { g, admin } = await bootstrap();
     const raw = g.sheets.get("_docs").data.find((r) => r[0] === "kv/master");

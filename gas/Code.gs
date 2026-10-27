@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.27h',
+  VERSION: '2026.10.27i',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -119,7 +119,8 @@ var HANDLERS = {
   'prop.apply': function (me, a) { return propApply_(me, String(a[0])); },
   'prop.discard': function (me, a) { if (me.role !== '管理者' && me.role !== '送迎表') throw { code: 'denied', message: '権限がありません' }; return propDiscard_(me, String(a[0])); }
 };
-function ok_(data) { return { ok: true, data: data }; }
+/* 画面への返事は必ず JSON の形にそろえる（日付などが混ざると、本物のGoogleでは返事がまるごと空で届くため） */
+function ok_(data) { return { ok: true, data: data === undefined ? null : JSON.parse(JSON.stringify(data)) }; }
 function err_(code, message) { return { ok: false, code: code, message: message }; }
 function withLock_(fn) {
   var lock = LockService.getScriptLock();

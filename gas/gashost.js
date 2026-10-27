@@ -14,10 +14,18 @@ function rawCall(method, args) {
   return new Promise((res, rej) => {
     const run = G.google && G.google.script && G.google.script.run;
     if (!run) { rej({ code: "unavailable", message: "サーバーに接続できません" }); return; }
-    run.withSuccessHandler((r) => { if (!r) return rej({ code: "unavailable" }); if (r.ok) res(r.data); else rej({ code: r.code, message: r.message }); })
-       .withFailureHandler((e) => rej({ code: "unavailable", message: String((e && e.message) || e) }))
+    run.withSuccessHandler((r) => { if (!r) { netTrouble("サーバーの返事が空でした（" + method + "）"); return rej({ code: "unavailable", message: "サーバーの返事が空でした" }); } if (r.ok) res(r.data); else rej({ code: r.code, message: r.message }); })
+       .withFailureHandler((e) => { const m = String((e && e.message) || e); netTrouble(m); rej({ code: "unavailable", message: m }); })
        .api(token, method, args);
   });
+}
+/* サーバーに届かないときは、理由を画面に出す（ずっと「接続中」のままにしない）。同じ内容は1分に1回まで */
+let lastTrouble = "", lastTroubleAt = 0;
+function netTrouble(m) {
+  const now = Date.now(); if (m === lastTrouble && now - lastTroubleAt < 60000) return;
+  lastTrouble = m; lastTroubleAt = now;
+  const many = /authoriz|承認|権限|PERMISSION|ログイン/i.test(m);
+  try { toastHost("サーバーとの通信に失敗しました：" + m + (many ? "（複数のGoogleアカウントでログインしているブラウザでは動かないことがあります。シークレットウィンドウで開いてみてください）" : "")); } catch (e) {}
 }
 const listeners = new Set();
 async function call(method, ...args) {

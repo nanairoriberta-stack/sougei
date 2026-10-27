@@ -28,6 +28,14 @@
     window.__sgOpenCalendar = (date) => { const a = document.createElement("a"); a.href = H.url("?page=calendar" + (date ? "&d=" + date : "")); a.target = "_top"; document.body.appendChild(a); a.click(); a.remove(); };
     H.startPolling(20000);
   });
+  // 画面の部品（いちばん大きいところ）が動かないとき、真っ白のままにせず理由を出す
+  setTimeout(() => {
+    if (window.__sgSetKV) return;
+    const noReact = !window.React || !window.ReactDOM;
+    alertBar(noReact
+      ? "送迎表の画面の部品（インターネットから読み込む部分）を読み込めませんでした。通信を確かめて再読み込みしてください。"
+      : "送迎表の画面を最後まで読み込めませんでした。Apps Script の「sougei」が最後まで貼れているか（一番下が </body></html> か）を確かめ、貼り直してから「デプロイを管理 → 新バージョン」をしてください。", "bad", [["再読み込み", () => location.reload()]]);
+  }, 20000);
   window.addEventListener("online", () => kv.resume());
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") kv.flushLocal(); else kv.kick(); });
   window.addEventListener("pagehide", () => kv.flushLocal());
