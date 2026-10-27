@@ -194,6 +194,8 @@ async function bootstrap() {
     const ev = (title, label, sg, t, extra) => Object.assign({ title, date, endDate: date, allDay: !t, start: t ? t[0] : "", end: t ? t[1] : "", label, place: "", memo: "", members: [], sg }, extra || {});
     const help = ev("ヘルプ（中村）", "help", { type: "help", staff: [], users: ["中村"], note: "中村" }, ["10:00", "11:00"]);
     const ride = ev("森 家族送り・家族迎え", "ride", { type: "user_time", users: ["森"], noMeet: "家族送り", noSend: "家族迎え" });
+    const mr = p.runs.find((r) => r.kind === "meet" && r.userIds.length), mu = m.users.find((u) => u.id === mr.userIds[0]);
+    const place = ev(mu.name + " 迎え先実家", "ride", { type: "user_time", users: [mu.name], meetPlace: "実家" });
     // 一般職員：利用者が関わるヘルプ・送迎は入れられない。休日出勤は自分の分だけ
     const ip = device(g); await ip.login(noOf(g, "八壁"), pinOf(g, "八壁"));
     for (const [i, e] of [help, ride, ev("日野 休日出勤", "hwork", { type: "hwork", staff: ["日野"] }, ["09:00", "13:00"])].entries())
@@ -206,10 +208,11 @@ async function bootstrap() {
     // 送迎表の担当者：ヘルプ・送迎を入れる
     const row = idRows(g).find((r) => r[1] === "白戸"); row[2] = "送迎表";
     const sg = device(g); const me = await sg.login(noOf(g, "白戸"), pinOf(g, "白戸"));
-    const cal = sg.cal(me.no); cal.save(help, null); cal.save(ride, null); await settleCal([sg]);
+    const cal = sg.cal(me.no); cal.save(help, null); cal.save(ride, null); cal.save(place, null); await settleCal([sg]);
     const s = (await admin.call("kv.get", "sheet:" + date)).value;
     const S = (n) => m.staff.find((x) => x.name === n).id, U = (n) => m.users.find((x) => x.name === n).id;
     assert.deepStrictEqual(s.noRide[U("森")], { meet: "家族送り", send: "家族迎え" }, "家族送り・家族迎え → 迎えなし・送りなし（理由つき）");
+    assert.strictEqual(s.runs.find((r) => r.id === mr.id).places[mu.id], "実家", "迎え先の変更 → 乗る便のその日だけの行き先");
     const hb = s.blocks.find((b) => b.calId && b.kind === "help");
     assert.ok(hb && hb.staffId === "__hold__" && hb.label === "中村" && hb.time === "10:00", "担当未定のヘルプは保留欄");
     assert.deepStrictEqual(s.staffOv[S("八壁")], { workToday: true, start: "9:00", end: "15:00", deptId: m.departments.find((d) => d.name === "津田").id }, "休日出勤（時間）＋勤務時間変更（退勤）");
@@ -219,11 +222,13 @@ async function bootstrap() {
     const mt = evs.find((e) => e.title === "会議"); assert.deepStrictEqual([mt.place, mt.tanto, mt.sg], ["2階", ["日野", "八壁"], null], "その他予定：場所・担当");
     const log = g.sheets.get("変更履歴").data.slice(1).map((r) => r.join(" | "));
     assert.ok(log.some((l) => l.includes("白戸") && l.includes("送迎表：送迎の変更 家族送り 家族迎え 森")), "変更履歴に内容つきで記録");
+    assert.ok(log.some((l) => l.includes("送迎の変更 迎え先実家 " + mu.name)), "迎え先も変更履歴に");
     // 送迎の予定を消す → 迎えなし・送りなしが外れる
-    cal.remove(evs.find((e) => e.sg && e.sg.type === "user_time")); await settleCal([sg]);
+    cal.remove(evs.find((e) => e.title === ride.title)); await settleCal([sg]);
     const s2 = (await admin.call("kv.get", "sheet:" + date)).value;
     assert.ok(!(s2.noRide || {})[U("森")] && s2.blocks.some((b) => b.calId && b.kind === "help"), "送迎の変更だけ外れる");
-    return `家族送り・家族迎え→迎えなし・送りなし、ヘルプ→保留欄10:00、休日出勤→9:00〜（津田）・勤務時間変更→退勤15:00、その他予定の担当。一般職員のヘルプ・送迎・他人の休日出勤/勤務時間変更は拒否`;
+    assert.strictEqual(s2.runs.find((r) => r.id === mr.id).places[mu.id], "実家", "別の予定の迎え先は残る");
+    return `家族送り・家族迎え→迎えなし・送りなし、迎え先→便の行き先、ヘルプ→保留欄10:00、休日出勤→9:00〜（津田）・勤務時間変更→退勤15:00、その他予定の担当。一般職員のヘルプ・送迎・他人の休日出勤/勤務時間変更は拒否`;
   });
 
   await test("大きなマスタ（セル上限5万字を超える）も分割して保存・読み込み", async () => {

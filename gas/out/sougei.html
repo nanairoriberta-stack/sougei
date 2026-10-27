@@ -101,7 +101,8 @@ function normSg(x) {
   return { type: x.type, staff: names(x.staff), users: names(x.users), meet: t(x.meet), send: t(x.send), noMeet: str(x.noMeet, 40), noSend: str(x.noSend, 40), half: x.type === "staff_off" && (x.half === "am" || x.half === "pm") ? x.half : "",
     reason: str(x.reason, 40), note: str(x.note, 40),                            // 理由（欠席・勤務時間変更）／行き先（ヘルプ）
     dept: x.type === "hwork" || x.type === "shift" ? str(x.dept, 40) : "",       // その日の部署は送迎表の名前で持つ
-    wstart: x.type === "shift" ? t(x.wstart) : "", wend: x.type === "shift" ? t(x.wend) : "" };  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
+    wstart: x.type === "shift" ? t(x.wstart) : "", wend: x.type === "shift" ? t(x.wend) : "",  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
+    meetPlace: x.type === "user_time" ? str(x.meetPlace, 40) : "", sendPlace: x.type === "user_time" ? str(x.sendPlace, 40) : "" };  // 送迎：その日の迎え先・送り先  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
 }
 const strip = e => { const x = clone(e); x.prev = null; return x; };
 
@@ -766,7 +767,7 @@ const toMinX = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); r
 const appTime = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); return m ? `${Number(m[1])}:${m[2]}` : ""; };
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const TYPE_LABEL = { staff_off: "職員の休み・不在", staff_plan: "職員の予定", user_absent: "利用者の欠席", user_time: "利用者の時間変更", help: "ヘルプ", hwork: "休日出勤", shift: "勤務時間変更" };
+const TYPE_LABEL = { staff_off: "職員の休み・不在", staff_plan: "職員の予定", user_absent: "利用者の欠席", user_time: "送迎の変更", help: "ヘルプ", hwork: "休日出勤", shift: "勤務時間変更" };
 const HOLD_ID = "__hold__";                                  // 送迎表の「保留」欄（担当がまだ決まっていないヘルプ）
 
 function specsFor(master, events, date) {
@@ -790,7 +791,7 @@ function specsFor(master, events, date) {
     out.push({ id: ev.id, rev: ev.rev, type: ev.sg.type, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date),
       meet: appTime(ev.sg.meet), send: appTime(ev.sg.send), noMeet: ev.sg.noMeet || "", noSend: ev.sg.noSend || "", missing,
       reason: ev.sg.reason || "", note: ev.sg.note || "", deptId: dept ? dept.id : "",
-      wstart: appTime(ev.sg.wstart), wend: appTime(ev.sg.wend) });
+      wstart: appTime(ev.sg.wstart), wend: appTime(ev.sg.wend), meetPlace: ev.sg.meetPlace || "", sendPlace: ev.sg.sendPlace || "" });
   }
   return out;
 }
@@ -844,6 +845,16 @@ function revert(next, rec) {
   for (const [uid, r] of Object.entries(rec.userAbsent || {})) set("userAbsent", uid, r.prev, r.mine);
   for (const [uid, r] of Object.entries(rec.userTime || {})) set("userTime", uid, r.prev, r.mine);
   for (const [uid, r] of Object.entries(rec.noRide || {})) set("noRide", uid, r.prev, r.mine);
+  // 迎え先・送り先：反映した値のままの便だけ元に戻す（手で別の行き先に変えていたら触らない）
+  for (const [key, e] of Object.entries(rec.places || {})) {
+    const [k, uid] = key.split(":");
+    for (const r of next.runs || []) {
+      if (r.kind !== k || !r.places || r.places[uid] !== e.mine) continue;
+      const pl = Object.assign({}, r.places);
+      if (r.id === e.run && e.prev != null) pl[uid] = e.prev; else delete pl[uid];
+      if (Object.keys(pl).length) r.places = pl; else delete r.places;
+    }
+  }
   const ids = new Set(rec.blocks || []);
   if (ids.size) next.blocks = (next.blocks || []).filter((b) => !ids.has(b.id));
 }
@@ -874,6 +885,18 @@ function applySpec(next, spec) {
     if (spec.meet || spec.send) put("userTime", u.id, Object.assign({}, (next.userTime || {})[u.id] || {}, spec.meet ? { meet: spec.meet } : {}, spec.send ? { send: spec.send } : {}));
     if (spec.noMeet || spec.noSend) put("noRide", u.id, Object.assign({}, (next.noRide || {})[u.id] || {}, spec.noMeet ? { meet: spec.noMeet } : {}, spec.noSend ? { send: spec.noSend } : {}));
   });
+  // 迎え先・送り先：その日その人が乗る迎え／送りの便に「その日だけの行き先」を入れる。まだ便に入っていなければ、入ったときに入れる（healPlaces）
+  if (spec.type === "user_time") for (const [k, place] of [["meet", spec.meetPlace], ["send", spec.sendPlace]]) {
+    if (!place) continue;
+    rec.places = rec.places || {};
+    spec.users.forEach((u) => {
+      const r = runOf(next, k, u.id);
+      if (!r) { rec.places[`${k}:${u.id}`] = { run: null, prev: null, mine: place }; return; }
+      const prev = r.places && r.places[u.id] !== undefined ? r.places[u.id] : null;
+      r.places = Object.assign({}, r.places, { [u.id]: place });
+      rec.places[`${k}:${u.id}`] = { run: r.id, prev, mine: place };
+    });
+  }
   const bl = blocksOf(spec);
   next.blocks = (next.blocks || []).filter((b) => !bl.some((x) => x.id === b.id)).concat(bl);
   rec.blocks = bl.map((b) => b.id);
@@ -902,6 +925,20 @@ function heal(sheet, rec, work) {
   return changed;
 }
 
+const runOf = (sheet, k, uid) => (sheet.runs || []).find((r) => r.kind === k && (r.userIds || []).includes(uid));
+/* 迎え先・送り先の補い：便に入った（入り直した）のに行き先が入っていなければ入れる。手で入れた行き先はそのまま */
+function healPlaces(get, work, id) {
+  const rec = get().calApplied[id];
+  for (const [key, e] of Object.entries(rec.places || {})) {
+    const [k, uid] = key.split(":");
+    const r = runOf(get(), k, uid);
+    if (!r || (r.places && r.places[uid] !== undefined)) continue;
+    const n = work(); const rr = n.runs.find((x) => x.id === r.id);
+    rr.places = Object.assign({}, rr.places, { [uid]: e.mine });
+    n.calApplied[id].places[key] = { run: r.id, prev: null, mine: e.mine };
+  }
+}
+
 /* sheet を events に合わせる。変更がなければ同じ sheet を返す */
 function reconcile(master, sheet, events, date) {
   if (!master || !sheet) return sheet;
@@ -919,6 +956,7 @@ function reconcile(master, sheet, events, date) {
     if (!cur) { const n = work(); n.calApplied = n.calApplied || {}; n.calApplied[sp.id] = applySpec(n, sp); continue; }
     // 反映済みの予定は、消えてしまった項目と便・予定の欠けを補う（パターン読込・Excel取込で消えた場合など）
     heal(next || sheet, cur, work);
+    healPlaces(() => next || sheet, work, sp.id);
     const bl = blocksOf(sp); const have = new Set(((next || sheet).blocks || []).map((b) => b.id));
     if (bl.some((b) => !have.has(b.id))) { const n = work(); n.blocks = (n.blocks || []).filter((b) => !bl.some((x) => x.id === b.id)).concat(bl); }
   }
@@ -933,7 +971,7 @@ function summary(master, sheet, events, date) {
     time: s.half ? (s.half === "am" ? "AM休（午後から出勤）" : "PM休（午前で退勤）") :
       s.type === "help" ? `${s.from}〜${s.note ? `・${s.note}` : ""}${s.staff.length ? "" : "・担当は未定（保留欄）"}` :
       s.type === "shift" ? [s.wstart && `出勤${s.wstart}`, s.wend && `退勤${s.wend}`].filter(Boolean).join("・") || "部署の変更" :
-      s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) : s.type === "user_time" ? [s.meet && `迎え${s.meet}`, s.send && `送り${s.send}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
+      s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) : s.type === "user_time" ? [s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
 }
 
 const API = { reconcile, specsFor, summary, TYPE_LABEL, appTime };

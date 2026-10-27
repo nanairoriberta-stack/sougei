@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.27e',
+  VERSION: '2026.10.27f',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -201,15 +201,17 @@ function staffList_() {
 function namesList_() {
   var c = CacheService.getScriptCache(), hit = c.get('names2');
   if (hit) return JSON.parse(hit);
-  var users = [], seen = {}, idx = docIndex_(), depts = [], seenD = {};
+  var users = [], seen = {}, idx = docIndex_(), depts = [], seenD = {}, places = ['自宅', 'ﾘﾍﾞ'], seenP = { '自宅': 1, 'ﾘﾍﾞ': 1 };
   ['v1', 'v2', 'v3'].forEach(function (ed) {
     var d = docGet_(kvPath_(APP.EDITIONS[ed] + 'master'), idx); var m = d ? d.value.v : null; if (!m) return;
     var dn = function (id) { var x = (m.departments || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ''; };
     (m.users || []).forEach(function (u) { if (u && u.name && !seen[u.name]) { seen[u.name] = 1; users.push({ name: u.name, dept: dn(u.deptId) }); } });
     // 休日出勤・勤務時間変更の部署を選ぶための名前（送迎表の名前で持ち、各版で名前から探す）
+    // 迎え先・送り先の候補：利用者タブの「いつもの迎え先・送り先」（家族送り・家族迎えは別の選択肢なので除く）
+    (m.users || []).forEach(function (u) { [u && u.meetPlace, u && u.sendPlace].forEach(function (v) { v = String(v || '').trim(); if (/^(リベルタ|リベ|ﾘﾍﾞﾙﾀ|ﾘﾍﾞ)$/.test(v)) v = 'ﾘﾍﾞ'; if (v && !/^(家族|母|父)/.test(v) && !seenP[v]) { seenP[v] = 1; places.push(v); } }); });
     (m.departments || []).forEach(function (d) { if (d && d.name && !seenD[d.name]) { seenD[d.name] = 1; depts.push(d.name); } });
   });
-  var out = { users: users, depts: depts };
+  var out = { users: users, depts: depts, places: places };
   try { c.put('names2', JSON.stringify(out), 300); } catch (e) {}
   return out;
 }
@@ -453,7 +455,7 @@ function calApply_(me, op) {
   });
 }
 function sgText_(sg) {
-  var t = { staff_off: sg.half === 'am' ? 'AM休' : sg.half === 'pm' ? 'PM休' : '休み・不在', staff_plan: '職員の予定', user_absent: '欠席', user_time: '送迎の変更' + [sg.meet ? ' 迎え' + sg.meet : '', sg.noMeet ? ' ' + sg.noMeet : '', sg.send ? ' 送り' + sg.send : '', sg.noSend ? ' ' + sg.noSend : ''].join(''),
+  var t = { staff_off: sg.half === 'am' ? 'AM休' : sg.half === 'pm' ? 'PM休' : '休み・不在', staff_plan: '職員の予定', user_absent: '欠席', user_time: '送迎の変更' + [sg.meet ? ' 迎え' + sg.meet : '', sg.noMeet ? ' ' + sg.noMeet : '', sg.meetPlace ? ' 迎え先' + sg.meetPlace : '', sg.send ? ' 送り' + sg.send : '', sg.noSend ? ' ' + sg.noSend : '', sg.sendPlace ? ' 送り先' + sg.sendPlace : ''].join(''),
     help: 'ヘルプ', hwork: '休日出勤', shift: '勤務時間変更' + (sg.wstart ? ' 出勤' + sg.wstart : '') + (sg.wend ? ' 退勤' + sg.wend : '') }[sg.type];
   return t + ' ' + sg.staff.concat(sg.users).join('・') + (sg.reason || sg.note ? '（' + (sg.reason || sg.note) + '）' : '');
 }

@@ -56,7 +56,7 @@ bash build.sh        # → gas/out/ ができる
 bash test.sh         # Nodeのテスト全部
 bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ```
-- テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎の変更/休日出勤/勤務時間変更）、`test-agent.js`（AIと相談の適用 10件）、
+- テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎の変更/迎え先・送り先/休日出勤/勤務時間変更）、`test-agent.js`（AIと相談の適用 10件）、
   `gas/test-gas.js`（サーバー 21件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
   `mcp/test-mcp.js`（公式MCPクライアントで35件。Googleの302転送も再現）、`pw/gas_ui.js`・`pw/agent_ui.js`（画面）
 - `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
@@ -77,11 +77,14 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - CacheService は1値100KBまで（日本語はUTF-8で数える `utf8len_`）
 
 ## カレンダー → 送迎表の反映
-予定に `sg:{type, staff[], users[], meet, send, noMeet, noSend, half, reason, note, dept, wstart, wend}` を付けると、その日の送迎表に自動反映（`calsync.js`）。
+予定に `sg:{type, staff[], users[], meet, send, noMeet, noSend, half, reason, note, dept, wstart, wend, meetPlace, sendPlace}` を付けると、その日の送迎表に自動反映（`calsync.js`）。
 職員・利用者・部署は**送迎表の名前**で持ち、各版のマスタで名前から探す（見つからない名前は「反映されていません」と表示）。
 - `staff_off`：職員の休み・不在。`half:"am"|"pm"` は**その職員のその曜日の勤務時間の真ん中**で区切る（夜勤の日またぎ対応）
 - `staff_plan`：職員の予定（送迎表の「予定」欄へ）
 - `user_absent`：利用者の欠席 / `user_time`：送迎の変更（迎え：時間変更/家族送り/受診後送り、送り：時間変更/家族迎え。家族送りなどは `noMeet`/`noSend` に理由としてそのまま入る）
+  - 迎え先・送り先の変更（`meetPlace`/`sendPlace`）→ その日その人が乗る迎え／送りの便の `places[利用者ID]`（送迎表の「その日だけの行き先」）。
+    まだ便に入っていなければ記録だけして、便に入った保存のときに入れる（`healPlaces`）。別の便に移しても付いていく。
+    手で別の行き先にした便は触らない。予定を消すと、反映した値のままの便だけ元の行き先に戻す。候補は `names.list` の `places`
 - `help`：ヘルプ → `blocks` に `kind:"help"`（ID `cal_<予定ID>_<職員ID>`、開始時刻だけ・長さは送迎表の決まり（`durMin` を付けない）、
   `label`=行き先（`note`）、行き先が利用者名なら `users`/`userIds` にも入る、担当未定は保留欄 `__hold__`）
 - （以前あった「送迎＝臨時の便を作る `ride`」は 2026-10-27 に廃止。送迎ラベルは `user_time`）
@@ -100,7 +103,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 | ラベル | 入力項目 | 送迎表へ |
 |---|---|---|
 | ヘルプ | 担当職員（行き先が利用者なら未定可）・開始時刻・行き先（利用者名の候補つき、場所も可） | 【ヘルプ】 |
-| 送迎 | 利用者・迎え（いつもどおり/時間変更/家族送り/受診後送り）・送り（いつもどおり/時間変更/家族迎え） | 時刻・迎えなし/送りなし（理由つき） |
+| 送迎 | 利用者・迎え（いつもどおり/時間変更/家族送り/受診後送り）・送り（いつもどおり/時間変更/家族迎え）・迎え先／送り先の変更（迎えなし・送りなしのときは出さない） | 時刻・迎えなし/送りなし（理由つき）・便の行き先 |
 | 職員休み | 職員・1日/AM休/PM休/時間で（中抜け・通院など）。**理由は聞かない** | 休み・半休・不在 |
 | 利用者休み | 利用者・理由（任意） | 欠席 |
 | その他予定 | タイトル・時間・場所・担当（職員、予定の `tanto` に残る）・「担当の職員の予定として送迎表にも載せる」 | （載せるときだけ）予定 |

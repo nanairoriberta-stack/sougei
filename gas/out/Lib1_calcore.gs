@@ -86,7 +86,8 @@ function normSg(x) {
   return { type: x.type, staff: names(x.staff), users: names(x.users), meet: t(x.meet), send: t(x.send), noMeet: str(x.noMeet, 40), noSend: str(x.noSend, 40), half: x.type === "staff_off" && (x.half === "am" || x.half === "pm") ? x.half : "",
     reason: str(x.reason, 40), note: str(x.note, 40),                            // 理由（欠席・勤務時間変更）／行き先（ヘルプ）
     dept: x.type === "hwork" || x.type === "shift" ? str(x.dept, 40) : "",       // その日の部署は送迎表の名前で持つ
-    wstart: x.type === "shift" ? t(x.wstart) : "", wend: x.type === "shift" ? t(x.wend) : "" };  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
+    wstart: x.type === "shift" ? t(x.wstart) : "", wend: x.type === "shift" ? t(x.wend) : "",  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
+    meetPlace: x.type === "user_time" ? str(x.meetPlace, 40) : "", sendPlace: x.type === "user_time" ? str(x.sendPlace, 40) : "" };  // 送迎：その日の迎え先・送り先  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
 }
 const strip = e => { const x = clone(e); x.prev = null; return x; };
 

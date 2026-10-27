@@ -114,3 +114,42 @@ console.log('labels OK');
  const T=require('./calcore.js'); assert.strictEqual(T.normSg({type:'staff_off',staff:['x'],wstart:'07:00'}).wstart,'','勤務時間変更以外は時刻を持たない');
 }
 console.log('shift OK');
+// ===== 送迎：迎え先・送り先の変更 =====
+{
+ const D='2026-11-02';
+ const inRun=(k)=>{const r=sheet.runs.find(r=>r.kind===k&&r.userIds.length);return{r,u:m.users.find(u=>u.id===r.userIds[0])}};
+ const {r:mr,u:mu}=inRun('meet'); const {r:sr,u:su}=inRun('send');
+ const free=m.users.find(u=>!sheet.runs.some(r=>r.kind==='meet'&&r.userIds.includes(u.id)));
+ const L=[{id:'pl1',rev:1,date:D,endDate:D,allDay:true,title:'迎え先',sg:{type:'user_time',users:[mu.name],meetPlace:'実家'}},
+  {id:'pl2',rev:1,date:D,endDate:D,allDay:true,title:'送り先',sg:{type:'user_time',users:[su.name],sendPlace:'病院',send:'15:00'}},
+  {id:'pl3',rev:1,date:D,endDate:D,allDay:true,title:'まだ便にいない人',sg:{type:'user_time',users:[free.name],meetPlace:'ﾘﾍﾞ'}}];
+ const x=C.reconcile(m,sheet,L,D);
+ assert.strictEqual(x.runs.find(r=>r.id===mr.id).places[mu.id],'実家','乗る迎えの便に、その日だけの迎え先');
+ assert.strictEqual(x.runs.find(r=>r.id===sr.id).places[su.id],'病院','乗る送りの便に、その日だけの送り先'); assert.strictEqual(x.userTime[su.id].send,'15:00');
+ assert.ok(!x.runs.some(r=>r.places&&r.places[free.id]),'便にいない人はまだ入れない');
+ assert.strictEqual(C.reconcile(m,x,L,D),x,'同じ内容なら変更なし');
+ // 送迎表で便に入れる → 次の保存で迎え先が入る
+ const y=JSON.parse(JSON.stringify(x)); const tr=y.runs.find(r=>r.kind==='meet'&&r.id!==mr.id); tr.userIds.push(free.id);
+ const y2=C.reconcile(m,y,L,D); assert.strictEqual(y2.runs.find(r=>r.id===tr.id).places[free.id],'ﾘﾍﾞ','便に入ったら迎え先が入る');
+ // 別の便に移しても付いていく。手で別の行き先にした分はそのまま
+ const z=JSON.parse(JSON.stringify(y2)); const a=z.runs.find(r=>r.id===mr.id); a.userIds=a.userIds.filter(i=>i!==mu.id); delete a.places[mu.id]; if(!Object.keys(a.places).length)delete a.places;
+ const other=z.runs.find(r=>r.kind==='meet'&&r.id!==mr.id&&r.id!==tr.id); other.userIds.push(mu.id);
+ z.runs.find(r=>r.id===sr.id).places[su.id]='自宅';
+ const z2=C.reconcile(m,z,L,D);
+ assert.strictEqual(z2.runs.find(r=>r.id===other.id).places[mu.id],'実家','移した便にも迎え先');
+ assert.strictEqual(z2.runs.find(r=>r.id===sr.id).places[su.id],'自宅','手で変えた送り先は残す');
+ // パターン読込で便が作り直されても入れ直す
+ const w=Object.assign({},z2,{runs:JSON.parse(JSON.stringify(p.runs))}); const w2=C.reconcile(m,w,L,D);
+ assert.strictEqual(w2.runs.find(r=>r.id===mr.id).places[mu.id],'実家');
+ // 予定を消す → 反映した行き先だけ外れる（手で変えた送り先は残る）
+ const g=C.reconcile(m,z2,[],D);
+ assert.ok(!g.runs.some(r=>r.places&&(r.places[mu.id]==='実家'||r.places[free.id]==='ﾘﾍﾞ')),'迎え先は外れる');
+ assert.strictEqual(g.runs.find(r=>r.id===sr.id).places[su.id],'自宅');
+ // もともとその日だけの行き先があった便は、消したら元の行き先に戻る
+ const base=JSON.parse(JSON.stringify(sheet)); base.runs.find(r=>r.id===mr.id).places={[mu.id]:'ﾘﾍﾞ'};
+ const b1=C.reconcile(m,base,[L[0]],D); assert.strictEqual(b1.runs.find(r=>r.id===mr.id).places[mu.id],'実家');
+ assert.deepStrictEqual(C.reconcile(m,b1,[],D).runs.find(r=>r.id===mr.id).places,{[mu.id]:'ﾘﾍﾞ'},'元の行き先に戻る');
+ assert.strictEqual(C.summary(m,x,L,D).find(s=>s.id==='pl2').time,'送り15:00・送り先:病院');
+ const T=require('./calcore.js'); assert.strictEqual(T.normSg({type:'user_absent',users:['x'],meetPlace:'a'}).meetPlace,'','欠席に迎え先は持たない');
+}
+console.log('place OK');
