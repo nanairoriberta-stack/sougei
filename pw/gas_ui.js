@@ -76,15 +76,21 @@ const D = path.join(__dirname, "../gas/out");
   await pick("users", "森"); await A.pg.check('input[name="w-ukind"][value="change"]'); await A.pg.waitForTimeout(200);
   await A.pg.check('input[name="w-meet"][value="none"]'); await A.pg.waitForTimeout(200); await A.pg.click('[data-fill="w-reason"][data-v="受診"]');
   await A.pg.locator(".sheet").screenshot({ path: "g_user.png" });
+  await A.pg.click("[data-save]"); await A.pg.waitForTimeout(1500);
+  await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-shift"); await A.pg.waitForTimeout(300);
+  await pick("staff", "八壁"); await A.pg.check('input[name="w-we"][value="time"]'); await A.pg.waitForTimeout(200);
+  await A.pg.fill("#w-wet", "19:00"); await A.pg.click('[data-fill="w-reason"][data-v="残業"]');
+  await A.pg.locator(".sheet").screenshot({ path: "g_shift.png" });
   await A.pg.click("[data-save]"); await A.pg.waitForTimeout(2500);
   const s2 = api(t, "kv.get", ["sheet:" + date]).data.value; const S = (n) => m.staff.find((x) => x.name === n).id, U = (n) => m.users.find((x) => x.name === n).id;
   const run = s2.runs.find((r) => r.calId);
   assert.ok(run && run.kind === "other_run" && run.time === "9:30" && run.staffId === S("白戸") && run.staffRiderIds[0] === S("吉岡") && run.vehicleId === m.vehicles[0].id && run.note === "通院", JSON.stringify(run));
   const hb = s2.blocks.find((x) => x.calId && x.kind === "help"); assert.ok(hb && hb.staffId === "__hold__" && hb.note === "入浴" && hb.time === "14:00");
   assert.strictEqual(s2.noRide[U("森")].meet, "受診");
+  assert.strictEqual(s2.staffOv[S("八壁")].end, "19:00", "勤務時間変更");
   const titles = A.pg.locator(".ev-row .t"); const tl = await titles.allInnerTexts();
-  assert.ok(tl.includes("森 送迎（通院）") && tl.includes("中村 ヘルプ（入浴）") && tl.includes("森 迎えなし（受診）"), tl.join(","));
-  console.log("管理者が入力 →", tl.filter((x) => /送迎|ヘルプ|迎えなし/.test(x)).join(" / "), "→ 送迎表: 便", run.time, "・ヘルプ(保留欄)", hb.time, "・迎えなし", s2.noRide[U("森")].meet, "/ 画面エラー:", A.errs);
+  assert.ok(tl.includes("森 送迎（通院）") && tl.includes("中村 ヘルプ（入浴）") && tl.includes("森 迎えなし（受診）") && tl.includes("八壁 退勤19:00（残業）"), tl.join(","));
+  console.log("管理者が入力 →", tl.filter((x) => /送迎|ヘルプ|迎えなし|退勤/.test(x)).join(" / "), "→ 送迎表: 便", run.time, "・ヘルプ(保留欄)", hb.time, "・迎えなし", s2.noRide[U("森")].meet, "・八壁の退勤", s2.staffOv[S("八壁")].end, "/ 画面エラー:", A.errs);
   assert.deepStrictEqual(real(A.errs), []);
   // 送迎表を開き直す → カレンダーから入った便・ヘルプが表に出る（画面エラーなし）
   P.errs.length = 0; await P.pg.reload(); await P.pg.waitForTimeout(5000);   // ログインは端末に残っている

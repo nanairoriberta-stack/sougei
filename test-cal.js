@@ -101,3 +101,20 @@ console.log('half OK');
  assert.strictEqual(T.normSg({type:'staff_off',staff:['八壁'],vehicle:'x',dept:'y'}).vehicle,'','職員休みに車両は持たない');
 }
 console.log('labels OK');
+// ===== 勤務時間変更 =====
+{
+ const D='2026-11-02', st=n=>S(n).id, tsu=m.departments.find(d=>d.name==='津田');
+ const L=[{id:'sh1',rev:1,date:'2026-11-01',endDate:'2026-11-03',allDay:true,title:'八壁 出勤7:30・退勤19:00',sg:{type:'shift',staff:['八壁'],wstart:'07:30',wend:'19:00',reason:'早出'}},
+  {id:'sh2',rev:1,date:D,endDate:D,allDay:true,title:'日野 退勤15:00',sg:{type:'shift',staff:['日野'],wend:'15:00',dept:'津田'}}];
+ const x=C.reconcile(m,sheet,L,D);
+ assert.deepStrictEqual(x.staffOv[st('八壁')],{start:'7:30',end:'19:00'},'出勤・退勤が変わる（何日も続く予定の中日も）');
+ assert.deepStrictEqual(x.staffOv[st('日野')],{end:'15:00',deptId:tsu.id},'退勤だけ・その日の部署');
+ assert.strictEqual(C.summary(m,x,L,D).find(s=>s.id==='sh1').time,'出勤7:30・退勤19:00');
+ // 手で退勤を直してから予定を消す → 手の分は残り、出勤だけ元に戻る
+ const h=JSON.parse(JSON.stringify(x)); h.staffOv[st('八壁')].end='18:00';
+ const g=C.reconcile(m,h,[],D); assert.deepStrictEqual(g.staffOv[st('八壁')],{end:'18:00'}); assert.ok(!(st('日野') in g.staffOv));
+ // パターン読込で消えても入れ直す
+ assert.deepStrictEqual(C.reconcile(m,Object.assign({},x,{staffOv:{}}),L,D).staffOv[st('八壁')],{start:'7:30',end:'19:00'});
+ const T=require('./calcore.js'); assert.strictEqual(T.normSg({type:'staff_off',staff:['x'],wstart:'07:00'}).wstart,'','勤務時間変更以外は時刻を持たない');
+}
+console.log('shift OK');

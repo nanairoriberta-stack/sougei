@@ -13,8 +13,8 @@ const LOCK_WAIT_MAX = 90000;   // ロック待ちの上限（超えたら後で�
 const MAX_BYTES = 240000;      // 1文書の上限（基盤は256KiB）
 const MAX_COMMENTS = 100;
 const TRASH_DAYS = 30;
-const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork"];  // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
-const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "help", "ride", "hwork"];
+const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift"];  // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
+const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "help", "ride", "hwork", "shift"];
 const RIDE_KINDS = ["meet", "send", "other_run"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
@@ -86,7 +86,8 @@ function normSg(x) {
   return { type: x.type, staff: names(x.staff), users: names(x.users), meet: t(x.meet), send: t(x.send), noMeet: str(x.noMeet, 40), noSend: str(x.noSend, 40), half: x.type === "staff_off" && (x.half === "am" || x.half === "pm") ? x.half : "",
     reason: str(x.reason, 40), note: str(x.note, 40),                            // 理由（休み）／内容・行き先（ヘルプ・送迎）
     kind: x.type === "ride" ? (RIDE_KINDS.includes(x.kind) ? x.kind : "other_run") : "",   // 送迎：迎え／送り／その他の便
-    vehicle: x.type === "ride" ? str(x.vehicle, 40) : "", dept: x.type === "hwork" ? str(x.dept, 40) : "" };  // 車両・その日の部署は送迎表の名前で持つ
+    vehicle: x.type === "ride" ? str(x.vehicle, 40) : "", dept: x.type === "hwork" || x.type === "shift" ? str(x.dept, 40) : "",  // 車両・その日の部署は送迎表の名前で持つ
+    wstart: x.type === "shift" ? t(x.wstart) : "", wend: x.type === "shift" ? t(x.wend) : "" };  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
 }
 const strip = e => { const x = clone(e); x.prev = null; return x; };
 
