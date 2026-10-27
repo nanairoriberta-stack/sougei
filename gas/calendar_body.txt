@@ -1,0 +1,35 @@
+
+
+<header class="bar"><div class="bar-in gutter">
+  <div class="brand"><i></i>カレンダー <span class="ver" id="ver"></span></div>
+  <button class="sync" id="syncBtn" data-s="busy"><i></i><span id="syncText">接続中…</span></button>
+  <div class="nav">
+    <button class="icon-btn" id="prev" aria-label="前の月">‹</button>
+    <div class="month-label" id="monthLabel"></div>
+    <button class="icon-btn" id="next" aria-label="次の月">›</button>
+    <button class="ghost" id="todayBtn">今日</button>
+  </div>
+  <div class="seg" role="group" aria-label="表示切替">
+    <button id="vMonth" aria-pressed="true">月</button>
+    <button id="vList" aria-pressed="false">リスト</button>
+    <button id="vTrash" aria-pressed="false">ゴミ箱</button>
+  </div>
+  <button class="primary" id="addBtn">＋ 予定を追加</button>
+</div></header>
+
+<div class="filters gutter" id="filters"></div>
+<div class="notices gutter" id="notices"></div>
+
+<main class="app gutter" id="app">
+  <section id="monthView" class="cal" aria-label="月間カレンダー">
+    <div class="dow"><div class="su">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div class="sa">土</div></div>
+    <div class="grid" id="grid"></div>
+  </section>
+  <section id="listView" class="agenda" hidden aria-label="予定リスト"></section>
+  <aside class="panel" id="panel" aria-live="polite"></aside>
+</main>
+
+<div id="sheetRoot"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<input type="file" id="restoreFile" accept=".json,application/json" hidden>
+

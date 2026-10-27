@@ -1,0 +1,116 @@
+# 送迎表＋職場カレンダー（Google Apps Script版）
+
+介護事業所（なないろ）の「送迎表アプリ」と、職員がスマホで使う「職場カレンダー（TimeTree風）」を、
+Googleスプレッドシート＋Apps Script（GAS）の1つのウェブアプリとして動かすプロジェクト。
+依頼者はエンジニアではない（介護事業所の担当者）。画面の文言・説明はすべて日本語で、専門用語を避ける。
+
+## いちばん大事な約束（これを壊す変更はしない）
+依頼者の最優先事項：**「各人が入力したデータが消える・保存されない・送迎表に反映されない」は絶対にダメ。**
+過去に別アプリで「同時に開くとデータが消えた」「ネットが切れて消えた」経験がある。約200人が同時に使う。
+
+- 読み込みに失敗した値で保存しない（空の画面を保存して上書き、を防ぐ。`loadFailed` で保存を止める）
+- 文書まるごとの上書きをしない。サーバー側でロック（`LockService`）を取り、**3者マージ（base / mine / theirs、`SGKV.merge3`）**して保存
+- 未送信の変更は即座に端末へ保存（localStorage）し、通信が戻ったら自動で再送。送る内容はその時点の写し（snapshot）
+- 操作は冪等（同じ操作が二度届いても二重にならない。`opId`/`lastOp`）
+- カレンダー→送迎表の反映は**サーバー側**で行う（送迎表の保存のたび・カレンダー操作のたびに `reconcile`）。画面側の反映は表示だけで保存しない
+- 変更は必ず `変更履歴` シートに誰が・何をを残す
+
+変更したら必ず `bash build.sh && bash test.sh ui` を通すこと（下記）。テストを弱めて通すのは禁止。
+
+## 全体の形
+```
+職員のスマホ ──(ID＋4桁PIN)──▶ GASウェブアプリ ?page=calendar  … カレンダー（gas/calendar_app.js）
+事務所PC     ──────────────▶ GASウェブアプリ ?page=sougei&e=v1|v2|v3 … 送迎表（sougei.jsx を束ねたもの）
+                                   │ google.script.run → api(token, method, args)（gas/Code.gs の HANDLERS）
+                                   ▼
+                        スプレッドシート（隠しシート _docs に JSON を分割保存）
+Claudeアプリ ─(カスタムコネクタ/MCP)─▶ Cloudflare中継 ─▶ GAS doPost(?mcp=1&k=鍵)（gas/Mcp.gs）
+```
+- GASは `executeAs: USER_DEPLOYING`、`access: ANYONE_ANONYMOUS`。認証はアプリ独自（職員番号＋PIN、セッション120日、5回失敗で15分ロック）
+- 送迎表は3つの版を1本のコードで切替：`v1`=現体制版（〜10/31）、`v2`=新体制版（11/1〜）、`v3`=りんく・ぷれいす版。保存キーの頭に `''` / `'v2:'` / `'v3:'`
+- 権限（`職員ID` シートC列）：`管理者` / `送迎表`（送迎表を編集できる）/ `一般`（カレンダーで自分の休み・予定だけ）
+
+## ファイル
+| ファイル | 中身 | 編集する？ |
+|---|---|---|
+| `sougei.jsx` | 送迎表アプリ本体（React、約1.2万行）。元は依頼者の v293。AI調整・💬AIと相談・🤖Claudeの案 を含む | ◯ |
+| `gas/Code.gs` | サーバー：doGet、api/HANDLERS、認証、文書ストア、kv.merge/cas、カレンダー操作 cal.apply、反映、変更履歴、AI(API)中継 | ◯ |
+| `gas/Mcp.gs` | Claudeのカスタムコネクタ（MCP、JSON-RPC）。道具：get_rules / get_day / get_master / get_week_pattern / propose / list_proposals / apply_proposal / discard_proposal | ◯ |
+| `gas/calendar_app.js` `calendar_css.txt` `calendar_body.txt` | カレンダー画面（素のJS） | ◯ |
+| `gas/gashost.js` | 画面共通：ログイン画面、PIN変更、`window.claude` 互換の口（db/user/downloads/sample）、ポーリング | ◯ |
+| `gas/kvgas.js` | 送迎表の保存エンジン（端末保存・再送・マージ・ポーリング） | ◯ |
+| `gas/sougei_boot.js` | 送迎表ページの起動 | ◯ |
+| `calcore.js` | カレンダーの共通部品（画面とサーバーで同じコード。→ `Lib1_calcore.gs`） | ◯ |
+| `kvsync.js` | merge3・eq・encKey（→ `Lib2_merge.gs`） | ◯ |
+| `calsync.js` | カレンダー→送迎表の反映 `SGCal.reconcile`（→ `Lib3_calsync.gs`） | ◯ |
+| `mcp/engine.js` | `sougei.jsx` の計算部分をサーバー用に束ねたもの（→ `Lib4_engine.gs`、グローバル `SGEngine`） | ✕ 生成物 |
+| `mcp/relay-worker.mjs` | Cloudflare Worker の中継（→ `gas/out/中継_Cloudflare.js`） | ◯ |
+| `gas/out/` | **Googleに貼るファイル一式**（生成物） | ✕ |
+| `build/` | 画面の束ね（esbuild＋Tailwind）。`build/shims` で React/three をグローバル（CDN）に向ける | shimsのみ |
+| `history/` | 以前の作り方（元のv1/v2/v3 → パッチを順に当てて作っていた）。参考用。**使わない** | ✕ |
+
+## 作る・試す
+```bash
+npm install && (cd build && npm install) && (cd pw && npm install && npx playwright install chromium)
+bash build.sh        # → gas/out/ ができる
+bash test.sh         # Nodeのテスト全部
+bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
+```
+- テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-cal.js`（反映・AM/PM休）、`test-agent.js`（AIと相談の適用 10件）、
+  `gas/test-gas.js`（サーバー 20件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
+  `mcp/test-mcp.js`（公式MCPクライアントで35件。Googleの302転送も再現）、`pw/gas_ui.js`・`pw/agent_ui.js`（画面）
+- `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
+- `sougei.jsx` の関数をテスト/サーバーで使うときは `build.sh` の `EXP` と `mcp/engine_entry.js` に名前を足す
+
+## 本番への出し方（依頼者がやる）
+スプレッドシート → 拡張機能 → Apps Script に `gas/out/` の `.gs` と `.html`、`appsscript.json` を貼る →
+初回はエディタで `setup` を実行 → デプロイ（ウェブアプリ）。更新は「デプロイを管理 → 編集 → 新バージョン」（URLは変わらない）。
+`setup` が `職員ID` シートを作り、職員番号（3桁、自動）と初期PINを振る。管理者は `000`。
+
+## データの置き方（スプレッドシート）
+- `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）
+  - 送迎表：`kv/<encKey(キー)>`。キーは `master`（利用者・職員・車両・部署・ルール）/ `sheet:YYYY-MM-DD` / `pattern:0〜6`（週間パターン）。版の頭 `v2:`/`v3:`
+  - カレンダー：`days/…`（日ごと・シャード）、`cm/…`（コメント）。Claudeの案：`prop/<id>`
+- `職員ID`・`変更履歴`・`_auth`・`_sessions`・`AI接続`（コネクタの鍵）
+- **スプレッドシートの自動変換に注意**：`"000"`→0、`"0123"`→123、`=`/`+`/`-`/`@` で始まる文字→数式、日付→Date。
+  書くときは `txt_()`（先頭に `'`）か `safe_()`、PINは `pinOf_()`、職員番号は `normNo_()`、ハッシュは `h:` 付き。`fakegas.js` はこの変換を再現する
+- CacheService は1値100KBまで（日本語はUTF-8で数える `utf8len_`）
+
+## カレンダー → 送迎表の反映
+予定に `sg:{type, staff[], users[], meet, send, noMeet, noSend, half}` を付けると、その日の送迎表に自動反映（`calsync.js`）。
+- `staff_off`：職員の休み・不在。`half:"am"|"pm"` は**その職員のその曜日の勤務時間の真ん中**で区切る（夜勤の日またぎ対応）
+- `staff_plan`：職員の予定（送迎表の「予定」欄へ）
+- `user_absent`：利用者の欠席 / `user_time`：利用者の時間変更・迎えなし/送りなし（受診後来所など）
+- 一般職員は自分の `staff_*` だけ。`user_*` は送迎表権限のみ（サーバーでも `calApply_` で検査）
+- 反映済みの記録（calApplied: prev/mine）を持ち、予定を消したら項目単位で元に戻す。パターン読込などで消えた分は heal で戻す
+- カレンダーの「休みを入れる」：プルダウン（休み（1日）/AM休/PM休）＋入れるボタン
+
+### カレンダーのラベル（2026-10-27 変更）
+`help`=ヘルプ、`ride`=送迎、`leave`=職員休み、`user`=利用者休み、`other`=その他予定、`hwork`=休日出勤。
+以前の `meeting/visit/deadline/event` は `normEvent` で `other` 扱い。
+**各ラベルで入力してもらう項目は依頼者から後で届く（未対応）**。ヘルプ・送迎・休日出勤はまだ送迎表に反映しない。
+
+## AI
+1. **🤖 AI調整・💬 AIと相談**（送迎表画面）：サーバー `ai.messages` が Anthropic API を呼ぶ（スクリプトプロパティ `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL` 既定 `claude-sonnet-5-5`）。
+   1回ごとに料金がかかるため**依頼者は使わない判断**。キー未設定なら動かないだけ（ボタンを隠すかは未決）
+2. **Claudeアプリ（月額プラン）＋カスタムコネクタ**（`gas/Mcp.gs`）：依頼者が選んだ方向。
+   Claudeは `propose` で「案」を置くだけ → 送迎表画面の「🤖 Claudeの案」で担当者が反映（サーバーで3者マージ）。
+   接続URLは `issueConnectorUrls()` で職員ごとに発行（`AI接続` シート、権限 管理者/送迎表のみ）。
+   **Googleは POST に必ず302転送で返し、公式MCPクライアント(1.32)は既定でそれを辿らない** → Cloudflare Worker 中継（`/mcp/<鍵>`）経由が前提。
+   手順は `gas/Claude接続の手順.txt`
+
+## まだ確かめていない／残っていること
+- [ ] 各ラベルの入力項目（依頼者待ち）と、ヘルプ・送迎・休日出勤の送迎表への反映
+- [ ] 本物のGoogle上での動作（ここまでは `fakegas.js` の再現環境でのみ検証）
+- [ ] 本物の claude.ai からカスタムコネクタでつながるか、Cloudflare中継の実地確認
+- [ ] AIボタン（API版）を隠すかどうか
+- [ ] 約200人同時の負荷（GASの同時実行上限30・LockServiceの待ち）を実環境で計測
+
+## 過去にあった不具合（同じ穴に落ちないために）
+- `normNo_(0)` が空になり管理者000がログイン不能 → `no == null` で判定
+- PINの先頭0が消える、`+`で始まるハッシュが数式になる、履歴セルが数式になる → txt_/safe_/h:
+- `?d=` からのXSS → 日付の形を検査し `<` をエスケープ
+- 後から作った日・パターン読込で消えた休みが反映されない、古い画面が反映を戻す → サーバー反映＋heal＋項目単位で戻す
+- AI調整の重複除去が移動便（`mode:"move"`、例：成相 あいのて→嫁島）を消した → move は対象外
+- 画面が真っ白：esbuild で react の解決ずれ → `--alias` で shims に固定
+- `collectSheetChecks` の引数名衝突（TDZ）→ `patDayArg`

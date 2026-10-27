@@ -1,0 +1,11 @@
+node_modules/
+.gen/
+eng.cjs
+build/app.jsx
+pw/g_*.html
+pw/a_*.html
+pw/c_*.html
+pw/*.png
+*.png
+mcp/dev.json
+mcp/dev.log

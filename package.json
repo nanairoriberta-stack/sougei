@@ -1,0 +1,12 @@
+{
+  "name": "sougei-calendar",
+  "scripts": {
+    "build": "bash build.sh",
+    "test": "bash test.sh"
+  },
+  "dependencies": {
+    "esbuild": "0.24.2",
+    "@modelcontextprotocol/sdk": "1.32.2"
+  },
+  "private": true
+}
