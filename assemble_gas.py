@@ -1,11 +1,16 @@
 import json, os
 O='gas/out/'
+# 画面の部品でエラーが出たり、インターネットから読み込む部品が届かなかったら、画面の下に出す（F12を使わなくても原因が分かるように）
+GUARD = '''<script>(function(){var n=0;function show(m){if(n++>4)return;var d=document.createElement("div");d.style.cssText="position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:8px;padding:8px 10px;font:12px/1.5 system-ui,sans-serif;white-space:pre-wrap;word-break:break-all";d.textContent="画面でエラーが出ました（この写真を担当者に送ってください）\\n"+m;(document.body||document.documentElement).appendChild(d)}
+window.addEventListener("error",function(e){var t=e.target;if(t&&t.tagName==="SCRIPT"&&t.src){show("読み込めませんでした: "+t.src);return}if(t&&t!==window)return;show((e.message||"")+(e.filename?"\\n"+String(e.filename).split("/").pop()+":"+e.lineno:""))},true);
+window.addEventListener("unhandledrejection",function(e){var r=e.reason;if(r instanceof Error)show("（あとで起きたエラー）"+r.message)})})();</script>'''
 rd=lambda p: open(p,encoding='utf-8').read()
 def js(p): return rd(p).replace('</script>','<\\/script>')
 cal_html = f'''<!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <title>カレンダー</title>
+{GUARD}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
 <style>[hidden]{{display:none!important}}body{{margin:0}}{rd('gas/calendar_css.txt')}</style>
@@ -19,6 +24,7 @@ cal_html = f'''<!DOCTYPE html>
 sg_html = f'''<!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>送迎表</title>
+{GUARD}
 <style>{rd('build/tw.css')}
 :root{{color-scheme:light}} html,body{{background:#f5f5f4;color:#292524}}
 .sg-alert{{position:fixed;left:50%;transform:translateX(-50%);top:8px;z-index:2000;display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:min(720px,calc(100% - 24px));padding:10px 12px;border-radius:8px;font:13px/1.5 system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.18);background:#fff7ed;color:#7c2d12;border:1px solid #fdba74}}

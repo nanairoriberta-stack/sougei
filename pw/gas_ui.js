@@ -113,5 +113,24 @@ const D = path.join(__dirname, "../gas/out");
   const body = await P.pg.locator("#root").innerText(); assert.ok(body.includes("受診後送り") && body.includes("中村"), "送迎表に受診後送り・ヘルプが出る");
   console.log("送迎表を開き直す → 森(受診後送り)・ヘルプ（中村）が表に出る / 画面エラー:", real(P.errs));
   assert.deepStrictEqual(real(P.errs), []);
+  // 動作の確認画面（?page=check）：全部 ✓ になる。普段の画面でエラーが出たら、画面の下に理由が出る
+  {
+    const ctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const pg = await ctx.newPage();
+    await pg.exposeFunction("__gasCall", (fn, a) => JSON.parse(JSON.stringify(fn === "api" ? g.ctx.api(...a) : g.ctx[fn](...a))));
+    await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { const o = { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x) };
+      for (const n of ["api", "checkServer"]) o[n] = (...a) => { setTimeout(() => window.__gasCall(n, a).then((r) => s && s(r), (e) => f && f(e)), 20); }; return o; })() } }; });
+    await pg.route("https://**/*", async (r) => { const u = r.request().url(); for (const k in LOC) if (u.endsWith(k)) return r.fulfill({ path: LOC[k], contentType: "application/javascript" }); return r.abort(); });
+    fs.writeFileSync(path.join(__dirname, "c_check.html"), g.ctx.doGet({ parameter: { page: "check" } }).getContent());
+    await pg.goto("file://" + path.join(__dirname, "c_check.html")); await pg.waitForTimeout(1500);
+    const items = await pg.locator("li").allInnerTexts(); await pg.screenshot({ path: "g_check.png", fullPage: true });
+    const bad = items.filter((x) => x.startsWith("✗") || x.startsWith("…"));
+    assert.deepStrictEqual(bad, [], "確認画面がすべて ✓"); assert.ok(items.some((x) => x.includes("sougei") && x.includes("文字")));
+    console.log("確認画面:", items.map((x) => x.split("\n")[0]).join(" / "));
+    await pg.goto("file://" + path.join(__dirname, "g_calendar.html")); await pg.waitForTimeout(800);
+    await pg.evaluate(() => setTimeout(() => { throw new Error("テストのエラー"); }, 0)); await pg.waitForTimeout(300);
+    const box = await pg.locator("text=画面でエラーが出ました").first().innerText(); assert.ok(box.includes("テストのエラー"), box);
+    console.log("エラーの表示:", box.replace(/\n/g, " "));
+    await ctx.close();
+  }
   await b.close();
 })();

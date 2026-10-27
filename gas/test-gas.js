@@ -268,6 +268,19 @@ async function bootstrap() {
     return "日付は文字に、undefined は null に";
   });
 
+  await test("動作の確認画面（?page=check）：ファイルが最後まで貼れているか・シートがあるかを返し、秘密は出さない", async () => {
+    const { g } = await bootstrap();
+    const r = JSON.parse(JSON.stringify(g.ctx.checkServer()));
+    assert.ok(r.files.sougei.end && r.files.calendar.end && r.files.sougei.boot, "2つのファイルが最後まである");
+    assert.ok(Object.values(r.sheets).every(Boolean));
+    const html = g.ctx.doGet({ parameter: { page: "check" } }).getContent();
+    assert.ok(html.includes("動作の確認") && html.includes("checkServer"));
+    const all = JSON.stringify(r) + html;
+    const secrets = [pinOf(g, "管理者"), ...g.sheets.get("_auth").data.slice(1).flatMap((x) => [x[1], x[2]]), ...g.sheets.get("_sessions").data.slice(1).map((x) => x[0])].map(String).filter((x) => x.length >= 4);
+    assert.ok(secrets.length >= 1 && secrets.every((x) => !all.includes(x)), "暗証番号・ハッシュ・ログインの鍵は出さない");
+    return `sougei ${r.files.sougei.len}文字・calendar ${r.files.calendar.len}文字、シート${Object.keys(r.sheets).length}枚`;
+  });
+
   await test("大きなマスタ（セル上限5万字を超える）も分割して保存・読み込み", async () => {
     const { g, admin } = await bootstrap();
     const raw = g.sheets.get("_docs").data.find((r) => r[0] === "kv/master");

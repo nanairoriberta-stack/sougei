@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.27i',
+  VERSION: '2026.10.27j',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -24,6 +24,7 @@ var APP = {
 function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.mcp) return ContentService.createTextOutput(JSON.stringify({ name: '送迎表', message: 'これはClaudeのカスタムコネクタ用の接続先です。Claudeの「設定 → コネクタ → カスタムコネクタを追加」にこのURLを貼ってください。' })).setMimeType(ContentService.MimeType.JSON);
+  if (p.page === 'check') return checkPage_();
   var page = p.page === 'sougei' ? 'sougei' : 'calendar';
   var ed = APP.EDITIONS.hasOwnProperty(p.e) ? p.e : 'v1';
   var base = ScriptApp.getService().getUrl();
@@ -35,6 +36,72 @@ function doGet(e) {
     .setTitle(page === 'sougei' ? '送迎表（' + APP.EDITION_LABEL[ed] + '）' : 'カレンダー')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+}
+
+/* ================= 動作の確認画面（?page=check） =================
+   画面が真っ白・「接続中…」のままのとき、どこまで動いているかを一覧で見せる。
+   ファイル（calendar / sougei）に頼らずにここだけで作るので、ファイルが壊れていても開ける。秘密の情報は出さない */
+function checkServer() {
+  var out = { version: APP.VERSION, now: new Date().toISOString(), sheets: {}, files: {} };
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    [APP.SH.ids, APP.SH.log, APP.SH.auth, APP.SH.sess, APP.SH.docs].forEach(function (n) { out.sheets[n] = !!ss.getSheetByName(n); });
+    var ids = ss.getSheetByName(APP.SH.ids); out.staffRows = ids ? Math.max(0, ids.getLastRow() - 1) : 0;
+    var docs = ss.getSheetByName(APP.SH.docs); out.docRows = docs ? Math.max(0, docs.getLastRow() - 1) : 0;
+  } catch (e) { out.sheetError = String(e && e.message || e); }
+  ['calendar', 'sougei'].forEach(function (f) {
+    try { var c = HtmlService.createHtmlOutputFromFile(f).getContent(); out.files[f] = { len: c.length, end: /<\/html>\s*$/.test(c), boot: c.indexOf('/*__BOOT__*/') >= 0 }; }
+    catch (e) { out.files[f] = { error: String(e && e.message || e) }; }
+  });
+  return out;
+}
+function checkPage_() {
+  var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>動作の確認</title><style>' +
+    'body{margin:0;background:#f3f5f4;color:#18201d;font:15px/1.6 system-ui,sans-serif}main{max-width:720px;margin:0 auto;padding:16px}' +
+    'h1{font-size:20px;margin:8px 0}li{list-style:none;background:#fff;border:1px solid #dde3e0;border-radius:8px;padding:10px 12px;margin:8px 0}' +
+    'ul{padding:0}b.ok{color:#13795b}b.ng{color:#c23a32}b.wait{color:#9a6a00}small{color:#5f6b66;display:block;word-break:break-all}</style></head><body><main>' +
+    '<h1>動作の確認（版 ' + APP.VERSION + '）</h1><p>この画面の写真を担当者に送ってください。1分ほどで全部の結果が出ます。</p><ul id="r"></ul></main><script>' + checkScript_() + '</script></body></html>';
+  return HtmlService.createHtmlOutput(html).setTitle('動作の確認').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+function checkScript_() {
+  return String(function () {
+    var R = document.getElementById('r');
+    function row(title) { var li = document.createElement('li'); li.innerHTML = '<b class="wait">…</b> ' + title + '<small></small>'; R.appendChild(li);
+      return function (ok, note) { li.querySelector('b').className = ok ? 'ok' : 'ng'; li.querySelector('b').textContent = ok ? '✓' : '✗'; li.querySelector('small').textContent = note || ''; }; }
+    var errs = row('画面の部品のエラー'); var errList = []; errs(true, 'ありません');
+    window.addEventListener('error', function (e) { errList.push(e.message || 'エラー'); errs(false, errList.join(' / ')); });
+    row('画面の表示')(true, navigator.userAgent);
+    var ls = row('端末への一時保存（未送信を守るため）');
+    try { localStorage.setItem('sg:check', '1'); localStorage.removeItem('sg:check'); ls(true, '使えます'); } catch (e) { ls(false, '使えません（プライベートモードなど）：' + e); }
+    var run = window.google && google.script && google.script.run;
+    var g = row('サーバーへの通り道（google.script.run）'); g(!!run, run ? 'あります' : 'ありません');
+    function timed(title, fn, check) {
+      var done = row(title), t0 = Date.now(), fin = false;
+      var to = setTimeout(function () { if (!fin) { fin = true; done(false, '45秒たっても返事がありません。Chromeで複数のGoogleアカウントにログインしているときに起きやすいです。シークレットウィンドウ（Ctrl+Shift+N）で開き直して、もう一度この画面を見てください'); } }, 45000);
+      fn(function (r) { if (fin) return; fin = true; clearTimeout(to); var c = check(r); done(c[0], c[1] + '（' + (Date.now() - t0) + 'ミリ秒）'); },
+         function (e) { if (fin) return; fin = true; clearTimeout(to); done(false, '失敗：' + (e && e.message || e)); });
+    }
+    if (run) {
+      timed('サーバーの返事', function (ok, ng) { google.script.run.withSuccessHandler(ok).withFailureHandler(ng).checkServer(); }, function (r) {
+        if (!r) return [false, '返事が空でした'];
+        var miss = Object.keys(r.sheets || {}).filter(function (k) { return !r.sheets[k]; });
+        var f = r.files || {}, bad = [];
+        ['calendar', 'sougei'].forEach(function (n) { var x = f[n] || {}; if (x.error) bad.push(n + '：ファイルが見つかりません（名前は「' + n + '」）'); else if (!x.end) bad.push(n + '：最後まで貼れていません（' + x.len + '文字で切れています。全部消して貼り直してください）'); else if (!x.boot) bad.push(n + '：中身が違います（貼り直してください）'); });
+        var note = '版 ' + r.version + '・職員ID ' + r.staffRows + '行・データ ' + r.docRows + '行・calendar ' + ((f.calendar || {}).len || 0) + '文字・sougei ' + ((f.sougei || {}).len || 0) + '文字';
+        if (r.sheetError) return [false, 'スプレッドシートを読めません：' + r.sheetError];
+        if (miss.length) return [false, 'シートがありません：' + miss.join('、') + '（エディタで setup を実行してください）。' + note];
+        if (bad.length) return [false, bad.join(' / ') + '。' + note];
+        return [true, note];
+      });
+      timed('ログインの窓口', function (ok, ng) { google.script.run.withSuccessHandler(ok).withFailureHandler(ng).api('', 'auth.me', []); }, function (r) {
+        return r && r.ok === false && r.code === 'auth' ? [true, '動いています'] : [false, '思った返事と違います：' + JSON.stringify(r)];
+      });
+    }
+    var cdn = row('送迎表の画面の部品（インターネットから読み込む React）');
+    var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js';
+    s.onload = function () { cdn(!!window.React, '読み込めました'); }; s.onerror = function () { cdn(false, '読み込めません。事業所のネットワークやセキュリティソフトが cdnjs.cloudflare.com を止めていないか確かめてください'); };
+    document.head.appendChild(s);
+  }) .replace(/^function \(\) \{/, '(function () {') + ')();';
 }
 
 /* ================= 初期設定（最初に1回、エディタから実行） ================= */
