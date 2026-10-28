@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.28b',
+  VERSION: '2026.10.28c',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -17,7 +17,7 @@ var APP = {
   EDITIONS: { v1: '', v2: 'v2:', v3: 'v3:' },
   EDITION_LABEL: { v1: '現体制版', v2: '新体制版', v3: 'りんく・ぷれいす版' },
   ROLES: ['管理者', '送迎表', '一般'],
-  SH: { ids: '職員ID', log: '変更履歴', auth: '_auth', sess: '_sessions', docs: '_docs' }
+  SH: { ids: '職員ID', log: '変更履歴', auth: '_auth', sess: '_sessions', docs: '_docs', conf: '設定' }
 };
 
 /* ================= 画面 ================= */
@@ -27,7 +27,7 @@ function doGet(e) {
   if (p.page === 'check') return checkPage_();
   var page = p.page === 'sougei' ? 'sougei' : 'calendar';
   var ed = APP.EDITIONS.hasOwnProperty(p.e) ? p.e : 'v1';
-  var base = ScriptApp.getService().getUrl();
+  var base = appUrl_();
   var d = /^\d{4}-\d{2}-\d{2}$/.test(String(p.d || '')) ? String(p.d) : '';
   var js = function (v) { return JSON.stringify(v).replace(/</g, '\\u003c'); };
   var html = HtmlService.createHtmlOutputFromFile(page).getContent()
@@ -38,11 +38,24 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
+/* 公開URL（…/exec）。Googleの getUrl() はテスト用の …/dev（作った人しか開けない）を返すことがあるので、
+   「設定」シートB2に貼った公開URLを優先する（2026-10-28 実機：スマホでメニューの送迎表が開けなかった） */
+var APP_URL_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/;
+function appUrl_() {
+  try { var sh = sheet_(APP.SH.conf); var v = sh ? String(sh.getRange(2, 2).getValue()).trim() : ''; if (APP_URL_RE.test(v)) return v; } catch (e) {}
+  return ScriptApp.getService().getUrl();
+}
+function confSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(APP.SH.conf);
+  if (!sh) { sh = ss.insertSheet(APP.SH.conf); sh.getRange(1, 1, 2, 2).setValues([['項目', '値'], ['公開URL（デプロイの「ウェブアプリ」のURL。最後が /exec）', '']]); sh.setFrozenRows(1); }
+  return sh;
+}
+
 /* ================= 動作の確認画面（?page=check） =================
    画面が真っ白・「接続中…」のままのとき、どこまで動いているかを一覧で見せる。
    ファイル（calendar / sougei）に頼らずにここだけで作るので、ファイルが壊れていても開ける。秘密の情報は出さない */
 function checkServer() {
-  var out = { version: APP.VERSION, now: new Date().toISOString(), sheets: {}, files: {} };
+  var out = { version: APP.VERSION, now: new Date().toISOString(), sheets: {}, files: {}, base: appUrl_() };
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     [APP.SH.ids, APP.SH.log, APP.SH.auth, APP.SH.sess, APP.SH.docs].forEach(function (n) { out.sheets[n] = !!ss.getSheetByName(n); });
@@ -93,6 +106,11 @@ function checkScript_() {
         if (bad.length) return [false, bad.join(' / ') + '。' + note];
         return [true, note];
       });
+      timed('画面どうしのつながり（公開URL）', function (ok, ng) { google.script.run.withSuccessHandler(ok).withFailureHandler(ng).checkServer(); }, function (r) {
+        var b = String(r && r.base || '');
+        if (/\/exec$/.test(b)) return [true, b];
+        return [false, 'メニューのリンクが「' + b + '」（テスト用）になっています。スプレッドシートの「設定」シートのB2に、デプロイの「ウェブアプリ」のURL（最後が /exec）を貼ってください。「設定」シートが無ければ、エディタで setup をもう一度実行すると作られます'];
+      });
       timed('ログインの窓口', function (ok, ng) { google.script.run.withSuccessHandler(ok).withFailureHandler(ng).api('', 'auth.me', []); }, function (r) {
         return r && r.ok === false && r.code === 'auth' ? [true, '動いています'] : [false, '思った返事と違います：' + JSON.stringify(r)];
       });
@@ -118,6 +136,7 @@ function setup() {
   mk(APP.SH.auth, ['職員番号', 'salt', 'hash', '失敗回数', 'ロック解除', '変更済み'], true);
   mk(APP.SH.sess, ['tokenHash', '職員番号', '期限', '端末'], true);
   mk(APP.SH.docs, ['path', 'rev', 'at', 'meta', 'parts'], true);
+  confSheet_();
   if (ids.getLastRow() < 2) {
     ids.appendRow([txt_('000'), '管理者', '管理者', txt_(randomPin_()), '', '最初のログイン用。職員の登録が済んだら利用停止にしてください']);
   }

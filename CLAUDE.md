@@ -57,7 +57,7 @@ bash test.sh         # Nodeのテスト全部
 bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ```
 - テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-excel.js`（送迎表のExcel出力に版が入る）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎の変更/迎え先・送り先/休日出勤/勤務時間変更）、`test-agent.js`（AIと相談の適用 10件）、
-  `gas/test-gas.js`（サーバー 25件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
+  `gas/test-gas.js`（サーバー 26件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
   `mcp/test-mcp.js`（公式MCPクライアントで35件。Googleの302転送も再現）、`pw/gas_ui.js`・`pw/agent_ui.js`（画面）
 - `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
 - `sougei.jsx` の関数をテスト/サーバーで使うときは `build.sh` の `EXP` と `mcp/engine_entry.js` に名前を足す
@@ -77,7 +77,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）
   - 送迎表：`kv/<encKey(キー)>`。キーは `master`（利用者・職員・車両・部署・ルール）/ `sheet:YYYY-MM-DD` / `pattern:0〜6`（週間パターン）。版の頭 `v2:`/`v3:`
   - カレンダー：`days/…`（日ごと・シャード）、`cm/…`（コメント）。Claudeの案：`prop/<id>`
-- `職員ID`・`変更履歴`・`_auth`・`_sessions`・`AI接続`（コネクタの鍵）
+- `職員ID`・`変更履歴`・`設定`（B2=公開URL）・`_auth`・`_sessions`・`AI接続`（コネクタの鍵）
 - **スプレッドシートの自動変換に注意**：`"000"`→0、`"0123"`→123、`=`/`+`/`-`/`@` で始まる文字→数式、日付→Date。
   書くときは `txt_()`（先頭に `'`）か `safe_()`、PINは `pinOf_()`、職員番号は `normNo_()`、ハッシュは `h:` 付き。`fakegas.js` はこの変換を再現する
 - CacheService は1値100KBまで（日本語はUTF-8で数える `utf8len_`）
@@ -147,6 +147,9 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - AI調整の重複除去が移動便（`mode:"move"`、例：成相 あいのて→嫁島）を消した → move は対象外
 - 画面が真っ白：esbuild で react の解決ずれ → `--alias` で shims に固定
 - `collectSheetChecks` の引数名衝突（TDZ）→ `patDayArg`
+- **スマホでメニューの送迎表が開けない（「ファイルを開くことができません」）**（2026-10-28 実機）：`ScriptApp.getService().getUrl()` がテスト用の `…/dev`
+  （作った人しか開けない）を返し、メニューのリンク・Claude接続URLがそれになっていた → `appUrl_()`：「設定」シートB2の公開URL（`…/exec`）を優先。
+  画面側（gashost）も `…/dev` のときは開いたときのURL（referrer）が `…/exec` ならそれを使う。確認画面に「画面どうしのつながり」
 - **本物のGoogleで画面が真っ白／カレンダーが「接続中…」のまま**（2026-10-28 実機）：Googleは画面をいったん自分の仕組み（mae_html_user の document.write）で書き出し、
   プログラムの中の「タグに見える文字」でログインの土台（gashost）を途中で切った（`Failed to execute 'write' … Unexpected end of input`）。
   → `assemble_gas.py` の `ev()` で、画面のプログラムはすべて「<」を含まない文字列にして `(0,eval)(…)` で実行する。確認画面のプログラムも同じ。

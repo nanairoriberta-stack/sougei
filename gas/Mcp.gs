@@ -14,7 +14,7 @@ function issueConnectorUrls() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(MCP.SHEET) || ss.insertSheet(MCP.SHEET);
   if (sh.getLastRow() === 0) { sh.getRange(1, 1, 1, 5).setValues([['職員番号', '名前', '接続URL（Claudeのカスタムコネクタに貼る）', '停止', '発行日']]); sh.setFrozenRows(1); }
-  var base = ScriptApp.getService().getUrl();
+  var base = appUrl_();   // テスト用の …/dev では Claude からつながらないので、公開URLを使う
   var n = sh.getLastRow(); if (n < 2) return 0;
   var rows = sh.getRange(2, 1, n - 1, 5).getValues(), made = 0;
   rows.forEach(function (r, i) {

@@ -1,7 +1,10 @@
 /* Google版の土台：ログイン（職員番号＋暗証番号）、サーバー呼び出し、変更の確認、画面部品の橋渡し */
 (function (G) {
 "use strict";
-const ED = G.__SG_EDITION || "v1", BASE = G.__SG_BASE || "";
+// 画面どうしのリンクに使う公開URL（…/exec）。サーバーの知らせるURLがテスト用（…/dev、作った人しか開けない）のときは、
+// 開いたときのURL（document.referrer）が公開URLならそちらを使う
+const REF = (() => { try { const m = /^(https:\/\/script\.google\.com\/(?:a\/[^/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec)/.exec(document.referrer || ""); return m ? m[1] : ""; } catch (e) { return ""; } })();
+const ED = G.__SG_EDITION || "v1", BASE = /\/exec$/.test(G.__SG_BASE || "") ? G.__SG_BASE : (REF || G.__SG_BASE || "");
 let ls = null; try { ls = G.localStorage; } catch (e) {}
 const store = G.TCCore.makeStore(ls || { getItem() { throw 0; }, setItem() { throw 0; }, removeItem() {}, key() { return null; }, length: 0 });
 const TK = "sg:token", MK = "sg:me", DK = "sg:dir";

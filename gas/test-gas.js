@@ -294,6 +294,22 @@ async function bootstrap() {
     return out.join("・");
   });
 
+  await test("公開URL：Googleがテスト用の …/dev を返しても、「設定」シートB2の公開URLでメニューのリンク・Claude接続URLを作る", async () => {
+    const { g } = await bootstrap();
+    const real = g.ctx.ScriptApp; g.ctx.ScriptApp = { getService: () => ({ getUrl: () => "https://script.google.com/macros/s/HEADID/dev" }) };
+    const boot = () => /window\.__SG_BASE=("[^"]*")/.exec(g.ctx.doGet({ parameter: {} }).getContent())[1];
+    assert.strictEqual(JSON.parse(boot()), "https://script.google.com/macros/s/HEADID/dev", "設定が空ならGoogleのURLのまま");
+    assert.ok(g.sheets.get("設定"), "setup で「設定」シートができる");
+    assert.strictEqual(JSON.parse(JSON.stringify(g.ctx.checkServer())).base, "https://script.google.com/macros/s/HEADID/dev", "確認画面で分かる");
+    const pub = "https://script.google.com/macros/s/AKfycbPUBLIC_123/exec";
+    g.sheets.get("設定").data[1][1] = pub;
+    assert.strictEqual(JSON.parse(boot()), pub, "設定した公開URLを使う");
+    g.sheets.get("設定").data[1][1] = "https://evil.example.com/exec";
+    assert.strictEqual(JSON.parse(boot()), "https://script.google.com/macros/s/HEADID/dev", "Googleの公開URL以外は使わない");
+    g.ctx.ScriptApp = real;
+    return "…/dev → 設定の …/exec を使う（それ以外のURLは無視）";
+  });
+
   await test("大きなマスタ（セル上限5万字を超える）も分割して保存・読み込み", async () => {
     const { g, admin } = await bootstrap();
     const raw = g.sheets.get("_docs").data.find((r) => r[0] === "kv/master");
