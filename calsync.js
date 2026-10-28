@@ -40,13 +40,14 @@ function specsFor(master, events, date) {
 
 const wdOf = (date) => { const [y, m, d] = String(date).split("-").map(Number); return new Date(y, m - 1, d).getDay(); };
 const fmt = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
-/* その日の勤務時間（曜日別の勤務 → 基本）の真ん中。15分単位に切り下げ */
-function midOf(s, wd) {
+/* その日の勤務時間（曜日別の勤務 → 基本）の真ん中から off 分ずらした時刻。真ん中は15分単位に切り下げ
+   半休は昼休みの分をはさむ：8:30〜17:30 の人は AM休＝13:30から・PM休＝12:30まで（真ん中13:00の±30分） */
+function midOf(s, wd, off) {
   const sh = (s.shiftByDay || {})[wd] || {};
   const st = toMinX(sh.start || s.start || "8:30"), en = toMinX(sh.end || s.end || "17:30");
   if (st == null || en == null || en === st) return null;
   const end = en < st ? en + 1440 : en;                     // 夜勤（22:00〜6:00など日をまたぐ勤務）
-  return fmt((Math.floor((st + end) / 2 / 15) * 15) % 1440);
+  return fmt(((Math.floor((st + end) / 2 / 15) * 15) + (off || 0) + 1440) % 1440);
 }
 
 function blocksOf(spec) {
@@ -112,8 +113,8 @@ function applySpec(next, spec) {
     map[id] = val; rec[field][id] = { prev, mine: clone(val) };
   };
   if (spec.type === "staff_off" && spec.half) spec.staff.forEach((s) => {
-    const mid = midOf(s, spec.wd); if (!mid) return;
-    // AM休 = 勤務時間の半分から出勤 / PM休 = 勤務時間の半分で退勤（送迎表の遅刻・早退と同じ扱い）
+    const mid = midOf(s, spec.wd, spec.half === "am" ? 30 : -30); if (!mid) return;
+    // AM休 = 勤務時間の半分＋30分から出勤 / PM休 = 勤務時間の半分−30分で退勤（送迎表の遅刻・早退と同じ扱い）
     put("staffOv", s.id, Object.assign({}, (next.staffOv || {})[s.id] || {}, spec.half === "am" ? { start: mid } : { end: mid }));
   });
   else if (spec.type === "staff_off" && spec.whole) spec.staff.forEach((s) => put("staffOv", s.id, Object.assign({}, (next.staffOv || {})[s.id] || {}, { off: true })));

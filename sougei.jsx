@@ -136,6 +136,46 @@ const todayStr = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
+// 日付ボタンのカレンダー。ブラウザ標準の日付選びは出る位置がずれる（Googleの画面の中では特に）ので、ボタンのすぐ下に自前で出す
+function DatePop({ date, setDate }) {
+  const [open, setOpen] = useState(false);
+  const [ym, setYm] = useState(() => date.slice(0, 7));
+  useEffect(() => { if (open) setYm(date.slice(0, 7)); }, [open, date]);
+  useEffect(() => { if (!open) return; const k = (e) => { if (e.key === "Escape") setOpen(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [open]);
+  const d = new Date(date + "T00:00:00");
+  const [y, m] = ym.split("-").map(Number);
+  const first = new Date(y, m - 1, 1).getDay(), days = new Date(y, m, 0).getDate();
+  const ds = (n) => `${y}-${String(m).padStart(2, "0")}-${String(n).padStart(2, "0")}`;
+  const move = (k) => { const t = new Date(y, m - 1 + k, 1); setYm(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`); };
+  const today = todayStr();
+  const cells = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  return (
+    <span className="relative inline-flex">
+      <button type="button" data-datepop className="inline-flex items-center border border-stone-300 rounded-md px-3 py-1.5 text-sm font-bold text-stone-700 bg-white cursor-pointer hover:bg-stone-50" title="クリックで日付を選択" onClick={() => setOpen((o) => !o)}>
+        {`${d.getMonth() + 1}/${d.getDate()}(${DAYS[d.getDay()]})`}
+        <span className="ml-1.5 text-stone-400 font-normal">📅</span>
+      </button>
+      {open && (<>
+        <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+        <div className="absolute left-0 top-full mt-1 z-50 w-64 bg-white border border-stone-300 rounded-lg shadow-lg p-2 text-sm" role="dialog" aria-label="日付を選ぶ">
+          <div className="flex items-center justify-between mb-1">
+            <button type="button" className="px-2 py-1 rounded hover:bg-stone-100" onClick={() => move(-1)} aria-label="前の月">‹</button>
+            <span className="font-bold text-stone-700">{y}年{m}月</span>
+            <button type="button" className="px-2 py-1 rounded hover:bg-stone-100" onClick={() => move(1)} aria-label="次の月">›</button>
+          </div>
+          <div className="grid grid-cols-7 text-center gap-0.5">
+            {DAYS.map((w, i) => <span key={w} className={`text-xs py-1 ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-stone-500"}`}>{w}</span>)}
+            {cells.map((n, i) => n == null ? <span key={"b" + i} /> : (
+              <button type="button" key={n} data-day={ds(n)} onClick={() => { setDate(ds(n)); setOpen(false); }}
+                className={`py-1 rounded ${ds(n) === date ? "bg-teal-600 text-white font-bold" : ds(n) === today ? "ring-1 ring-teal-500 text-stone-800" : i % 7 === 0 ? "text-red-500 hover:bg-stone-100" : i % 7 === 6 ? "text-blue-500 hover:bg-stone-100" : "text-stone-700 hover:bg-stone-100"}`}>{n}</button>
+            ))}
+          </div>
+          <div className="flex justify-end mt-1"><button type="button" className="text-xs text-teal-700 px-2 py-1 rounded hover:bg-stone-100" onClick={() => { setDate(today); setOpen(false); }}>今日</button></div>
+        </div>
+      </>)}
+    </span>
+  );
+}
 // ファイル名用の日付。曜日をかっこ付きで添える(例: 2026-08-26(水))
 const dateWithDay = (dateStr) => `${dateStr}(${DAYS[weekdayOf(dateStr)]})`;
 const weekdayOf = (dateStr) => {
@@ -9959,19 +9999,7 @@ function AppInner() {
             <div className="flex items-center gap-1.5 mb-3 flex-wrap">
               <button className={`${btnSec} px-2`} onClick={() => setDate(todayStr())} title="今日に移動">今日</button>
               <button className={`${btnSec} px-2`} onClick={() => shiftDate(-1)} title="前日">←</button>
-              <label className="relative inline-flex items-center border border-stone-300 rounded-md px-3 py-1.5 text-sm font-bold text-stone-700 bg-white cursor-pointer hover:bg-stone-50 mr-0" title="クリックで日付を選択"
-                onClick={(e) => {
-                  // 可能なら明示的にピッカーを開く。iframe内などでshowPickerが拒否された場合は
-                  // 標準動作(透明のdate入力のクリック)に任せるため、成功した時だけpreventDefaultする
-                  const inp = e.currentTarget.querySelector('input[type="date"]');
-                  if (inp && inp.showPicker) {
-                    try { inp.showPicker(); e.preventDefault(); } catch (err) { /* 標準動作にフォールバック */ }
-                  }
-                }}>
-                {(() => { const d = new Date(date + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}(${DAYS[d.getDay()]})`; })()}
-                <span className="ml-1.5 text-stone-400 font-normal">📅</span>
-                <input type="date" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
-              </label>
+              <DatePop date={date} setDate={setDate} />
               <button className={`${btnSec} px-2`} onClick={() => shiftDate(1)} title="翌日">→</button>
               <span className="inline-flex items-center gap-0.5 mr-1 pl-1 border-l border-stone-300">
                 <button

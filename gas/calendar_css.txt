@@ -230,3 +230,17 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
   .lblpick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
   .lblpick label span{width:100%;justify-content:center;padding:0 4px;height:36px;font-size:12px}
 }
+/* スマホの入力画面（TimeTreeのように）：上に ×・題名・保存。キーボードが出ている間は下の帯を隠し、見えている高さに合わせる */
+.head-save{display:none}
+@media (max-width:560px){
+  .sheet-head{padding:max(8px,env(safe-area-inset-top,0px)) 10px 8px;gap:6px}
+  .sheet-head .icon-btn{order:-1}
+  .sheet-head h2{flex:1;text-align:center;font-size:15px}
+  .head-save{display:inline-flex;height:36px;padding:0 16px;font-size:15px}
+  .sheet{border-radius:0}
+  .overlay{padding-top:0}
+  html.kb .overlay{bottom:auto;top:var(--vvt,0px);height:var(--vvh,100%)}
+  html.kb .sheet-foot{display:none}
+  html.kb .sheet-body{padding-bottom:70vh}
+  .sghits{max-height:min(200px,32vh)}
+}

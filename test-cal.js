@@ -44,6 +44,10 @@ console.log('calsync OK');
  console.log('AM休',yo.name,yo.start,yo.end,(yo.shiftByDay||{})[1]||'',JSON.stringify(st));
  const e2=[{...e[0],rev:2,sg:{...e[0].sg,half:'pm'}}]; const y=C.reconcile(m,x,e2,'2026-11-02'); console.log('PM休',JSON.stringify(y.staffOv[yo.id]));
  const z=C.reconcile(m,y,[],'2026-11-02'); assert.ok(!(yo.id in z.staffOv),'取り消し');
+ // 8:30〜17:30 の人：AM休は13:30から、PM休は12:30まで（真ん中13:00の±30分）
+ const m2=JSON.parse(JSON.stringify(m)); const y2=m2.staff.find(s=>s.id===yo.id); y2.start='8:30'; y2.end='17:30'; y2.shiftByDay={};
+ assert.strictEqual(C.reconcile(m2,sheet,e,'2026-11-02').staffOv[yo.id].start,'13:30','AM休は13:30から');
+ assert.strictEqual(C.reconcile(m2,sheet,e2,'2026-11-02').staffOv[yo.id].end,'12:30','PM休は12:30まで');
 }
 console.log('half OK');
 // ===== ラベルごとの項目：ヘルプ（開始時刻・行き先）・送迎（迎え・送りの変更）・休日出勤（時間） =====

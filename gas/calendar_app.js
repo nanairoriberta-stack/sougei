@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.28l";
+const APP_VERSION="2026.10.28m";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -232,7 +232,7 @@ function drawSg(){
     +(L==="extra"?"":hint("変えるところだけ入れてください。家族送り・受診後送り・家族迎えは、送迎表で「迎えなし・送りなし」として理由つきで入ります。迎え先・送り先は、その日その人が乗る便に「その日だけの行き先」として入ります（まだ便に入っていなければ、入れたときに入ります）。何日も続くときは終了日を変えてください。"));
   else if(L==="leave")h=(staffSelf(d)?self:who("staff","休む職員","職員の名前で検索"))
     +`<div class="sgsub"><span class="lbl2">休みの形</span>${radios("w-leave",w.leave,[["day","1日"],["am","AM休"],["pm","PM休"],["time","時間で（中抜け・通院など）"]])}</div>`
-    +hint(w.leave==="am"?"勤務時間の半分から出勤として送迎表に入ります。":w.leave==="pm"?"勤務時間の半分で退勤として送迎表に入ります。":w.leave==="time"?"開始〜終了の時刻を、送迎表でその職員の不在として入れます。":"送迎表でその日は休みになります。何日も続く休みは終了日を変えてください。");
+    +hint(w.leave==="am"?"勤務時間の真ん中＋30分から出勤として送迎表に入ります（8:30〜17:30なら13:30から）。":w.leave==="pm"?"勤務時間の真ん中−30分で退勤として送迎表に入ります（8:30〜17:30なら12:30まで）。":w.leave==="time"?"開始〜終了の時刻を、送迎表でその職員の不在として入れます。":"送迎表でその日は休みになります。何日も続く休みは終了日を変えてください。");
   else if(L==="user")h=who("users","利用者","利用者の名前で検索")+text("w-reason",w.reason,"例：通院",PICK.user,"理由（任意）")
     +hint("送迎表でその日は欠席になります。何日も続くときは終了日を変えてください。迎え・送りだけ変わるときは「送迎」のラベルを使ってください。");
   else if(L==="hwork")h=(staffSelf(d)?self:who("staff","出勤する職員","職員の名前で検索"))+dept()
@@ -360,7 +360,7 @@ function drawSheet(){
   // ラベルごとの項目。その他予定は「時間・場所・担当」の順になるよう、場所の下に出す
   const box=`<div class="field sgbox" style="--sc:var(--l-${lab(d.label)})"><span class="lbl">${esc(LMAP[d.label]?.n||"その他予定")}で入力する項目</span><div id="sgArea"></div></div>`;
   $("sheetRoot").innerHTML=`<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t">
-  <div class="sheet-head"><h2 id="sh-t">${ed.id?"予定の詳細":"新しい予定"}</h2><button class="icon-btn" data-close aria-label="閉じる">×</button></div>
+  <div class="sheet-head"><h2 id="sh-t">${ed.id?"予定の詳細":"新しい予定"}</h2><button class="icon-btn" data-close aria-label="閉じる">×</button>${ro||ed.confirmDel?"":`<button type="button" class="primary head-save" data-hsave>保存</button>`}</div>
   <form class="sheet-body" id="evForm" novalidate>
     <div class="note warn" id="liveNote" ${ed.changed?"":"hidden"}><p>この予定は、開いている間に他の人が変更または削除しました。このまま保存すると、どちらを残すか確認する画面が出ます。</p></div>
     <div class="field"><span class="lbl">ラベル</span><div class="labels lblpick">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
@@ -525,7 +525,7 @@ document.addEventListener("click",async e=>{
     $("bkSlot").innerHTML=`<p class="by">復元を始めました（${restorePlan.add.length+restorePlan.undel.length}件）。右上の件数が消えたら完了です。</p>`;restorePlan=null;render();return}
   /* 編集画面 */
   if(!ed)return;
-  if(t.closest("[data-save]")){save();return}
+  if(t.closest("[data-save]")||t.closest("[data-hsave]")){save();return}
   if(t.closest("[data-del]")){readForm();ed.confirmDel=true;drawSheet();return}
   if(t.closest("[data-cancel-del]")){ed.confirmDel=false;drawSheet();return}
   if(t.closest("[data-do-del]")){core.remove(ed.base);closeEditor();toast("ゴミ箱に移しました（30日間は元に戻せます）");return}
@@ -556,6 +556,18 @@ document.addEventListener("change",e=>{
 async function search(q){const h=$("hits");if(!h||!user)return;let res=[];try{res=await user.search(q)}catch{}if(!ed)return;res=res.filter(p=>!ed.d.members.includes(p.id));
   h.innerHTML=res.length?res.map(p=>`<button type="button" data-pick="${esc(p.id)}"><img src="${esc(p.avatarUrl)}" alt=""><span>${esc(p.name)}${p.isMe?"（自分）":""}</span></button>`).join(""):`<div class="by" style="padding:6px 8px">${q?"見つかりません":"名前を入力してください"}</div>`;h.hidden=false}
 document.addEventListener("input",e=>{if(e.target.id==="f-sgq-staff"||e.target.id==="f-sgq-users"){sgHits(e.target.id.slice(6),e.target.value);return}if(e.target.id==="f-member")search(e.target.value);else if(ed&&e.target.closest("#evForm"))draftSave()});
+// スマホ：キーボードが出たら画面の高さを見えている所に合わせ、打っている欄を上の方へ（TimeTreeのように）
+const MOB=()=>matchMedia("(max-width:560px)").matches;
+function fitVV(){const vv=window.visualViewport,r=document.documentElement;if(!vv)return;
+  r.style.setProperty("--vvh",vv.height+"px");r.style.setProperty("--vvt",vv.offsetTop+"px")}
+if(window.visualViewport){visualViewport.addEventListener("resize",fitVV);visualViewport.addEventListener("scroll",fitVV);fitVV()}
+const TYPING=el=>el&&el.closest&&el.closest("#sheetRoot .sheet")&&(el.tagName==="TEXTAREA"||(el.tagName==="INPUT"&&!/^(checkbox|radio|button|submit)$/.test(el.type)));
+function bringUp(el){const sh=el.closest(".sheet"),hd=sh&&sh.querySelector(".sheet-head");if(!sh||!hd)return;
+  const top=(el.closest(".sgsub,.field")||el).getBoundingClientRect().top-hd.getBoundingClientRect().bottom-8;
+  if(Math.abs(top)>4)sh.scrollTop+=top}
+document.addEventListener("focusin",e=>{if(!MOB()||!TYPING(e.target))return;document.documentElement.classList.add("kb");
+  if(/^f-sgq-/.test(e.target.id))[60,350].forEach(ms=>setTimeout(()=>{fitVV();if(document.activeElement===e.target)bringUp(e.target)},ms))});
+document.addEventListener("focusout",()=>setTimeout(()=>{if(!TYPING(document.activeElement))document.documentElement.classList.remove("kb")},120));
 document.addEventListener("focusin",e=>{if(e.target.id==="f-member")search(e.target.value);if(e.target.id==="f-sgq-staff"||e.target.id==="f-sgq-users"){if(!SGN.loaded)loadNames().then(()=>sgHits(e.target.id.slice(6),e.target.value));sgHits(e.target.id.slice(6),e.target.value)}});
 document.addEventListener("submit",e=>{e.preventDefault();
   if(e.target.id==="cmtForm"){const i=$("f-cmt");const v=i.value.trim();if(v&&ed&&ed.base&&core){core.comment(ed.base,v);i.value="";drawComments()}}
