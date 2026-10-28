@@ -156,5 +156,6 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - **本物のGoogleで画面が真っ白／カレンダーが「接続中…」のまま**（2026-10-28 実機）：Googleは画面をいったん自分の仕組み（mae_html_user の document.write）で書き出し、
   プログラムの中の「タグに見える文字」でログインの土台（gashost）を途中で切った（`Failed to execute 'write' … Unexpected end of input`）。
   → `assemble_gas.py` の `ev()` で、画面のプログラムはすべて「<」を含まない文字列にして `(0,eval)(…)` で実行する。確認画面のプログラムも同じ。
+  送迎表（約65万字）は1つの長い文字列だと真っ白のままになったので、2万字ずつの文字列に分けて `[…].join("")` でつなぐ（2026-10-28）。
   `gas/test-gas.js` で「画面のプログラムに < がない」ことを検査。fakegas はこの書き出しを再現しないので、実機で確かめる。
   困ったときは `…/exec?page=check`（確認画面）と、画面の下に出る赤い枠（GUARD）を見る

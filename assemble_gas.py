@@ -9,7 +9,11 @@ def js(p): return ev(rd(p))
 # Googleは画面をいったん自分の仕組みで読み直してから書き出す。そのとき、プログラムの中の「タグに見える文字」（<form や </div> など）で
 # プログラムを途中で切ってしまうことがある（2026-10-28 実機で「Unexpected end of input」）。そこで、プログラムは「<」を1つも含まない
 # 文字列にして渡し、画面の中で実行する（中身は同じ。読み込みの速さもほぼ変わらない）
-def ev(code): return '(0,eval)(' + json.dumps(code, ensure_ascii=False).replace('<', '\\u003c').replace('\u2028', '\\u2028').replace('\u2029', '\\u2029') + ')'
+def lit(c): return json.dumps(c, ensure_ascii=False).replace('<', '\\u003c').replace('\u2028', '\\u2028').replace('\u2029', '\\u2029')
+# 大きなプログラム（送迎表は約65万字）を1つの長い文字列にすると、Googleの書き出しが受け付けないことがあるので、2万字ずつの行に分けて渡す
+def ev(code):
+    parts = [code[i:i + 20000] for i in range(0, len(code), 20000)] or ['']
+    return '(0,eval)([\n' + ',\n'.join(lit(x) for x in parts) + '\n].join(""))'
 cal_html = f'''<!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
