@@ -50,6 +50,45 @@ console.log('calsync OK');
  assert.strictEqual(C.reconcile(m2,sheet,e2,'2026-11-02').staffOv[yo.id].end,'12:30','PM休は12:30まで');
 }
 console.log('half OK');
+// 休み・AM休・PM休・不在・勤務時間変更：勤務していない時間にかかる、その職員の便・予定は保留へ。予定を消すと（保留のままなら）元の担当へ
+{
+ const D='2026-11-02', wd=1, H='__hold__';
+ const mine=(sh,id)=>[...sh.runs,...sh.blocks].filter(x=>x.staffId===id&&!String(x.id).startsWith('cal_'));
+ const busy=m.staff.map(s=>({s,n:mine(sheet,s.id).length})).sort((a,b)=>b.n-a.n)[0].s;   // 予定の多い職員で試す
+ const m2=JSON.parse(JSON.stringify(m)); const b2=m2.staff.find(s=>s.id===busy.id); b2.start='8:30'; b2.end='17:30'; b2.shiftByDay={};
+ const tm=t=>{const [h,mm]=t.split(':').map(Number);return h*60+mm};
+ const all=mine(sheet,busy.id); assert.ok(all.length>=2,'試す職員に予定がある');
+ const ev=(o)=>[Object.assign({id:'hd1',rev:1,date:D,endDate:D,allDay:true,title:'休み',sg:{type:'staff_off',staff:[busy.name]}},o)];
+ // 1日休み → 全部保留
+ let x=C.reconcile(m2,sheet,ev({}),D);
+ assert.strictEqual(mine(x,busy.id).length,0,'1日休みは全部保留');
+ assert.strictEqual(x.calApplied.hd1.held.length,all.length);
+ all.forEach(a=>assert.strictEqual([...x.runs,...x.blocks].find(y=>y.id===a.id).staffId,H));
+ // 保留のうち1件を手で別の職員に → 予定を消しても、それは触らない。ほかは元の担当へ
+ const other=m2.staff.find(s=>s.id!==busy.id).id; x=JSON.parse(JSON.stringify(x)); const moved=[...x.runs,...x.blocks].find(y=>y.id===all[0].id); moved.staffId=other;
+ let y=C.reconcile(m2,x,[],D);
+ assert.strictEqual([...y.runs,...y.blocks].find(z=>z.id===all[0].id).staffId,other,'手で割り当てたものはそのまま');
+ assert.strictEqual(mine(y,busy.id).length,all.length-1,'ほかは元の担当へ');
+ // AM休（13:30から）→ 13:30より前に始まるものだけ保留
+ x=C.reconcile(m2,sheet,ev({sg:{type:'staff_off',staff:[busy.name],half:'am'}}),D);
+ const amHeld=all.filter(a=>tm(a.time)<tm('13:30')).map(a=>a.id).sort();
+ assert.deepStrictEqual(x.calApplied.hd1.held.map(h=>h.id).sort(),amHeld,'AM休は13:30より前');
+ assert.ok(mine(x,busy.id).every(a=>tm(a.time)>=tm('13:30')));
+ // PM休（12:30まで）→ 12:30を越えるものが保留
+ x=C.reconcile(m2,sheet,ev({sg:{type:'staff_off',staff:[busy.name],half:'pm'}}),D);
+ assert.ok(mine(x,busy.id).every(a=>tm(a.time)+(Number(a.durMin)||30)<=tm('12:30')),'PM休は12:30まで');
+ assert.strictEqual((x.calApplied.hd1.held||[]).length+mine(x,busy.id).length,all.length);
+ // 時間で不在（例 10:00〜11:00）→ その時間にかかるものだけ
+ x=C.reconcile(m2,sheet,ev({allDay:false,start:'10:00',end:'11:00',title:'通院'}),D);
+ (x.calApplied.hd1.held||[]).forEach(h=>{const a=all.find(z=>z.id===h.id);assert.ok(tm(a.time)<tm('11:00')&&tm(a.time)+(Number(a.durMin)||30)>tm('10:00'))});
+ // 勤務時間変更（出勤11:00）→ 11:00より前が保留。予定を消すと戻る
+ x=C.reconcile(m2,sheet,ev({title:'遅出',sg:{type:'shift',staff:[busy.name],wstart:'11:00'}}),D);
+ assert.ok(mine(x,busy.id).every(a=>tm(a.time)>=tm('11:00')));
+ y=C.reconcile(m2,x,[],D); assert.strictEqual(mine(y,busy.id).length,all.length,'消すと元どおり');
+ x=C.reconcile(m2,sheet,ev({sg:{type:'staff_off',staff:[busy.name],half:'am'}}),D);
+ assert.ok(C.summary(m2,x,ev({sg:{type:'staff_off',staff:[busy.name],half:'am'}}),D)[0].time.includes(`担当の予定${amHeld.length}件を保留へ`),'送迎表の「反映中」に保留の件数');
+ console.log('hold OK', busy.name, '予定', all.length, '件 / AM休で保留', amHeld.length, '件');
+}
 // ===== ラベルごとの項目：ヘルプ（開始時刻・行き先）・送迎（迎え・送りの変更）・休日出勤（時間） =====
 {
  const D='2026-11-02', st=n=>S(n).id, us=n=>U(n).id;

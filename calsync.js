@@ -101,6 +101,11 @@ function revert(next, rec) {
       if (Object.keys(pl).length) r.places = pl; else delete r.places;
     }
   }
+  // 保留へ移した便・予定：まだ保留のままなら元の担当に戻す（手で誰かに割り当てていたら触らない）
+  for (const h of rec.held || []) {
+    const it = (next[h.t] || []).find((x) => x.id === h.id);
+    if (it && it.staffId === HOLD_ID) it.staffId = h.staff;
+  }
   const ids = new Set(rec.blocks || []);
   if (ids.size) next.blocks = (next.blocks || []).filter((b) => !ids.has(b.id));
 }
@@ -125,6 +130,22 @@ function applySpec(next, spec) {
   if (spec.type === "shift") spec.staff.forEach((s) => {
     const patch = Object.assign({}, spec.wstart ? { start: spec.wstart } : {}, spec.wend ? { end: spec.wend } : {}, spec.deptId ? { deptId: spec.deptId } : {});
     if (Object.keys(patch).length) put("staffOv", s.id, Object.assign({}, (next.staffOv || {})[s.id] || {}, patch));
+  });
+  // 休み・半休・不在・勤務時間変更で、勤務していない時間にかかるその職員の便・予定（ヘルプなど）は保留へ移す。
+  // 移したものは記録し、予定を消したら（まだ保留のままなら）元の担当に戻す。反映した時だけ動かす（その後に手で戻したものは触らない）
+  if (spec.type === "staff_off" || spec.type === "shift") spec.staff.forEach((s) => {
+    const ov = (next.staffOv || {})[s.id] || {};
+    const st = toMinX(spec.type === "shift" ? spec.wstart : spec.half === "am" ? ov.start : ""), en = toMinX(spec.type === "shift" ? spec.wend : spec.half === "pm" ? ov.end : "");
+    const f = toMinX(spec.from), t = toMinX(spec.to === "24:00" ? "23:59" : spec.to);
+    const off = (t0, dur) => t0 == null ? false
+      : spec.type === "staff_off" && spec.whole && !spec.half ? true
+      : spec.type === "staff_off" && !spec.whole ? (f != null && t != null && t0 < t && t0 + dur > f)
+      : (st != null && t0 < st) || (en != null && t0 + dur > en);
+    for (const t2 of ["runs", "blocks"]) for (const it of next[t2] || []) {
+      if (it.staffId !== s.id || String(it.id || "").startsWith("cal_")) continue;   // カレンダーから入れた「不在」「予定」はそのまま
+      if (!off(toMinX(it.time), Number(it.durMin) || 30)) continue;
+      it.staffId = HOLD_ID; (rec.held = rec.held || []).push({ t: t2, id: it.id, staff: s.id });
+    }
   });
   if (spec.type === "user_absent") spec.users.forEach((u) => put("userAbsent", u.id, true));
   // 利用日外利用：その日だけ利用日にする（送迎表の「今日だけ利用」）。迎え・送りが未割当として出るので担当者が気づける
@@ -214,6 +235,13 @@ function reconcile(master, sheet, events, date) {
 
 /* 画面表示用：その日に反映中のカレンダー予定 */
 function summary(master, sheet, events, date) {
+  return summary0(master, sheet, events, date).map((x) => {           // 保留へ移した数（まだ保留のままのもの）も見せる
+    const rec = ((sheet && sheet.calApplied) || {})[x.id];
+    const n = ((rec && rec.held) || []).filter((h) => ((sheet[h.t] || []).find((y) => y.id === h.id) || {}).staffId === HOLD_ID).length;
+    return n ? Object.assign(x, { time: `${x.time ? x.time + "・" : ""}担当の予定${n}件を保留へ` }) : x;
+  });
+}
+function summary0(master, sheet, events, date) {
   return specsFor(master, events, date).filter((s) => s.staff.length || s.users.length).map((s) => ({ id: s.id, type: s.type, typeLabel: TYPE_LABEL[s.type], title: s.title,
     who: [...s.staff.map((x) => x.name), ...s.users.map((x) => x.name)], missing: s.missing,
     time: s.half ? (s.half === "am" ? "AM休（午後から出勤）" : "PM休（午前で退勤）") :
