@@ -144,6 +144,15 @@ const D = path.join(__dirname, "../gas/out");
   const body = await P.pg.locator("#root").innerText(); assert.ok(body.includes("受診後送り") && body.includes("中村"), "送迎表に受診後送り・ヘルプが出る");
   console.log("送迎表を開き直す → 森(受診後送り)・ヘルプ（中村）が表に出る / 画面エラー:", real(P.errs));
   assert.deepStrictEqual(real(P.errs), []);
+  // 開いたときに公開URLが届かなくても（実機で起きた）、ログイン後にサーバーへ聞いて、メニューのリンクは公開URLになる
+  {
+    const N = await open("calendar.html", { width: 1200, height: 800 }, `window.__SG_EDITION="v1";window.__SG_BASE="";window.__SG_DATE="${date}";`);
+    await N.pg.waitForTimeout(500); await N.pg.fill("#sghNo", "000"); await N.pg.fill("#sghPin", "5829"); await N.pg.click("#sghGo"); await N.pg.waitForTimeout(2500);
+    await N.pg.click(".sgh-chip"); await N.pg.waitForTimeout(300);
+    const hrefs = await N.pg.$$eval(".sgh-menu a", (a) => a.map((x) => x.getAttribute("href")));
+    assert.ok(hrefs.length >= 3 && hrefs.every((h) => h.startsWith("https://script.google.com/macros/s/TEST/exec?page=sougei")), "メニューのリンクが公開URL: " + hrefs.join(" "));
+    console.log("公開URLが届かないとき → ログイン後のリンク:", hrefs[0]);
+  }
   // 動作の確認画面（?page=check）：全部 ✓ になる。普段の画面でエラーが出たら、画面の下に理由が出る
   {
     const ctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const pg = await ctx.newPage();

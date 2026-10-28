@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.28i',
+  VERSION: '2026.10.28j',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -195,6 +195,7 @@ var HANDLERS = {
   'kv.get': function (me, a) { return kvGet_(String(a[0])); },
   'kv.getMany': function (me, a) { var idx = docIndex_(); return (a[0] || []).slice(0, 60).map(function (k) { var d = docGet_(kvPath_(String(k)), idx); return { key: String(k), rev: d ? d.rev : 0, value: d ? d.value.v : null }; }); },
   'names.list': function (me) { return namesList_(); },
+  'app.base': function (me) { return appUrl_(); },   // 画面どうしのリンクに使う公開URL（開いたときに届かなかった場合の予備）
   'kv.importMany': function (me, a) { return kvImportMany_(me, a[0] || []); },
   'kv.list': function (me, a) { return kvList_(String(a[0] || '')); },
   'kv.merge': function (me, a) { return kvMerge_(me, a[0]); },

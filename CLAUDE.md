@@ -154,7 +154,8 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
   （作った人しか開けない）を返し、メニューのリンク・Claude接続URLがそれになっていた → `appUrl_()`：「設定」シートB2の公開URL（`…/exec`）を優先。
   画面側（gashost）も `…/dev` のときは開いたときのURL（referrer）が `…/exec` ならそれを使う。確認画面に「画面どうしのつながり」
   さらに実機で、公開URLが分からないまま作ったメニューのリンクが中身用のアドレス（`…googleusercontent.com/userCodeAppPanel?page=sougei…`）を指し、
-  送迎表が真っ白になった → 公開URL（`…/exec`）が分からないときはリンクを作らず「設定シートB2に貼って」と出す（`BASE_OK`）。B2は後ろの `?page=…` を落として読む
+  送迎表が真っ白になった → 公開URL（`…/exec`）が分からないときはリンクを作らず「設定シートB2に貼って」と出す。B2は後ろの `?page=…` を落として読む。
+  B2を入れても開いたときの `__SG_BASE` が届かなかった（原因未確認）ので、ログイン後に `app.base` でサーバーに聞き、端末にも覚える（gashost の `learnBase`・`sg:base`）
 - **本物のGoogleで画面が真っ白／カレンダーが「接続中…」のまま**（2026-10-28 実機）：Googleは画面をいったん自分の仕組み（mae_html_user の document.write）で書き出し、
   プログラムの中の「タグに見える文字」でログインの土台（gashost）を途中で切った（`Failed to execute 'write' … Unexpected end of input`）。
   → `assemble_gas.py` の `ev()` で、画面のプログラムはすべて「<」を含まない文字列にして `(0,eval)(…)` で実行する。確認画面のプログラムも同じ。

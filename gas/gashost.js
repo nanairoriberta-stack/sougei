@@ -4,7 +4,8 @@
 // 画面どうしのリンクに使う公開URL（…/exec）。サーバーの知らせるURLがテスト用（…/dev、作った人しか開けない）のときは、
 // 開いたときのURL（document.referrer）が公開URLならそちらを使う
 const REF = (() => { try { const m = /^(https:\/\/script\.google\.com\/(?:a\/[^/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec)/.exec(document.referrer || ""); return m ? m[1] : ""; } catch (e) { return ""; } })();
-const ED = G.__SG_EDITION || "v1", BASE = /\/exec$/.test(G.__SG_BASE || "") ? G.__SG_BASE : (REF || G.__SG_BASE || "");
+const ED = G.__SG_EDITION || "v1";
+let BASE = /\/exec$/.test(G.__SG_BASE || "") ? G.__SG_BASE : (REF || G.__SG_BASE || "");
 let ls = null; try { ls = G.localStorage; } catch (e) {}
 const store = G.TCCore.makeStore(ls || { getItem() { throw 0; }, setItem() { throw 0; }, removeItem() {}, key() { return null; }, length: 0 });
 const TK = "sg:token", MK = "sg:me", DK = "sg:dir";
@@ -108,14 +109,17 @@ function askNewPin(first, oldPin) {
   };
 }
 function setMe(m) { me = m; store.set(MK, JSON.stringify(m)); renderChip(); }
-function done() { hideOverlay(); renderChip(); readyResolve(me); for (const f of listeners) { try { f(me); } catch (e) {} } loadDirectory(); }
+function done() { hideOverlay(); renderChip(); readyResolve(me); for (const f of listeners) { try { f(me); } catch (e) {} } loadDirectory(); learnBase(); }
 function logout() { const t = token; token = ""; store.del(TK); store.del(MK); me = null; rawCall("auth.logout", [t]).catch(() => {}); location.reload(); }
 
 /* ---------- 右下の「ログイン中」 ---------- */
 let chip = null, menu = null;
 // 公開URLが分からないとき（BASEが空・テスト用）は、リンクを作らない。中身用のアドレス（googleusercontent）へ飛んで真っ白になるため
-const BASE_OK = /^https:\/\/script\.google\.com\/.*\/exec$/.test(BASE);
-function url(q) { return BASE_OK ? BASE + q : ""; }
+const isExec = (u) => /^https:\/\/script\.google\.com\/.*\/exec$/.test(String(u || ""));
+// 開いたときに公開URLが届かなかったら（実機で起きた）、前に教わったURL → ログイン後にサーバーへ聞いたURL の順で使う
+if (!isExec(BASE)) { const b = store.get("sg:base"); if (isExec(b)) BASE = b; }
+function learnBase() { call("app.base").then((b) => { if (isExec(b)) { BASE = b; store.set("sg:base", b); } }).catch(() => {}); }
+function url(q) { return isExec(BASE) ? BASE + q : ""; }
 function renderChip() {
   if (!me) { if (chip) chip.remove(); chip = null; return; }
   if (!chip) {
@@ -130,9 +134,9 @@ function toggleMenu() {
   menu = document.createElement("div"); menu.className = "sgh-menu" + (chip && chip.classList.contains("in-slot") ? " top" : "");
   const page = G.__SG_PAGE || "calendar";
   const links = [];
-  if (!BASE_OK) links.push(`<small style="color:#9a6a00">送迎表・カレンダーをメニューから開くには、スプレッドシートの「設定」シートのB2に公開URL（最後が /exec）を貼ってください</small>`);
+  if (!isExec(BASE)) links.push(`<small style="color:#9a6a00">送迎表・カレンダーをメニューから開くには、スプレッドシートの「設定」シートのB2に公開URL（最後が /exec）を貼ってください</small>`);
   else if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar"))}" target="_top">📅 カレンダー</a>`);
-  if (BASE_OK && (me.canSougei || me.admin)) [["v1", "現体制版"], ["v2", "新体制版"], ["v3", "りんく・ぷれいす版"]].forEach(([e, l]) => { if (!(page === "sougei" && e === ED)) links.push(`<a href="${esc(url("?page=sougei&e=" + e))}" target="_top">🚌 送迎表（${l}）</a>`); });
+  if (isExec(BASE) && (me.canSougei || me.admin)) [["v1", "現体制版"], ["v2", "新体制版"], ["v3", "りんく・ぷれいす版"]].forEach(([e, l]) => { if (!(page === "sougei" && e === ED)) links.push(`<a href="${esc(url("?page=sougei&e=" + e))}" target="_top">🚌 送迎表（${l}）</a>`); });
   menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
   menu.onclick = (e) => {
     const a = e.target.closest("[data-a]"); if (!a) return;
@@ -217,7 +221,7 @@ const sampleShim = Object.assign(async (input, opts) => {
 }, { limits: async () => ({ images: false }) });
 G.claude = { use: async (n) => { await ready; return { db: dbShim, user: userShim, downloads: downloadsShim, sample: sampleShim }[n] || null; } };
 
-G.SGHost = { ready, call, store, get me() { return me; }, edition: ED, base: BASE, url, onLogin: (f) => listeners.add(f), startPolling, pollOnce, refreshCalendar: () => Promise.all([...calSubs].map((f) => f())), runOp: async (op) => { const r = await call("cal.apply", op); if (r && r.status === "ok") { try { await Promise.all([...calSubs].map((f) => f())); } catch (e) {} } return r; }, toast: toastHost, directory: () => directory, loadDirectory };
+G.SGHost = { ready, call, store, get me() { return me; }, edition: ED, get base() { return BASE; }, url, onLogin: (f) => listeners.add(f), startPolling, pollOnce, refreshCalendar: () => Promise.all([...calSubs].map((f) => f())), runOp: async (op) => { const r = await call("cal.apply", op); if (r && r.status === "ok") { try { await Promise.all([...calSubs].map((f) => f())); } catch (e) {} } return r; }, toast: toastHost, directory: () => directory, loadDirectory };
 
 /* ---------- 起動：保存済みのログインがあれば、通信できなくてもそのまま使える（未送信は端末に保存） ---------- */
 function boot() {
