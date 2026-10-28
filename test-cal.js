@@ -96,6 +96,17 @@ console.log('half OK');
  assert.strictEqual(T.normSg({type:'staff_off',staff:['八壁'],dept:'y'}).dept,'','職員休みに部署は持たない');
  assert.deepStrictEqual(T.normEvent({date:D,title:'会議',tanto:['八壁','',1,'八壁']},'abcdef12',0).tanto,['八壁'],'担当（その他予定）');
 }
+// ヘルプ（2026-10-28〜）：職員は選ばず利用者。保留欄に【ヘルプ（利用者）】、家以外の行き先は（ ）書き
+{
+ const D='2026-11-02';
+ const x=C.reconcile(m,sheet,[{id:'hq1',rev:1,date:D,endDate:D,allDay:false,start:'10:30',end:'11:30',title:'森 ヘルプ（○○病院）',sg:{type:'help',staff:[],users:['森'],note:'○○病院'}},
+   {id:'hq2',rev:1,date:D,endDate:D,allDay:false,start:'13:00',end:'14:00',title:'中村 ヘルプ',sg:{type:'help',staff:[],users:['中村'],note:''}}],D);
+ const a=x.blocks.find(b=>b.id==='cal_hq1___hold__'); assert.ok(a&&a.staffId==='__hold__'&&a.label==='森'&&a.note==='○○病院'&&a.time==='10:30'&&a.userIds[0]===U('森').id,'利用者のヘルプは保留欄');
+ const b=x.blocks.find(b=>b.id==='cal_hq2___hold__'); assert.ok(b&&b.label==='中村'&&!('note' in b),'行き先なし');
+ // 送迎表で担当を割り当てても（同じ札のまま職員の欄へ）、そのまま残る
+ const y=JSON.parse(JSON.stringify(x)); y.blocks.find(b=>b.id==='cal_hq1___hold__').staffId=S('日野').id;
+ assert.strictEqual(C.reconcile(m,y,[{id:'hq1',rev:1,date:D,endDate:D,allDay:false,start:'10:30',end:'11:30',title:'',sg:{type:'help',staff:[],users:['森'],note:'○○病院'}},{id:'hq2',rev:1,date:D,endDate:D,allDay:false,start:'13:00',end:'14:00',title:'',sg:{type:'help',staff:[],users:['中村'],note:''}}],D).blocks.find(b=>b.id==='cal_hq1___hold__').staffId,S('日野').id,'割り当てた担当は残る');
+}
 console.log('labels OK');
 // ===== 勤務時間変更 =====
 {

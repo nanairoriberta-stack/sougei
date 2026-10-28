@@ -50,11 +50,13 @@ function midOf(s, wd) {
 }
 
 function blocksOf(spec) {
-  if (spec.type === "help") {                              // ヘルプ：開始時刻に、担当職員の欄へ【ヘルプ】（行き先）。担当が未定なら保留欄。長さは送迎表の決まり（既定1時間）
+  if (spec.type === "help") {                              // ヘルプ：開始時刻に【ヘルプ（利用者）】。職員が無ければ保留欄（担当者が送迎表で割り当てる）。長さは送迎表の決まり（既定1時間）
     if (!spec.from) return [];
     const who = spec.staff.length ? spec.staff.map((s) => s.id) : [HOLD_ID];
-    return who.map((sid) => ({ id: `cal_${spec.id}_${sid}`, kind: "help", time: spec.from, staffId: sid,
-      label: spec.note || spec.users.map((u) => u.name).join("・"), vehicleId: "", userIds: spec.users.map((u) => u.id), calId: spec.id }));
+    const names = spec.users.map((u) => u.name).join("・");
+    const note = names && spec.note && spec.note !== names ? spec.note : "";   // 家以外の行き先は（ ）書きで出る
+    return who.map((sid) => Object.assign({ id: `cal_${spec.id}_${sid}`, kind: "help", time: spec.from, staffId: sid,
+      label: names || spec.note, vehicleId: "", userIds: spec.users.map((u) => u.id), calId: spec.id }, note ? { note } : {}));
   }
   if (spec.type !== "staff_off" && spec.type !== "staff_plan") return [];
   if (spec.type === "staff_off" && (spec.whole || spec.half)) return [];
