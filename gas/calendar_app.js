@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.28f";
+const APP_VERSION="2026.10.28g";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -29,7 +29,9 @@ function allEvents(){return core?Object.values(core.overlay(S.server)):Object.va
 function visible(){return allEvents().filter(e=>!e.deleted&&pass(e))}
 function pass(e){if(S.label!=="all"&&e.label!==S.label)return false;if(S.mine&&!isMine(e))return false;return true}
 function isMine(e){const nm=(window.SGHost&&window.SGHost.me||{}).name;return!!((S.me&&e.members.includes(S.me))||(nm&&((e.tanto||[]).includes(nm)||(e.sg&&e.sg.staff||[]).includes(nm))))}
-function cmp(a,b){const sa=a.date!==a.endDate,sb=b.date!==b.endDate;if(sa!==sb)return sa?-1:1;if(a.allDay!==b.allDay)return a.allDay?-1:1;return(a.start||"").localeCompare(b.start||"")||a.title.localeCompare(b.title)}
+/* 予定の並び：ラベルの順（ヘルプ・送迎・利用者休み…その他予定）→ 何日も続く予定 → 終日 → 開始時刻 → タイトル。予定が入るたびにこの順で並び直る */
+const LORDER=Object.fromEntries(LABELS.map((l,i)=>[l.k,i]));
+function cmp(a,b){const la=LORDER[lab(a.label)]??99,lb=LORDER[lab(b.label)]??99;if(la!==lb)return la-lb;const sa=a.date!==a.endDate,sb=b.date!==b.endDate;if(sa!==sb)return sa?-1:1;if(a.allDay!==b.allDay)return a.allDay?-1:1;return(a.start||"").localeCompare(b.start||"")||a.title.localeCompare(b.title)}
 function on(list,day){return list.filter(e=>e.date<=day&&e.endDate>=day).sort(cmp)}
 function timeText(e){const md=s=>{const d=parse(s);return`${d.getMonth()+1}/${d.getDate()}`};
   if(e.date!==e.endDate)return e.allDay?`${md(e.date)}–${md(e.endDate)}`:`${md(e.date)} ${e.start}–${md(e.endDate)} ${e.end}`;return e.allDay?"終日":`${e.start}–${e.end}`}
