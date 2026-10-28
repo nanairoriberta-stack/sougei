@@ -57,7 +57,7 @@ bash test.sh         # Nodeのテスト全部
 bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ```
 - テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-excel.js`（送迎表のExcel出力に版が入る）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎の変更/迎え先・送り先/休日出勤/勤務時間変更）、`test-agent.js`（AIと相談の適用 10件）、
-  `gas/test-gas.js`（サーバー 26件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
+  `gas/test-gas.js`（サーバー 27件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
   `mcp/test-mcp.js`（公式MCPクライアントで35件。Googleの302転送も再現）、`pw/gas_ui.js`・`pw/agent_ui.js`（画面）
 - `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
 - `sougei.jsx` の関数をテスト/サーバーで使うときは `build.sh` の `EXP` と `mcp/engine_entry.js` に名前を足す
@@ -77,7 +77,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）
   - 送迎表：`kv/<encKey(キー)>`。キーは `master`（利用者・職員・車両・部署・ルール）/ `sheet:YYYY-MM-DD` / `pattern:0〜6`（週間パターン）。版の頭 `v2:`/`v3:`
   - カレンダー：`days/…`（日ごと・シャード）、`cm/…`（コメント）。Claudeの案：`prop/<id>`
-- `職員ID`・`変更履歴`・`設定`（B2=公開URL）・`_auth`・`_sessions`・`AI接続`（コネクタの鍵）
+- `職員ID`・`変更履歴`・`設定`（B2=公開URL）・`よみがな`（A=名前・B=よみ・C=職員/利用者。名前は送迎表から自動で足す `syncYomi_`、読みは管理者が入れる）・`_auth`・`_sessions`・`AI接続`（コネクタの鍵）
 - **スプレッドシートの自動変換に注意**：`"000"`→0、`"0123"`→123、`=`/`+`/`-`/`@` で始まる文字→数式、日付→Date。
   書くときは `txt_()`（先頭に `'`）か `safe_()`、PINは `pinOf_()`、職員番号は `normNo_()`、ハッシュは `h:` 付き。`fakegas.js` はこの変換を再現する
 - CacheService は1値100KBまで（日本語はUTF-8で数える `utf8len_`）
@@ -121,6 +121,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 一般職員にはヘルプ・送迎・利用者休みのラベルは押せない（灰色）。職員休み・休日出勤・勤務時間変更・職員の予定は自分の分だけ。
 モニタリング・支援会議の対応者は、一般職員は自分だけ、送迎表の担当者と管理者は誰でも（サーバーの `calApply_` で `label` を見て許可）。
 部署の選択肢・ヘルプの行き先の候補はサーバーの `names.list`（キャッシュ名 `names2`）から。
+名前の入力は予測（`sgHits`）：「よみがな」シートの読みの頭・名前の頭が合うものを先に（カタカナ・半角もそろえる `kanaNorm`）。ラベルの並びは「その他予定」が最後。モニタリング・支援会議の場所は利用者・対応者のすぐ下。項目を作り直しても画面の位置は保つ（`drawSheet` の keep）。
 参加者（members）の入力欄は出さない（既存のデータは残す）。「自分の予定」は参加者・担当・送迎表の対象職員に自分が入っているもの。
 
 ## AI

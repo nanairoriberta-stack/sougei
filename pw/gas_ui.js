@@ -35,7 +35,7 @@ const D = path.join(__dirname, "../gas/out");
   await pg.fill("#sghOld", String(yo[3])); await pg.fill("#sghNew", "3871"); await pg.fill("#sghNew2", "3871");
   await pg.evaluate(() => { const f = document.getElementById("sghPinF"); f.requestSubmit(); f.requestSubmit(); });   // 2回押し（Enterとクリック）でもエラーにならない await pg.waitForTimeout(2500);
   await pg.screenshot({ path: "g_cal.png" });
-  await pg.selectOption('#qKind', 'am'); await pg.locator('.quick').screenshot({ path: 'g_quick.png' }); await pg.click('[data-quick]'); await pg.waitForTimeout(2500);
+  await pg.selectOption("#qKind", "am"); await pg.locator('.quick').screenshot({ path: 'g_quick.png' }); await pg.click('[data-quick]'); await pg.waitForTimeout(2500);
   await pg.screenshot({ path: "g_cal_after.png" });
   await pg.click("#addBtn"); await pg.waitForTimeout(400); await pg.screenshot({ path: "g_editor.png" });
   // 一般職員：利用者が関わるラベル（ヘルプ・送迎・利用者休み）は選べない。休日出勤は自分の分だけ
@@ -60,6 +60,10 @@ const D = path.join(__dirname, "../gas/out");
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);
   // 管理者がカレンダーで「送迎」「ヘルプ」「利用者休み」「勤務時間変更」「その他予定」を入れる → 送迎表に反映
+  // よみがな：送迎表の名前は「よみがな」シートに自動で並ぶ。読みを入れると、ひらがなで予測が出る
+  const ys = g.sheets.get("よみがな"); assert.ok(ys && ys.data.some((r) => r[0] === "中村" && r[2] === "利用者"), "よみがなシートに利用者が並ぶ");
+  ys.data.forEach((r) => { if (r[0] === "中村") r[1] = "なかむら"; if (r[0] === "日野") r[1] = "ひの"; });
+  for (const k of [...g.cache.keys()]) if (k === "names2") g.cache.delete(k);
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
@@ -71,12 +75,24 @@ const D = path.join(__dirname, "../gas/out");
   const sendOpts = await A.pg.$$eval('input[name="w-send"]', (o) => o.map((x) => x.parentElement.innerText));
   assert.deepStrictEqual(meetOpts, ["いつもどおり", "時間変更", "家族送り", "受診後送り"]); assert.deepStrictEqual(sendOpts, ["いつもどおり", "時間変更", "家族迎え"]);
   await A.pg.check('input[name="w-meet"][value="clinic"]'); await A.pg.waitForTimeout(200);
-  await A.pg.check('input[name="w-send"][value="time"]'); await A.pg.waitForTimeout(200); await A.pg.fill("#w-sendt", "15:30");
+  const lastLabel = await A.pg.$$eval('input[name="f-label"]', (o) => o[o.length - 1].value); assert.strictEqual(lastLabel, "other", "その他予定はラベルの最後");
+  await A.pg.evaluate(() => { document.querySelector("#sheetRoot .sheet").scrollTop = 400; });
+  const before = await A.pg.evaluate(() => document.querySelector("#sheetRoot .sheet").scrollTop);
+  await A.pg.check('input[name="w-send"][value="time"]'); await A.pg.waitForTimeout(200);
+  const after = await A.pg.evaluate(() => document.querySelector("#sheetRoot .sheet").scrollTop);
+  assert.ok(before > 100 && Math.abs(after - before) < 5, `「時間変更」を押しても画面の位置はそのまま（${before}→${after}）`);
+  await A.pg.fill("#w-sendt", "15:30");
   assert.strictEqual(await A.pg.locator("#w-mplace").count(), 0, "受診後送りのときは迎え先の欄を出さない");
   await A.pg.fill("#w-splace", "病院");
   await A.pg.locator(".sheet").screenshot({ path: "g_ride.png" }); await save();
   // ヘルプ：担当・開始時刻・行き先（終了の時刻は出ない）
-  await add("help"); assert.strictEqual(await A.pg.locator("#f-sgq-staff").count(), 0, "ヘルプに職員の欄はない"); await pick("users", "中村"); await A.pg.fill("#w-dest", "○○病院"); await A.pg.fill("#f-start", "14:00");
+  await add("help"); assert.strictEqual(await A.pg.locator("#f-sgq-staff").count(), 0, "ヘルプに職員の欄はない");
+  await A.pg.fill("#f-sgq-users", "なか"); await A.pg.waitForTimeout(150);
+  const firstHit = await A.pg.locator('#sghits-users [data-sgpick]').first().getAttribute("data-name"); assert.strictEqual(firstHit, "中村", "「なか」で中村が先頭に");
+  await A.pg.fill("#f-sgq-users", "ナカ"); await A.pg.waitForTimeout(150);
+  assert.strictEqual(await A.pg.locator('#sghits-users [data-sgpick]').first().getAttribute("data-name"), "中村", "カタカナでも");
+  await A.pg.click('[data-sgpick="users"][data-name="中村"]');
+  console.log("予測:「なか」→", firstHit); await A.pg.fill("#w-dest", "○○病院"); await A.pg.fill("#f-start", "14:00");
   assert.ok(await A.pg.locator("#w-end").isHidden(), "ヘルプは開始時刻だけ");
   await A.pg.locator(".sheet").screenshot({ path: "g_help.png" }); await save();
   // 利用者休み：欠席（理由つき）

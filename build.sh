@@ -9,6 +9,8 @@ mkdir -p .gen
 EXP='seedMaster, mergeSeedMaster, resolveSeedPattern, SEED_PATTERNS, EDITION, emptySheet, applyDayDept, noRideDefaults, aiApplyPure, collectSheetChecks, aiContextOf, aiRulesText, agApplyRules, agApplyMaster, agMasterDiff, agentDiff, agApplyDay, agDayDiff, rulesOf, weekdayOf, DAYS, RULE_LISTS, ENTITY_FIELDS, resolveVehicle, HOLD_ID, buildWorkbook, buildExcelHtml, appVerLabel'
 { cat sougei.jsx; printf '\nexport { %s };\n' "$EXP"; } > .gen/eng_src.jsx
 
+echo "0) 画面のプログラムの書き間違いがないか"
+for f in calcore.js kvsync.js calsync.js gas/kvgas.js gas/gashost.js gas/sougei_boot.js gas/calendar_app.js; do node --check "$f"; done
 echo "1) テスト用の部品 → eng.cjs"
 $ESB .gen/eng_src.jsx --bundle --loader:.jsx=jsx --format=cjs --platform=node --log-level=warning $SHIM --outfile=eng.cjs
 echo "2) サーバー用の計算部品 → mcp/engine.js"

@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.28c',
+  VERSION: '2026.10.28d',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -17,7 +17,7 @@ var APP = {
   EDITIONS: { v1: '', v2: 'v2:', v3: 'v3:' },
   EDITION_LABEL: { v1: '現体制版', v2: '新体制版', v3: 'りんく・ぷれいす版' },
   ROLES: ['管理者', '送迎表', '一般'],
-  SH: { ids: '職員ID', log: '変更履歴', auth: '_auth', sess: '_sessions', docs: '_docs', conf: '設定' }
+  SH: { ids: '職員ID', log: '変更履歴', auth: '_auth', sess: '_sessions', docs: '_docs', conf: '設定', yomi: 'よみがな' }
 };
 
 /* ================= 画面 ================= */
@@ -322,7 +322,7 @@ function namesList_() {
     (m.users || []).forEach(function (u) { [u && u.meetPlace, u && u.sendPlace].forEach(function (v) { v = String(v || '').trim(); if (/^(リベルタ|リベ|ﾘﾍﾞﾙﾀ|ﾘﾍﾞ)$/.test(v)) v = 'ﾘﾍﾞ'; if (v && !/^(家族|母|父)/.test(v) && !seenP[v]) { seenP[v] = 1; places.push(v); } }); });
     (m.departments || []).forEach(function (d) { if (d && d.name && !seenD[d.name]) { seenD[d.name] = 1; depts.push(d.name); } });
   });
-  var out = { users: users, depts: depts, places: places };
+  var out = { users: users, depts: depts, places: places, yomi: yomiMap_() };
   try { c.put('names2', JSON.stringify(out), 300); } catch (e) {}
   return out;
 }
@@ -334,6 +334,7 @@ function syncStaffIds_() {
     var v = m ? m.value.v : null;
     (v && v.staff || []).forEach(function (s) { if (s && s.name && names.indexOf(s.name) < 0 && !(s.retireDate && s.retireDate <= today_())) names.push(s.name); });
   });
+  try { syncYomi_(); } catch (e) {}
   if (!names.length) return 0;
   var sh = sheet_(APP.SH.ids), r = rows_(APP.SH.ids);
   var have = {}, maxNo = 0;
@@ -342,6 +343,27 @@ function syncStaffIds_() {
   names.forEach(function (n) { if (!have[n]) { maxNo++; add.push([txt_(pad3_(maxNo)), safe_(n), '一般', txt_(randomPin_()), '', '送迎表から自動登録']); } });
   if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, 6).setValues(add);
   return add.length;
+}
+/* 「よみがな」シート：A=名前・B=よみ（ひらがな。管理者が入れる）・C=職員/利用者。名前は送迎表から自動で足す。
+   カレンダーで「た」と打つと「田中」などが出るようにするため（送迎表のデータには読みが無い） */
+function syncYomi_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(APP.SH.yomi);
+  if (!sh) { sh = ss.insertSheet(APP.SH.yomi); sh.getRange(1, 1, 1, 3).setValues([['名前', 'よみ（ひらがな。最初の数文字だけでも可）', '職員／利用者']]); sh.setFrozenRows(1); }
+  var have = {}; (sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues() : []).forEach(function (r) { have[String(r[0]).trim()] = 1; });
+  var add = [];
+  ['v1', 'v2', 'v3'].forEach(function (ed) {
+    var d = docGet_('kv/' + SGKV.encKey(APP.EDITIONS[ed] + 'master')); var m = d ? d.value.v : null; if (!m) return;
+    [['職員', m.staff || []], ['利用者', m.users || []]].forEach(function (g) {
+      g[1].forEach(function (x) { var n = x && String(x.name || '').trim(); if (n && !have[n]) { have[n] = 1; add.push([safe_(n), '', g[0]]); } });
+    });
+  });
+  if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, 3).setValues(add);
+  return add.length;
+}
+function yomiMap_() {
+  var sh = sheet_(APP.SH.yomi), out = {}; if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(function (r) { var n = String(r[0]).trim(), y = String(r[1]).trim(); if (n && y) out[n] = y; });
+  return out;
 }
 function today_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Asia/Tokyo', 'yyyy-MM-dd'); }
 

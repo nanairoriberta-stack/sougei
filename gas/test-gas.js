@@ -310,6 +310,17 @@ async function bootstrap() {
     return "…/dev → 設定の …/exec を使う（それ以外のURLは無視）";
   });
 
+  await test("よみがな：送迎表の職員・利用者が「よみがな」シートに自動で並び、入れた読みがカレンダーに届く", async () => {
+    const { g, admin } = await bootstrap();
+    const ys = g.sheets.get("よみがな"); assert.ok(ys, "シートができる");
+    const rows = ys.data.slice(1); assert.ok(rows.some((r) => r[0] === "八壁" && r[2] === "職員") && rows.some((r) => r[0] === "中村" && r[2] === "利用者"));
+    const n0 = rows.length; g.ctx.syncYomi_(); assert.strictEqual(ys.data.length - 1, n0, "2回目は増えない（重複なし）");
+    rows.find((r) => r[0] === "中村")[1] = "なかむら";
+    for (const k of [...g.cache.keys()]) if (k === "names2") g.cache.delete(k);
+    const nl = await admin.call("names.list"); assert.strictEqual(nl.yomi["中村"], "なかむら"); assert.ok(!("八壁" in nl.yomi), "空の読みは送らない");
+    return `職員と利用者 ${n0}名が並ぶ。読みは names.list で届く`;
+  });
+
   await test("大きなマスタ（セル上限5万字を超える）も分割して保存・読み込み", async () => {
     const { g, admin } = await bootstrap();
     const raw = g.sheets.get("_docs").data.find((r) => r[0] === "kv/master");

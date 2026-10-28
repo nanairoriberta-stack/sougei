@@ -1,8 +1,8 @@
 
 "use strict";
-const APP_VERSION="2026.10.28c";
+const APP_VERSION="2026.10.28d";
 const C=window.TCCore;
-const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"leave",n:"職員休み"},{k:"user",n:"利用者休み"},{k:"other",n:"その他予定"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"勤務時間変更"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"}];
+const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"leave",n:"職員休み"},{k:"user",n:"利用者休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"勤務時間変更"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
 const HOL={
 "2026-01-01":"元日","2026-01-12":"成人の日","2026-02-11":"建国記念の日","2026-02-23":"天皇誕生日","2026-03-20":"春分の日","2026-04-29":"昭和の日","2026-05-03":"憲法記念日","2026-05-04":"みどりの日","2026-05-05":"こどもの日","2026-05-06":"振替休日","2026-07-20":"海の日","2026-08-11":"山の日","2026-09-21":"敬老の日","2026-09-22":"国民の休日","2026-09-23":"秋分の日","2026-10-12":"スポーツの日","2026-11-03":"文化の日","2026-11-23":"勤労感謝の日",
@@ -156,12 +156,12 @@ const NO_MEET={fam:"家族送り",clinic:"受診後送り"},NO_SEND={fam:"家族
 const LABEL_OF_SG={staff_off:"leave",user_absent:"user",user_time:"ride",help:"help",hwork:"hwork",shift:"shift",staff_plan:"other"};
 const USER_LABELS=["help","ride","user"];          // 利用者が関わるラベル（送迎表の担当者だけが入力できる）
 const PLAN_LABELS=["monitor","shien"];             // モニタリング・支援会議：利用者・時間・場所・対応者。対応者の予定として送迎表に入る
-let SGN={staff:[],users:[],depts:[],places:[],loaded:false};
+let SGN={staff:[],users:[],depts:[],places:[],yomi:{},loaded:false};
 async function loadNames(){
   const H=window.SGHost;if(!H)return;
   let r=null;try{r=await H.call("names.list")}catch{}
   if(!H.directory().length)await H.loadDirectory();
-  SGN={staff:H.directory().filter(d=>d.no!=="000").map(d=>({name:d.name,dept:d.no})),users:r?r.users||[]:SGN.users,depts:r?r.depts||[]:SGN.depts,places:r?r.places||[]:SGN.places,loaded:true};
+  SGN={staff:H.directory().filter(d=>d.no!=="000").map(d=>({name:d.name,dept:d.no})),users:r?r.users||[]:SGN.users,depts:r?r.depts||[]:SGN.depts,places:r?r.places||[]:SGN.places,yomi:r?r.yomi||{}:SGN.yomi,loaded:true};
 }
 const meInfo=()=>window.SGHost&&window.SGHost.me||{};
 const canLabel=k=>{const me=meInfo();return!USER_LABELS.includes(k)||!!(me.canSougei||me.admin)};
@@ -239,17 +239,25 @@ function drawSg(){
     +dept()+text("w-reason",w.reason,"例：送迎の応援",PICK.shift,"理由（任意）")
     +hint("送迎表のその日の勤務時間（出勤・退勤）が変わります。何日も続くときは終了日を変えてください。");
   else if(PLAN_LABELS.includes(L))h=who("users","利用者","利用者の名前で検索")+who("staff","対応者","職員の名前で検索")
+    +`<div class="sgsub"><label class="lbl2" for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="例：自宅・事業所・○○病院" ${ro?"readonly":""}></div>`
     +hint("対応者の予定として、送迎表のその時間に入ります（送迎と重なると注意が出ます）。")+(!meInfo().canSougei?hint("対応者に自分以外を入れるときは、送迎表の担当者か管理者に入れてもらってください。"):"");
   else h=who("staff","担当","職員の名前で検索","なし")
     +`<label class="check"><input type="checkbox" id="w-plan" ${w.plan?"checked":""} ${dis}>担当の職員の予定として送迎表にも載せる（会議・研修・外出など）</label>`
     +(w.plan?hint("その時間の予定として担当の職員の欄に入り、送迎と重なると注意が出ます。"):"");
   box.innerHTML=h+(!SGN.loaded?`<span class="by">名前の一覧を読み込んでいます…</span>`:"");
 }
+/* 読みをそろえる：カタカナ→ひらがな、半角→全角、空白なし */
+function kanaNorm(s){return String(s||"").normalize("NFKC").replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/\s+/g,"").toLowerCase()}
 function sgHits(kind,q){
   const h=$("sghits-"+kind);if(!h||!ed)return;const sel=new Set(ed.d.w[kind]||[]);
   const src=kind==="staff"?SGN.staff:SGN.users;const qq=String(q||"").trim();
-  const list=src.filter(x=>!sel.has(x.name)&&(!qq||x.name.includes(qq)||x.dept.includes(qq))).slice(0,40);
-  h.innerHTML=list.length?list.map(x=>`<button type="button" data-sgpick="${kind}" data-name="${esc(x.name)}"><span>${esc(x.name)}</span><small>${esc(x.dept)}</small></button>`).join(""):`<div class="by" style="padding:6px 10px">${SGN.loaded?"見つかりません":"読み込み中…"}</div>`;h.hidden=false;
+  // 予測：「た」→ 田中・田原（「よみがな」シートの読みの頭）、「田」→ 田中（名前の頭）。頭が合うものを先に
+  const qn=kanaNorm(qq),Y=SGN.yomi||{};
+  const scored=src.filter(x=>!sel.has(x.name)).map(x=>{const n=kanaNorm(x.name),y=kanaNorm(Y[x.name]||"");
+    const s=!qn?2:(n.startsWith(qn)||(y&&y.startsWith(qn)))?0:(n.includes(qn)||(y&&y.includes(qn)))?1:String(x.dept).includes(qq)?2:9;return{x,s,k:y||n}}).filter(o=>o.s<9);
+  scored.sort((a,b)=>a.s-b.s||a.k.localeCompare(b.k,"ja"));
+  const list=scored.slice(0,qn?12:40).map(o=>o.x);
+  h.innerHTML=list.length?list.map(x=>`<button type="button" data-sgpick="${kind}" data-name="${esc(x.name)}"><span>${esc(x.name)}${Y[x.name]?` <small>${esc(Y[x.name])}</small>`:""}</span><small>${esc(x.dept)}</small></button>`).join(""):`<div class="by" style="padding:6px 10px">${SGN.loaded?"見つかりません":"読み込み中…"}</div>`;h.hidden=false;
 }
 function readSg(){
   if(!ed||!$("sgArea"))return;const w=ed.d.w;
@@ -258,6 +266,7 @@ function readSg(){
   for(const[n,k]of[["w-leave","leave"],["w-meet","meetM"],["w-send","sendM"],["w-ws","wsM"],["w-we","weM"]]){const v=rv(n);if(v!=null)w[k]=v}
   for(const[id,k]of[["w-dest","dest"],["w-mplace","mplace"],["w-splace","splace"],["w-reason","reason"],["w-meett","meet"],["w-sendt","send"],["w-dept","dept"],["w-wst","wstart"],["w-wet","wend"]]){const v=iv(id);if(v!=null)w[k]=v}
   if($("w-plan"))w.plan=$("w-plan").checked;
+  if($("f-place"))ed.d.place=$("f-place").value.trim();   // 場所が項目の中にあるラベル（モニタリング・支援会議）でも書きかけを残す
 }
 /* 自動で付けるタイトル（空欄のとき） */
 function autoTitle(label,sg,w){
@@ -340,6 +349,7 @@ function liveCheck(){
   if(changed!==ed.changed){ed.changed=changed;const b=$("liveNote");if(b)b.hidden=!changed}
 }
 function drawSheet(){
+  const keep=document.querySelector("#sheetRoot .sheet")?.scrollTop||0;   // 「時間変更」などを押して作り直しても、見ていた位置のまま
   const d=ed.d,ro=ed.ro,v=x=>ro?"readonly":"";
   // ラベルごとの項目。その他予定は「時間・場所・担当」の順になるよう、場所の下に出す
   const box=`<div class="field sgbox" style="--sc:var(--l-${lab(d.label)})"><span class="lbl">${esc(LMAP[d.label]?.n||"その他予定")}で入力する項目</span><div id="sgArea"></div></div>`;
@@ -359,7 +369,7 @@ function drawSheet(){
       <div class="field" ${d.label==="help"?"hidden":""}><label for="f-enddate">終了日</label><input class="input" type="date" id="f-enddate" value="${esc(d.endDate)}" ${v()}></div>
       <div class="field" ${d.allDay||d.label==="help"?"hidden":""} id="w-end"><label for="f-end">${d.label==="hwork"?"退勤の時刻":"終了時刻"}</label><input class="input" type="time" id="f-end" value="${esc(d.end||"11:00")}" step="300" ${v()}></div>
     </div>
-    ${d.label==="other"||PLAN_LABELS.includes(d.label)?`<div class="field"><label for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="会議室A / オンライン など" ${v()}></div>`:""}
+    ${d.label==="other"?`<div class="field"><label for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="会議室A / オンライン など" ${v()}></div>`:""}
     ${d.label==="other"?box:""}
     <div class="field"><label for="f-memo">メモ</label><textarea class="input" id="f-memo" maxlength="2000" placeholder="${d.label==="other"?"議題、持ち物、URL など":"伝えたいこと（送迎表には出ません）"}" ${v()}>${esc(d.memo)}</textarea></div>
     <p class="err" id="f-err" ${ed.err?"":"hidden"}>${esc(ed.err)}</p>
@@ -372,6 +382,7 @@ function drawSheet(){
   ${ed.base?`<div class="comments"><h3>コメント</h3><div id="cmts"></div>${!ro?`<form class="cmt-form" id="cmtForm"><input class="input" id="f-cmt" maxlength="500" placeholder="コメントを書く" autocomplete="off"><button class="primary">送信</button></form>`:""}</div>`:""}
   </div></div>`;
   drawMembers();drawComments();drawSg();
+  if(keep){const sh=document.querySelector("#sheetRoot .sheet");if(sh)sh.scrollTop=keep}
   if(ed.base&&ed.base.updatedBy)profiles([ed.base.updatedBy]).then(ps=>{const b=$("byline");if(b)b.textContent=`最終更新：${ps[ed.base.updatedBy]?.name||"メンバー"}（${fmtAt(ed.base.updatedAt)}）`});
 }
 async function drawMembers(){
