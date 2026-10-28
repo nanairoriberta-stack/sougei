@@ -70,6 +70,21 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await P.pg.locator("[data-datepop]").innerText()).startsWith("11/3"), "選んだ日に移る");
     await P.pg.click("[data-datepop]"); await P.pg.click('[data-day="2026-11-02"]'); await P.pg.waitForTimeout(1500);
     assert.ok((await P.pg.locator("[data-datepop]").innerText()).startsWith("11/2")); console.log("日付のカレンダー: ボタンの下", JSON.stringify(r)); }
+  // 訓練送り：チェックしない人は送り漏れに出る（通常の送りが別にある）、「通常の送りと同じ」にチェックした人は出ない
+  { const m0 = api(t, "kv.get", ["master"]).data.value, s0 = api(t, "kv.get", ["sheet:" + date]).data.value;
+    const r0 = s0.runs.find((r) => r.kind === "send" && !r.mode && r.userIds.length && !r.trainBothIds && !r.trainUserIds); const un = m0.users.find((u) => u.id === r0.userIds[0]).name;
+    const unsent = async () => (await P.pg.locator('[data-unasg="send"] button').allInnerTexts()).some((x) => x.startsWith(un));
+    const edit = async (fn) => { await P.pg.click(`[data-item-id="${r0.id}"]`); await P.pg.waitForTimeout(300); await fn(); await P.pg.click('button:text-is("保存")'); await P.pg.waitForTimeout(1500); };
+    const kindSel = () => P.pg.locator('select:has(option[value="train_send"])');
+    assert.ok(!(await unsent()), "はじめは送り漏れにいない");
+    await edit(async () => { await kindSel().selectOption("train_send"); assert.ok(await P.pg.locator("[data-trainsame]").isVisible(), "訓練送りの便に「通常の送りと同じ」の欄"); });
+    assert.ok(await unsent(), "チェックなしの訓練送り → 送り漏れに出る");
+    await edit(async () => { await P.pg.locator(`[data-same="${un}"]`).check(); await P.pg.locator(".fixed [data-trainsame]").screenshot({ path: "g_trainsame.png" }).catch(() => {}); });
+    assert.ok(!(await unsent()), "「通常の送りと同じ」→ 送り漏れに出ない");
+    const s1 = api(t, "kv.get", ["sheet:" + date]).data.value.runs.find((r) => r.id === r0.id); assert.ok(s1.mode === "train" && s1.trainBothIds.includes(r0.userIds[0]));
+    await edit(async () => { await P.pg.locator(`[data-same="${un}"]`).uncheck(); await kindSel().selectOption("send"); });   // 元に戻す
+    const s2 = api(t, "kv.get", ["sheet:" + date]).data.value.runs.find((r) => r.id === r0.id); assert.ok(!s2.mode && !s2.trainBothIds, "元に戻る");
+    console.log("訓練送り:", un, "チェックなし→送り漏れ / 通常の送りと同じ→出ない"); }
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   assert.strictEqual(await P.pg.getByRole("button", { name: /AI調整|AIと相談/ }).count(), 0, "料金がかかるAIのボタンは、キーが無ければ出ない");
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);

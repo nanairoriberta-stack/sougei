@@ -73,6 +73,12 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 `appVerLabel()`（sougei.jsx）＝ `Ver293(2026.10.27f)`：Ver＋`SEED_VERSION`、括弧内はGoogle版の `APP.VERSION`（ログイン時に `SGHost.me.version` で届く）。
 ファイル名 `送迎表_11月2日(月)_Ver293(2026.10.27f).xlsx`、表の一番下の行、印刷の右上に入る。**ファイルを直して出すたびに `gas/Code.gs` の `APP.VERSION`（と `calendar_app.js` の `APP_VERSION`）を上げる**（`SEED_VERSION` は上げるとマスタの初期データが入り直るので、版の区別のために上げない）。
 
+## 送迎表の訓練の便（2026-10-28 すっきりさせた）
+- 種別「訓練迎」「訓練送」（`mode:"train"`）の便は、1人ずつ「通常の迎え/送りと同じにする」チェックだけ（`data-trainsame`）。
+  チェック＝`trainBothIds`（その日の迎え/送りに数える＝漏れに出ない）、チェックなし＝別枠（通常の迎え/送りが別に要る）。判定は `rideKindOf`
+- 通常の迎え・送りの便に訓練の人を乗せる指定（`trainUserIds`/`trainBothIds`/`trainDropIds`/`trainEndIds`）は「訓練の人を乗せるとき（開く）」の中にたたむ
+- 以前の「🏁 この訓練送りで送迎終了にする」ボタン（noRide に「訓練送りで終了」を入れる別のやり方）は廃止。入っている noRide はそのまま効く
+
 ## データの置き方（スプレッドシート）
 - `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）
   - 送迎表：`kv/<encKey(キー)>`。キーは `master`（利用者・職員・車両・部署・ルール）/ `sheet:YYYY-MM-DD` / `pattern:0〜6`（週間パターン）。版の頭 `v2:`/`v3:`

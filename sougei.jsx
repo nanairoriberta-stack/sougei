@@ -4279,7 +4279,7 @@ function StaffPicker({ master, selected, onChange, excludeId }) {
 /* ============================================================
    予定の追加・編集モーダル
    ============================================================ */
-function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose, onMarkTrainEnd }) {
+function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }) {
   // 徒歩は「車両=徒歩」で管理するので、種別は迎え/送りのまま扱う(訓練・移動は従来どおり種別で持つ)
   const [kind, setKind] = useState(
     initial.mode && initial.mode !== "walk" && (initial.kind === "meet" || initial.kind === "send")
@@ -4477,8 +4477,35 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose, 
         </div>
       )}
 
-      {canPickVehicle && !isHelp && userIds.length > 0 && ((mode || "") === "" || mode === "train") && (
-        <div className="mt-2">
+      {canPickVehicle && !isHelp && userIds.length > 0 && mode === "train" && (
+        // 訓練迎・訓練送の便：1人ずつ「通常の迎え/送りと同じ」かどうかだけ選ぶ（チェックすると迎え漏れ・送り漏れに出ない）
+        <div className="mt-2 rounded-md border border-indigo-200 bg-indigo-50/50 p-2" data-trainsame>
+          <div className="text-xs font-bold text-stone-700">通常の{baseKind === "meet" ? "迎え" : "送り"}と同じにする人</div>
+          <div className="text-[11px] text-stone-500 mb-1">
+            {baseKind === "meet"
+              ? "チェックした人は、この訓練迎えが今日の迎えになります（訓練先から拾ってそのまま来所など）。迎え漏れに出ません。チェックしない人は、通常の迎えが別にある扱いです。"
+              : "チェックした人は、この訓練送りが今日の送りになります（訓練先へ送ってそのまま終わりなど）。送り漏れに出ません。チェックしない人は、通常の送りが別にある扱いです。"}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {userIds.map((id) => {
+              const u = master.users.find((x) => x.id === id);
+              if (!u) return null;
+              const on = bothIds.includes(id);
+              return (
+                <label key={id} className="inline-flex items-center gap-1 text-sm cursor-pointer">
+                  <input type="checkbox" data-same={u.name} checked={on}
+                    onChange={() => { setBothIds((prev) => (on ? prev.filter((x) => x !== id) : [...prev, id])); if (!on) { setTrainIds((prev) => prev.filter((x) => x !== id)); setDropIds((prev) => prev.filter((x) => x !== id)); setEndIds((prev) => prev.filter((x) => x !== id)); } }} />
+                  {u.name}{on ? <span className="text-[11px] text-indigo-700 font-bold">{baseKind === "meet" ? "迎(訓練)" : "送(訓練)"}</span> : ""}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {canPickVehicle && !isHelp && userIds.length > 0 && (mode || "") === "" && (
+        // 通常の迎え・送りの便に訓練の人を乗せるとき（ふだんは閉じておく）
+        <details className="mt-2" open={[...trainIds, ...bothIds, ...dropIds, ...endIds].some((id) => userIds.includes(id))}>
+          <summary className="text-xs font-bold text-stone-600 cursor-pointer">訓練の人を乗せるとき（開く）</summary>
           {(mode || "") === "" && <>
           <div className="text-xs font-bold text-stone-600">訓練{kind === "meet" ? "迎え" : "送り"}の人(タップで切替・名前に{kind === "meet" ? "(訓迎)" : "(訓送)"}が付きます)</div>
           <div className="text-[11px] text-stone-400 mb-1">通常の{kind === "meet" ? "迎え" : "送り"}と訓練の{kind === "meet" ? "迎え" : "送り"}を同じ便に混ぜるときに使います。訓練の人は希望時刻ズレ・重複の警告対象外になります。</div>
@@ -4570,19 +4597,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose, 
               </div>
             </div>
           )}
-          {(kind === "send" || kind === "meet") && onMarkTrainEnd && (mode === "train" || trainIds.length > 0) && (
-            <button type="button"
-              className="mt-1.5 text-xs px-2 py-1 rounded border border-violet-400 bg-violet-50 text-violet-800 font-bold hover:bg-violet-100"
-              onClick={() => {
-                const tgt = mode === "train" ? userIds : trainIds.filter((id) => userIds.includes(id));
-                if (tgt.length) onMarkTrainEnd(tgt, kind);
-              }}>
-              {kind === "send"
-                ? "🏁 この訓練送りで送迎終了にする(通常の送りを「送迎なし」に登録)"
-                : "🏁 この訓練迎えを本日の迎え扱いにする(通常の迎えを「送迎なし」に登録)"}
-            </button>
-          )}
-        </div>
+        </details>
       )}
 
       {!isOwn && vehicleId && vehicleId !== "__walk__" && !String(vehicleId).startsWith("own:") && (
@@ -7765,7 +7780,7 @@ function UnassignedPanel({ master, data, weekday, onPick, onToggleAbsent, extraU
   const row = (kind, label) => (
     <div className="mb-2">
       <div className="text-xs font-bold text-stone-500 mb-1">{label}が未割当(本日利用予定の人 / {onPick ? "クリックでAI調整 / " : ""}表の便へドラッグでも可)</div>
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-1" data-unasg={kind}>
         {master.departments.map((d, di) => {
           const c = (DEPT_COLORS[di % DEPT_COLORS.length] || DEPT_COLORS[0]);
           return master.users
@@ -10605,17 +10620,6 @@ function AppInner() {
           data={dataForGrid}
           weekday={isPattern ? weekday : weekdayOf(date)}
           initial={modal.initial}
-          onMarkTrainEnd={isPattern ? null : (ids, kind2) => {
-            // 訓練の便を本日の迎え/送り扱いに: 対象者の通常の迎え/送りを「送迎なし」に登録
-            const reason = kind2 === "meet" ? "訓練迎えで来所" : "訓練送りで終了";
-            updateSheet((prev) => {
-              const nr = { ...((prev && prev.noRide) || {}) };
-              ids.forEach((uid2) => { nr[uid2] = { ...(nr[uid2] || {}), [kind2]: reason }; });
-              return { ...prev, noRide: nr };
-            });
-            const names = ids.map((id2) => { const u = curMaster.users.find((x) => x.id === id2); return u ? u.name : ""; }).filter(Boolean);
-            notify(`${names.join("・")}を「${reason}」にしました(通常の${kind2 === "meet" ? "迎え" : "送り"}は送迎なし扱い)`);
-          }}
           onSave={(payload) => { saveItem(payload); setModal(null); }}
           onDelete={() => {
             const t = modal.editTarget || ((modal.initial.kind === "help" || modal.initial.kind === "block") ? "blocks" : "runs");
