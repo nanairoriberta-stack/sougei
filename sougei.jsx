@@ -12161,8 +12161,9 @@ function AgentChat({ master, sheet, date, onApply, onClose }) {
   const [err, setErr] = useState("");
   const endRef = useRef(null);
   useEffect(() => { (async () => {
+    // 7曜日を同時に読む（1つずつだと本物のGoogleでは10〜20秒かかった）
     const ps = {};
-    for (const d of AGENT_PATTERN_DAYS) { try { ps[d] = (await sGet(`pattern:${d}`)) || null; } catch (e) { ps[d] = null; } }
+    await Promise.all(AGENT_PATTERN_DAYS.map(async (d) => { try { ps[d] = (await sGet(`pattern:${d}`)) || null; } catch (e) { ps[d] = null; } }));
     base.current.patterns = agClone(ps);
     setDraft((x) => ({ ...x, patterns: agClone(ps) }));
   })(); }, []);
