@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.28k',
+  VERSION: '2026.10.28l',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -308,7 +308,9 @@ function logout_(token) {
   var th = hash_(String(token || '')); CacheService.getScriptCache().remove('s:' + th);
   withLock_(function () { var r = rows_(APP.SH.sess), sh = sheet_(APP.SH.sess); for (var i = 0; i < r.length; i++) if (r[i][0] === th) sh.getRange(i + 2, 3).setValue(new Date(0)); });
 }
-function publicMe_(me) { return { no: me.no, name: me.name, role: me.role, mustChange: !!me.mustChange, canSougei: me.role === '管理者' || me.role === '送迎表', admin: me.role === '管理者', version: APP.VERSION }; }
+function publicMe_(me) { return { no: me.no, name: me.name, role: me.role, mustChange: !!me.mustChange, canSougei: me.role === '管理者' || me.role === '送迎表', admin: me.role === '管理者', version: APP.VERSION, aiApi: aiEnabled_() }; }
+/* 料金がかかるAI（API版の AI調整・AIと相談）を使えるか。キーを入れていなければ、送迎表の画面にボタンを出さない */
+function aiEnabled_() { try { return !!PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY'); } catch (e) { return false; } }
 function staffList_() {
   return rows_(APP.SH.ids).filter(function (r) { return String(r[0]).trim() && !String(r[4]).trim(); })
     .map(function (r) { return { no: normNo_(r[0]), name: String(r[1]).trim() }; });

@@ -16,6 +16,9 @@ const SLOT = 30;
 const GRID_START = 6 * 60;
 const GRID_END = 22 * 60;
 const HOLD_ID = "__hold__";
+// 料金がかかるAI（API版の 🤖 AI調整・💬 AIと相談）は、Googleのスクリプトのプロパティにキーを入れたときだけボタンを出す（依頼者は使わない判断）。
+// 月額プランのClaudeから届く「🤖 Claudeの案」はこれとは別で、いつも出る
+const aiApiOn = () => !!(typeof window !== "undefined" && window.SGHost && window.SGHost.me && window.SGHost.me.aiApi);
 const SEED_VERSION = 293; // マスタ初期データの版。上げると次回起動時に自動で最新seedへ更新
 // Excelに書き出す「どの版で出したか」。Ver293=送迎表の版、括弧内=Google版のファイルの版（gas/Code.gs の APP.VERSION。ログイン時に届く）
 const appVerLabel = () => {
@@ -6804,7 +6807,7 @@ function MissingAlert({ master, sheet, date }) {
       {missSend.length > 0 && (
         <div><span className="font-semibold">送り未入力({missSend.length}名):</span> {missSend.map((u) => u.name).join("・")}</div>
       )}
-      <div className="text-xs text-rose-600 mt-1">下の未割当一覧から名前をクリックするとAI調整(その人の割り当て)が開きます。欠席の場合は欠席にしてください。</div>
+      <div className="text-xs text-rose-600 mt-1">{aiApiOn() ? "下の未割当一覧から名前をクリックするとAI調整(その人の割り当て)が開きます。" : "下の未割当一覧から名前を表の便へドラッグして割り当ててください。"}欠席の場合は欠席にしてください。</div>
     </div>
     </>
   );
@@ -7721,7 +7724,7 @@ function UnassignedPanel({ master, data, weekday, onPick, onToggleAbsent, extraU
   const absent = data.userAbsent || {};
   const row = (kind, label) => (
     <div className="mb-2">
-      <div className="text-xs font-bold text-stone-500 mb-1">{label}が未割当(本日利用予定の人 / クリックでAI調整 / 表の便へドラッグでも可)</div>
+      <div className="text-xs font-bold text-stone-500 mb-1">{label}が未割当(本日利用予定の人 / {onPick ? "クリックでAI調整 / " : ""}表の便へドラッグでも可)</div>
       <div className="flex flex-wrap gap-1">
         {master.departments.map((d, di) => {
           const c = (DEPT_COLORS[di % DEPT_COLORS.length] || DEPT_COLORS[0]);
@@ -7734,7 +7737,7 @@ function UnassignedPanel({ master, data, weekday, onPick, onToggleAbsent, extraU
                   onDragStart={dragStart({ t: "user", userId: u.id, kind })}
                   onDragEnd={dragEnd}
                   className={`text-xs px-2 py-1 rounded border ${c.chip} hover:brightness-95 cursor-grab active:cursor-grabbing`}
-                  onClick={() => onPick(kind, u)}
+                  onClick={() => onPick && onPick(kind, u)}
                   title={`${u.name} ${kind === "meet" ? "迎え" : "送り"}${userTimeOf(u, weekday, data.userTime)[kind] || "未設定"}`}>
                   {u.name}{u.baseDeptId && "◆"}{u.wheelchair && "♿"}
                   <span className="opacity-60 ml-0.5">{userTimeOf(u, weekday, data.userTime)[kind]}</span>
@@ -9991,8 +9994,8 @@ function AppInner() {
                 setModal({ type: "autoWizard", step: 0, offStaff: [], timeStaff: [], absentUsers: [], meetChanges: [], sendChanges: [], otherPlans: [] });
               }} title="今日の休み・時間変更を1つずつ確認してから、保留と未割当を制約チェック付きで確実に割り当てます">⚙ 自動割当</button>
               <button className={show3d ? btnPri : btnSec} onClick={() => setShow3d((v) => !v)} title="送迎表を編集しながら3Dマップを右下に並べて表示します">🚌 3D並列{show3d ? "ON" : ""}</button>
-              <button className={btnSec} onClick={() => setModal({ type: "aiAdjust" })} title="当日の欠席・送迎なし・職員の休みを踏まえて、AIが便の組み替え案を作ります">🤖 AI調整</button>
-              <button className={btnSec} onClick={() => setModal({ type: "agent" })} title="AIと会話しながら、送迎表・利用者の利用曜日・入浴の曜日や時刻・ルールを変えます。反映するまで何も変わりません">💬 AIと相談</button>
+              {aiApiOn() && <button className={btnSec} onClick={() => setModal({ type: "aiAdjust" })} title="当日の欠席・送迎なし・職員の休みを踏まえて、AIが便の組み替え案を作ります">🤖 AI調整</button>}
+              {aiApiOn() && <button className={btnSec} onClick={() => setModal({ type: "agent" })} title="AIと会話しながら、送迎表・利用者の利用曜日・入浴の曜日や時刻・ルールを変えます。反映するまで何も変わりません">💬 AIと相談</button>}
               {claudeProps.enabled && claudeProps.list.length > 0 && <button className="bg-amber-100 border border-amber-400 hover:bg-amber-200 text-amber-900 text-sm font-semibold px-3 py-2 rounded-md" onClick={() => { claudeProps.load(); setModal({ type: "claudeProps" }); }} title="Claudeアプリで相談して作った組み替え案を確認して反映します">🤖 Claudeの案 {claudeProps.list.length}</button>}
               <button className={btnPri} onClick={quickLibCsv} title="エクスポートツール実行後に押すだけ: クリップボードのCSVを取り込み、この日のリベ迎・リベ送を自動で振り分けます">📋🚌 リベCSV取込→振り分け</button>
               <button className={btnSec} onClick={() => setModal({ type: "libCsv" })} title="CSVの取込状況の確認・ファイルからの取込・振り分けのやり直し">🚌 詳細</button>
@@ -10273,8 +10276,8 @@ function AppInner() {
                         return { ...prev, userDept: m };
                       })
                     }
-                    onPick={(kind, u) =>
-                      setModal({ type: "aiAdjust", focusUserName: u.name, focusKind: kind })
+                    onPick={aiApiOn() ? (kind, u) =>
+                      setModal({ type: "aiAdjust", focusUserName: u.name, focusKind: kind }) : undefined
                     }
                     extraUse={(curData && curData.userExtra) || {}}
                     onToggleExtraUse={(id) =>
@@ -10373,8 +10376,8 @@ function AppInner() {
                           return { ...prev, userDept: m };
                         })
                       }
-                      onPick={(kind, u) =>
-                        setModal({ type: "aiAdjust", focusUserName: u.name, focusKind: kind })
+                      onPick={aiApiOn() ? (kind, u) =>
+                        setModal({ type: "aiAdjust", focusUserName: u.name, focusKind: kind }) : undefined
                       }
                       extraUse={(curData && curData.userExtra) || {}}
                     onToggleExtraUse={(id) =>

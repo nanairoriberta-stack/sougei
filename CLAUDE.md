@@ -128,7 +128,8 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 
 ## AI
 1. **🤖 AI調整・💬 AIと相談**（送迎表画面）：サーバー `ai.messages` が Anthropic API を呼ぶ（スクリプトプロパティ `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL` 既定 `claude-sonnet-5-5`）。
-   1回ごとに料金がかかるため**依頼者は使わない判断**。キー未設定なら動かないだけ（ボタンを隠すかは未決）
+   1回ごとに料金がかかるため**依頼者は使わない判断**。2026-10-28〜 キー未設定ならボタンを出さない（サーバーの `aiEnabled_` → `me.aiApi`、画面の `aiApiOn()`）。
+   中身（組み替えの仕組み）はClaudeの案と共通なので残す。`pw/agent_ui.js` は `aiEnabled_` を true にして試す
 2. **Claudeアプリ（月額プラン）＋カスタムコネクタ**（`gas/Mcp.gs`）：依頼者が選んだ方向。
    Claudeは `propose` で「案」を置くだけ → 送迎表画面の「🤖 Claudeの案」で担当者が反映（サーバーで3者マージ）。
    接続URLは `issueConnectorUrls()` で職員ごとに発行（`AI接続` シート、権限 管理者/送迎表のみ）。
@@ -139,7 +140,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - [x] 各ラベルの入力項目と、ヘルプ・送迎・休日出勤の送迎表への反映（依頼者の確認待ち：理由・内容の選択肢は仮）
 - [ ] 本物のGoogle上での動作（ここまでは `fakegas.js` の再現環境でのみ検証）
 - [ ] 本物の claude.ai からカスタムコネクタでつながるか、Cloudflare中継の実地確認
-- [ ] AIボタン（API版）を隠すかどうか
+- [x] AIボタン（API版）はキーが無ければ隠す（2026-10-28 依頼者の判断）
 - [ ] 約200人同時の負荷（GASの同時実行上限30・LockServiceの待ち）を実環境で計測
 
 ## 過去にあった不具合（同じ穴に落ちないために）

@@ -35,6 +35,7 @@ function fakeAI(body) {
 (async () => {
   const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Code.gs"].map((f) => path.join(D, f))); g.ctx.setup();
   g.ctx.aiMessages_ = (me, body) => fakeAI(body);
+  g.ctx.aiEnabled_ = () => true;   // キーを入れたときだけボタンが出る
   const api = (t, m, a) => JSON.parse(JSON.stringify(g.ctx.api(t, m, JSON.parse(JSON.stringify(a)))));
   const rows = () => g.sheets.get("職員ID").data.slice(1).filter((r) => r[0] !== "" && r[0] !== undefined);
   const pin0 = String(rows()[0][3]);
