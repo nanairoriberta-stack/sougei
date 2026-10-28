@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.28a";
+const APP_VERSION="2026.10.28b";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"leave",n:"職員休み"},{k:"user",n:"利用者休み"},{k:"other",n:"その他予定"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"勤務時間変更"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -327,11 +327,11 @@ function openEditor(ev,day,draft){
   drawSheet();
   unsubCm?.();unsubCm=null;
   if(ed.id&&db&&ed.base){try{unsubCm=db.doc(C.cmPath(ed.base.cmKey||ed.base.date,ed.id)).onSnapshot(s=>{if(!ed)return;const cm=s.exists?C.normCm(s.data()):{};ed.comments=cm[ed.id]||[];drawComments()},()=>{})}catch{}}
-  setTimeout(()=>$("f-title")?.focus(),30);
+  setTimeout(()=>($("f-title")||{focus(){}}).focus(),30);
 }
 function closeEditor(keepDraft){unsubCm?.();unsubCm=null;if(!keepDraft)draftDrop();ed=null;$("sheetRoot").innerHTML="";render()}
 function readForm(){
-  if(!$("f-title"))return;const d=ed.d;d.title=$("f-title").value.trim();d.allDay=$("f-allday").checked;d.date=$("f-date").value;d.endDate=$("f-enddate").value||d.date;
+  if(!$("f-date"))return;const d=ed.d;if($("f-title"))d.title=$("f-title").value.trim();d.allDay=$("f-allday").checked;d.date=$("f-date").value;d.endDate=$("f-enddate").value||d.date;
   d.start=$("f-start").value;d.end=$("f-end").value;d.label=document.querySelector('input[name="f-label"]:checked')?.value||"other";d.place=$("f-place")?$("f-place").value.trim():d.place;d.memo=$("f-memo").value;readSg();fixTimes(d);
 }
 function liveCheck(){
@@ -349,7 +349,7 @@ function drawSheet(){
     <div class="note warn" id="liveNote" ${ed.changed?"":"hidden"}><p>この予定は、開いている間に他の人が変更または削除しました。このまま保存すると、どちらを残すか確認する画面が出ます。</p></div>
     <div class="field"><span class="lbl">ラベル</span><div class="labels lblpick">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
     ${d.label==="other"?"":box}
-    <div class="field"><label for="f-title">タイトル${d.label==="other"?"":"（空欄なら自動で付きます）"}</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="${d.label==="other"?"例：週次定例":"例："+esc(autoTitle(d.label,sgOf(d.label,Object.assign({},d.w,{staff:d.w.staff.length?d.w.staff:["○○"],users:d.w.users.length?d.w.users:["○○"]})))||"")}" ${v()}></div>
+    ${d.label==="other"?`<div class="field"><label for="f-title">タイトル</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="例：週次定例" ${v()}></div>`:""}
     <label class="check" ${d.label==="other"?"":"hidden"}><input type="checkbox" id="f-allday" ${d.allDay?"checked":""} ${ro?"disabled":""}>終日</label>
     <div class="row">
       <div class="field"><label for="f-date">開始日</label><input class="input" type="date" id="f-date" value="${esc(d.date)}" ${v()}></div>
@@ -393,7 +393,8 @@ function save(){
   readForm();const d=ed.d;
   d.sg=sgOf(d.label,d.w);
   const bad=checkSg(d,d.sg);if(bad)return showErr(bad);
-  if(!d.title)d.title=autoTitle(d.label,d.sg);
+  // その他予定だけタイトルを入れてもらう。ほかのラベルは入力した内容から毎回付け直す（直したときに古い題名が残らない）
+  if(d.label!=="other")d.title=autoTitle(d.label,d.sg)||LMAP[d.label]?.n||d.title;
   if(!d.title)return showErr("タイトルを入力してください。");
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d.date))return showErr("開始日を選んでください。");
   if(d.endDate<d.date)return showErr("終了日は開始日以降にしてください。");

@@ -50,6 +50,11 @@ const OUT = process.argv[2] || __dirname;
     await pg.keyboard.press("Escape"); await pg.waitForTimeout(300);
     await pg.click(".sgh-chip"); await pg.waitForTimeout(300); await pg.screenshot({ path: `${OUT}/${tag}_6menu.png` });
     console.log(tag, "画面エラー", errs);
+    // 送迎表（スマホで開いたとき）
+    const html2 = fs.readFileSync(path.join(D, "sougei.html"), "utf8").replace("/*__BOOT__*/", boot);
+    fs.writeFileSync(path.join(__dirname, "m_sougei.html"), html2);
+    await pg.goto("file://" + path.join(__dirname, "m_sougei.html")); await pg.waitForTimeout(5000);
+    await pg.screenshot({ path: `${OUT}/${tag}_7sougei.png` }); await sw("送迎表");
     await ctx.close();
   }
   await b.close();

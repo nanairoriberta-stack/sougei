@@ -66,7 +66,7 @@ const D = path.join(__dirname, "../gas/out");
   const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-" + label); await A.pg.waitForTimeout(300); };
   const save = async (ms) => { await A.pg.click("[data-save]"); await A.pg.waitForTimeout(ms || 1500); };
   // 送迎：迎えは「受診後送り」、送りは時間変更
-  await add("ride"); await pick("users", "森");
+  await add("ride"); assert.strictEqual(await A.pg.locator("#f-title").count(), 0, "その他予定以外はタイトルの欄なし"); await pick("users", "森");
   const meetOpts = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
   const sendOpts = await A.pg.$$eval('input[name="w-send"]', (o) => o.map((x) => x.parentElement.innerText));
   assert.deepStrictEqual(meetOpts, ["いつもどおり", "時間変更", "家族送り", "受診後送り"]); assert.deepStrictEqual(sendOpts, ["いつもどおり", "時間変更", "家族迎え"]);
@@ -89,7 +89,7 @@ const D = path.join(__dirname, "../gas/out");
   await A.pg.fill("#w-wet", "19:00"); await A.pg.click('[data-fill="w-reason"][data-v="残業"]');
   await A.pg.locator(".sheet").screenshot({ path: "g_shift.png" }); await save();
   // その他予定：時間・場所・担当
-  await add("other"); await A.pg.fill("#f-title", "会議"); await A.pg.fill("#f-start", "13:00"); await A.pg.fill("#f-end", "14:00"); await A.pg.fill("#f-place", "2階"); await pick("staff", "日野");
+  await add("other"); assert.strictEqual(await A.pg.locator("#f-title").count(), 1, "その他予定はタイトルあり"); await A.pg.fill("#f-title", "会議"); await A.pg.fill("#f-start", "13:00"); await A.pg.fill("#f-end", "14:00"); await A.pg.fill("#f-place", "2階"); await pick("staff", "日野");
   await A.pg.locator(".sheet").screenshot({ path: "g_other.png" }); await save(2500);
   // モニタリング：利用者・時間・場所・対応者
   await add("monitor"); await pick("users", "森"); await pick("staff", "日野"); await A.pg.fill("#f-start", "13:30"); await A.pg.fill("#f-end", "14:30"); await A.pg.fill("#f-place", "自宅");
