@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.28e',
+  VERSION: '2026.10.28f',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -563,8 +563,8 @@ function calApply_(me, op) {
     var planForOthers = sg.type === 'staff_plan' && (op.ev.label === 'monitor' || op.ev.label === 'shien') && me.role === '送迎表';
     if ((sg.type === 'staff_off' || sg.type === 'staff_plan' || sg.type === 'hwork' || sg.type === 'shift') && me.role !== '管理者' && !planForOthers && !(sg.staff.length === 1 && sg.staff[0] === me.name))
       throw { code: 'invalid_argument', message: '他の職員の休み・予定・休日出勤・職員時間変更は管理者だけが入力できます' };
-    if ((sg.type === 'user_absent' || sg.type === 'user_time' || sg.type === 'help') && me.role === '一般')
-      throw { code: 'invalid_argument', message: '利用者休み・送迎の変更・ヘルプは送迎表の担当者だけが入力できます' };
+    if ((sg.type === 'user_absent' || sg.type === 'user_time' || sg.type === 'user_extra' || sg.type === 'help') && me.role === '一般')
+      throw { code: 'invalid_argument', message: '利用者休み・送迎の変更・利用日外利用・ヘルプは送迎表の担当者だけが入力できます' };
   }
   return withLock_(function () {
     var idx = docIndex_();
@@ -590,7 +590,8 @@ function calApply_(me, op) {
   });
 }
 function sgText_(sg) {
-  var t = { staff_off: sg.half === 'am' ? 'AM休' : sg.half === 'pm' ? 'PM休' : '休み・不在', staff_plan: '職員の予定', user_absent: '欠席', user_time: '送迎の変更' + [sg.meet ? ' 迎え' + sg.meet : '', sg.noMeet ? ' ' + sg.noMeet : '', sg.meetPlace ? ' 迎え先' + sg.meetPlace : '', sg.send ? ' 送り' + sg.send : '', sg.noSend ? ' ' + sg.noSend : '', sg.sendPlace ? ' 送り先' + sg.sendPlace : ''].join(''),
+  var t = { staff_off: sg.half === 'am' ? 'AM休' : sg.half === 'pm' ? 'PM休' : '休み・不在', staff_plan: '職員の予定', user_absent: '欠席', user_extra: '利用日外利用' + [sg.meet ? ' 迎え' + sg.meet : '', sg.noMeet ? ' ' + sg.noMeet : '', sg.send ? ' 送り' + sg.send : '', sg.noSend ? ' ' + sg.noSend : ''].join(''),
+    user_time: '送迎の変更' + [sg.meet ? ' 迎え' + sg.meet : '', sg.noMeet ? ' ' + sg.noMeet : '', sg.meetPlace ? ' 迎え先' + sg.meetPlace : '', sg.send ? ' 送り' + sg.send : '', sg.noSend ? ' ' + sg.noSend : '', sg.sendPlace ? ' 送り先' + sg.sendPlace : ''].join(''),
     help: 'ヘルプ', hwork: '休日出勤', shift: '職員時間変更' + (sg.wstart ? ' 出勤' + sg.wstart : '') + (sg.wend ? ' 退勤' + sg.wend : '') }[sg.type];
   return t + ' ' + sg.staff.concat(sg.users).join('・') + (sg.reason || sg.note ? '（' + (sg.reason || sg.note) + '）' : '');
 }

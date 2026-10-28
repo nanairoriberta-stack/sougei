@@ -9,7 +9,7 @@ const toMinX = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); r
 const appTime = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); return m ? `${Number(m[1])}:${m[2]}` : ""; };
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const TYPE_LABEL = { staff_off: "職員の休み・不在", staff_plan: "職員の予定", user_absent: "利用者の欠席", user_time: "送迎の変更", help: "ヘルプ", hwork: "休日出勤", shift: "職員時間変更" };
+const TYPE_LABEL = { staff_off: "職員の休み・不在", staff_plan: "職員の予定", user_absent: "利用者の欠席", user_time: "送迎の変更", user_extra: "利用日外利用", help: "ヘルプ", hwork: "休日出勤", shift: "職員時間変更" };
 const HOLD_ID = "__hold__";                                  // 送迎表の「保留」欄（担当がまだ決まっていないヘルプ）
 
 function specsFor(master, events, date) {
@@ -89,6 +89,7 @@ function revert(next, rec) {
   for (const [uid, r] of Object.entries(rec.userAbsent || {})) set("userAbsent", uid, r.prev, r.mine);
   for (const [uid, r] of Object.entries(rec.userTime || {})) set("userTime", uid, r.prev, r.mine);
   for (const [uid, r] of Object.entries(rec.noRide || {})) set("noRide", uid, r.prev, r.mine);
+  for (const [uid, r] of Object.entries(rec.userExtra || {})) set("userExtra", uid, r.prev, r.mine);
   // 迎え先・送り先：反映した値のままの便だけ元に戻す（手で別の行き先に変えていたら触らない）
   for (const [key, e] of Object.entries(rec.places || {})) {
     const [k, uid] = key.split(":");
@@ -104,7 +105,7 @@ function revert(next, rec) {
 }
 
 function applySpec(next, spec) {
-  const rec = { rev: spec.rev, title: spec.title, type: spec.type, staffOv: {}, userAbsent: {}, userTime: {}, noRide: {}, blocks: [] };
+  const rec = { rev: spec.rev, title: spec.title, type: spec.type, staffOv: {}, userAbsent: {}, userTime: {}, noRide: {}, userExtra: {}, blocks: [] };
   const put = (field, id, val) => {
     const map = next[field] || (next[field] = {});
     const prev = map[id] === undefined ? null : clone(map[id]);
@@ -125,12 +126,14 @@ function applySpec(next, spec) {
     if (Object.keys(patch).length) put("staffOv", s.id, Object.assign({}, (next.staffOv || {})[s.id] || {}, patch));
   });
   if (spec.type === "user_absent") spec.users.forEach((u) => put("userAbsent", u.id, true));
-  if (spec.type === "user_time") spec.users.forEach((u) => {
+  // 利用日外利用：その日だけ利用日にする（送迎表の「今日だけ利用」）。迎え・送りが未割当として出るので担当者が気づける
+  if (spec.type === "user_extra") spec.users.forEach((u) => put("userExtra", u.id, true));
+  if (spec.type === "user_time" || spec.type === "user_extra") spec.users.forEach((u) => {
     if (spec.meet || spec.send) put("userTime", u.id, Object.assign({}, (next.userTime || {})[u.id] || {}, spec.meet ? { meet: spec.meet } : {}, spec.send ? { send: spec.send } : {}));
     if (spec.noMeet || spec.noSend) put("noRide", u.id, Object.assign({}, (next.noRide || {})[u.id] || {}, spec.noMeet ? { meet: spec.noMeet } : {}, spec.noSend ? { send: spec.noSend } : {}));
   });
   // 迎え先・送り先：その日その人が乗る迎え／送りの便に「その日だけの行き先」を入れる。まだ便に入っていなければ、入ったときに入れる（healPlaces）
-  if (spec.type === "user_time") for (const [k, place] of [["meet", spec.meetPlace], ["send", spec.sendPlace]]) {
+  if (spec.type === "user_time" || spec.type === "user_extra") for (const [k, place] of [["meet", spec.meetPlace], ["send", spec.sendPlace]]) {
     if (!place) continue;
     rec.places = rec.places || {};
     spec.users.forEach((u) => {
@@ -151,7 +154,7 @@ function applySpec(next, spec) {
    手で別の値に変えた項目（休み→出勤など）はそのまま */
 function heal(sheet, rec, work) {
   let changed = false;
-  for (const field of ["staffOv", "userTime", "noRide", "userAbsent"]) {
+  for (const field of ["staffOv", "userTime", "noRide", "userAbsent", "userExtra"]) {
     for (const [id, r] of Object.entries(rec[field] || {})) {
       const cur = (sheet[field] || {})[id];
       if (isObj(r.mine)) {
@@ -215,7 +218,7 @@ function summary(master, sheet, events, date) {
     time: s.half ? (s.half === "am" ? "AM休（午後から出勤）" : "PM休（午前で退勤）") :
       s.type === "help" ? `${s.from}〜${s.note ? `・${s.note}` : ""}${s.staff.length ? "" : "・担当は未定（保留欄）"}` :
       s.type === "shift" ? [s.wstart && `出勤${s.wstart}`, s.wend && `退勤${s.wend}`].filter(Boolean).join("・") || "部署の変更" :
-      s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) : s.type === "user_time" ? [s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
+      s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) : s.type === "user_time" || s.type === "user_extra" ? [s.type === "user_extra" ? "今日だけ利用" : "", s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
 }
 
 const API = { reconcile, specsFor, summary, TYPE_LABEL, appTime };

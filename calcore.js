@@ -12,8 +12,8 @@ const LOCK_WAIT_MAX = 90000;   // ロック待ちの上限（超えたら後で�
 const MAX_BYTES = 240000;      // 1文書の上限（基盤は256KiB）
 const MAX_COMMENTS = 100;
 const TRASH_DAYS = 30;
-const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien"];  // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
-const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "help", "hwork", "shift"];
+const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien", "extra"];  // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
+const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "user_extra", "help", "hwork", "shift"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 const PERM = ["invalid_argument", "quota_exceeded", "transform_error", "full", "outdated_client"];
@@ -86,7 +86,7 @@ function normSg(x) {
     reason: str(x.reason, 40), note: str(x.note, 40),                            // 理由（欠席・勤務時間変更）／行き先（ヘルプ）
     dept: x.type === "hwork" || x.type === "shift" ? str(x.dept, 40) : "",       // その日の部署は送迎表の名前で持つ
     wstart: x.type === "shift" ? t(x.wstart) : "", wend: x.type === "shift" ? t(x.wend) : "",  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
-    meetPlace: x.type === "user_time" ? str(x.meetPlace, 40) : "", sendPlace: x.type === "user_time" ? str(x.sendPlace, 40) : "" };  // 送迎：その日の迎え先・送り先  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
+    meetPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.meetPlace, 40) : "", sendPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.sendPlace, 40) : "" };  // 送迎：その日の迎え先・送り先  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
 }
 const strip = e => { const x = clone(e); x.prev = null; return x; };
 

@@ -1,8 +1,8 @@
 
 "use strict";
-const APP_VERSION="2026.10.28e";
+const APP_VERSION="2026.10.28f";
 const C=window.TCCore;
-const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
+const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
 const HOL={
 "2026-01-01":"元日","2026-01-12":"成人の日","2026-02-11":"建国記念の日","2026-02-23":"天皇誕生日","2026-03-20":"春分の日","2026-04-29":"昭和の日","2026-05-03":"憲法記念日","2026-05-04":"みどりの日","2026-05-05":"こどもの日","2026-05-06":"振替休日","2026-07-20":"海の日","2026-08-11":"山の日","2026-09-21":"敬老の日","2026-09-22":"国民の休日","2026-09-23":"秋分の日","2026-10-12":"スポーツの日","2026-11-03":"文化の日","2026-11-23":"勤労感謝の日",
@@ -150,11 +150,11 @@ function draftDrop(){clearTimeout(dT);store.del(DKEY)}
    ・勤務時間変更 … 職員・出勤／退勤（いつもどおり or 時刻を変える）・その日の部署・理由 → その日の勤務時間
    ・モニタリング／支援会議 … 利用者・時間・場所・対応者 → 対応者の予定（その時間は送迎と重なると注意が出る） */
 const HALF={am:"AM休",pm:"PM休"};
-const SGT_SHORT={staff_off:"職員の休み",staff_plan:"職員の予定",user_absent:"欠席",user_time:"送迎の変更",help:"ヘルプ",hwork:"休日出勤",shift:"職員時間変更"};
+const SGT_SHORT={staff_off:"職員の休み",staff_plan:"職員の予定",user_absent:"欠席",user_time:"送迎の変更",user_extra:"利用日外利用",help:"ヘルプ",hwork:"休日出勤",shift:"職員時間変更"};
 const PICK={user:["体調不良","受診","家族の用事","ショートステイ"],shift:["早出","遅出","残業","遅刻・早退"]};
 const NO_MEET={fam:"家族送り",clinic:"受診後送り"},NO_SEND={fam:"家族迎え"};   // 送迎表の「迎えなし・送りなし」の理由としてそのまま出る
-const LABEL_OF_SG={staff_off:"leave",user_absent:"user",user_time:"ride",help:"help",hwork:"hwork",shift:"shift",staff_plan:"other"};
-const USER_LABELS=["help","ride","user"];          // 利用者が関わるラベル（送迎表の担当者だけが入力できる）
+const LABEL_OF_SG={staff_off:"leave",user_absent:"user",user_time:"ride",user_extra:"extra",help:"help",hwork:"hwork",shift:"shift",staff_plan:"other"};
+const USER_LABELS=["help","ride","user","extra"];          // 利用者が関わるラベル（送迎表の担当者だけが入力できる）
 const PLAN_LABELS=["monitor","shien"];             // モニタリング・支援会議：利用者・時間・場所・対応者。対応者の予定として送迎表に入る
 let SGN={staff:[],users:[],depts:[],places:[],yomi:{},loaded:false};
 async function loadNames(){
@@ -181,7 +181,7 @@ function sgOf(label,w){
   const base={staff:[...w.staff],users:[...w.users],meet:"",send:"",noMeet:"",noSend:"",half:"",reason:"",note:"",dept:"",wstart:"",wend:"",meetPlace:"",sendPlace:""};
   if(label==="leave")return Object.assign(base,{type:"staff_off",users:[],half:w.leave==="am"||w.leave==="pm"?w.leave:""});
   if(label==="user")return Object.assign(base,{type:"user_absent",staff:[],reason:w.reason});
-  if(label==="ride")return Object.assign(base,{type:"user_time",staff:[],meet:w.meetM==="time"?w.meet:"",send:w.sendM==="time"?w.send:"",noMeet:NO_MEET[w.meetM]||"",noSend:NO_SEND[w.sendM]||"",
+  if(label==="ride"||label==="extra")return Object.assign(base,{type:label==="extra"?"user_extra":"user_time",staff:[],meet:w.meetM==="time"?w.meet:"",send:w.sendM==="time"?w.send:"",noMeet:NO_MEET[w.meetM]||"",noSend:NO_SEND[w.sendM]||"",
     meetPlace:NO_MEET[w.meetM]?"":w.mplace.trim(),sendPlace:NO_SEND[w.sendM]?"":w.splace.trim()});   // 迎えなし・送りなしのときは行き先なし
   if(label==="help")return Object.assign(base,{type:"help",staff:[],note:w.dest.trim()});   // 職員は選ばない（送迎表の保留欄に入り、担当者が割り当てる）
   if(label==="hwork")return Object.assign(base,{type:"hwork",users:[],dept:w.dept});
@@ -195,7 +195,7 @@ const addMin=(t,n)=>{const m=/^(\d{1,2}):(\d{2})$/.exec(t||"");if(!m)return"";co
 function fixTimes(d){
   const w=d.w;
   if(d.label==="leave")d.allDay=w.leave!=="time";
-  else if(d.label==="user"||d.label==="ride"||d.label==="shift")d.allDay=true;
+  else if(d.label==="user"||d.label==="ride"||d.label==="extra"||d.label==="shift")d.allDay=true;
   else if(d.label==="help"){d.allDay=false;d.endDate=d.date;if(d.start)d.end=addMin(d.start,60)}   // ヘルプは開始時刻だけ（長さは送迎表の決まり）
   else if(d.label==="hwork"||PLAN_LABELS.includes(d.label))d.allDay=false;
   if(d.label==="leave"&&w.leave!=="time"&&w.leave!=="day")d.endDate=d.date;
@@ -220,13 +220,14 @@ function drawSg(){
   else if(L==="help")h=who("users","利用者","利用者の名前で検索")
     +`<div class="sgsub"><label class="lbl2" for="w-dest">行き先（家以外のときだけ）</label><input class="input" id="w-dest" maxlength="40" value="${esc(w.dest)}" placeholder="例：○○病院" autocomplete="off" ${ro?"readonly":""}></div>`
     +hint("開始時刻に、送迎表の「保留」欄へ【ヘルプ】として入ります。担当する職員は送迎表で割り当ててください（終わりの時刻は送迎表の決まりどおり）。");
-  else if(L==="ride")h=who("users","利用者","利用者の名前で検索")
-    +tm("w-meet",w.meetM,"w-meett",w.meet,"迎え",[["same","いつもどおり"],["time","時間変更"],["fam","家族送り"],["clinic","受診後送り"]])
+  else if(L==="ride"||L==="extra")h=who("users","利用者","利用者の名前で検索")
+    +tm("w-meet",w.meetM,"w-meett",w.meet,"迎え",[["same",L==="extra"?"いつもの時刻":"いつもどおり"],["time","時間変更"],["fam","家族送り"],["clinic","受診後送り"]])
     +(NO_MEET[w.meetM]?"":place("w-mplace",w.mplace,"迎え先の変更（いつもと違うときだけ）","例：実家・ﾘﾍﾞ"))
-    +tm("w-send",w.sendM,"w-sendt",w.send,"送り",[["same","いつもどおり"],["time","時間変更"],["fam","家族迎え"]])
+    +tm("w-send",w.sendM,"w-sendt",w.send,"送り",[["same",L==="extra"?"いつもの時刻":"いつもどおり"],["time","時間変更"],["fam","家族迎え"]])
     +(NO_SEND[w.sendM]?"":place("w-splace",w.splace,"送り先の変更（いつもと違うときだけ）","例：実家・病院"))
     +`<datalist id="w-place-list">${SGN.places.map(v=>`<option value="${esc(v)}"></option>`).join("")}</datalist>`
-    +hint("変えるところだけ入れてください。家族送り・受診後送り・家族迎えは、送迎表で「迎えなし・送りなし」として理由つきで入ります。迎え先・送り先は、その日その人が乗る便に「その日だけの行き先」として入ります（まだ便に入っていなければ、入れたときに入ります）。何日も続くときは終了日を変えてください。");
+    +(L==="extra"?hint("利用日でない日に来る人です。送迎表のその日に「今日だけ利用」として入り、迎え・送りが「未割当」に出るので、送迎表で便を決めてください。何日か続くときは終了日を変えてください。"):"")
+    +(L==="extra"?"":hint("変えるところだけ入れてください。家族送り・受診後送り・家族迎えは、送迎表で「迎えなし・送りなし」として理由つきで入ります。迎え先・送り先は、その日その人が乗る便に「その日だけの行き先」として入ります（まだ便に入っていなければ、入れたときに入ります）。何日も続くときは終了日を変えてください。"));
   else if(L==="leave")h=(staffSelf(d)?self:who("staff","休む職員","職員の名前で検索"))
     +`<div class="sgsub"><span class="lbl2">休みの形</span>${radios("w-leave",w.leave,[["day","1日"],["am","AM休"],["pm","PM休"],["time","時間で（中抜け・通院など）"]])}</div>`
     +hint(w.leave==="am"?"勤務時間の半分から出勤として送迎表に入ります。":w.leave==="pm"?"勤務時間の半分で退勤として送迎表に入ります。":w.leave==="time"?"開始〜終了の時刻を、送迎表でその職員の不在として入れます。":"送迎表でその日は休みになります。何日も続く休みは終了日を変えてください。");
@@ -276,6 +277,7 @@ function autoTitle(label,sg,w){
   const r=sg.reason?`（${sg.reason}）`:"";
   if(sg.type==="staff_off")return`${nm(sg.staff)} ${sg.half?HALF[sg.half]:"休み"}`;
   if(sg.type==="user_absent")return`${nm(sg.users)} 欠席${r}`;
+  if(sg.type==="user_extra")return`${nm(sg.users)} 利用日外利用${[sg.noMeet,sg.noSend].filter(Boolean).map(x=>`・${x}`).join("")}`;
   if(sg.type==="user_time")return`${nm(sg.users)} ${[sg.meet&&`迎え${sg.meet}`,sg.noMeet,sg.meetPlace&&`迎え先${sg.meetPlace}`,sg.send&&`送り${sg.send}`,sg.noSend,sg.sendPlace&&`送り先${sg.sendPlace}`].filter(Boolean).join("・")}`;
   if(sg.type==="help")return`${nm(sg.users)} ヘルプ${sg.note?`（${sg.note}）`:""}`;
   if(sg.type==="hwork")return`${nm(sg.staff)} 休日出勤`;

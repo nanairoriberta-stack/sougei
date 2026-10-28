@@ -40,7 +40,7 @@ const D = path.join(__dirname, "../gas/out");
   await pg.click("#addBtn"); await pg.waitForTimeout(400); await pg.screenshot({ path: "g_editor.png" });
   // 一般職員：利用者が関わるラベル（ヘルプ・送迎・利用者休み）は選べない。休日出勤は自分の分だけ
   const dis = await pg.$$eval('input[name="f-label"]', (o) => o.filter((x) => x.disabled).map((x) => x.value));
-  assert.deepStrictEqual(dis.sort(), ["help", "ride", "user"]);
+  assert.deepStrictEqual(dis.sort(), ["extra", "help", "ride", "user"]);
   await pg.check("#f-label-hwork"); await pg.waitForTimeout(400);
   await pg.locator(".sgbox").screenshot({ path: "g_sgbox.png" });
   const self = await pg.locator(".sgbox .sgchip").innerText(); assert.ok(self.includes("余村慎"));
@@ -68,7 +68,7 @@ const D = path.join(__dirname, "../gas/out");
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
   await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300);
-  assert.deepStrictEqual(await A.pg.$$eval('input[name="f-label"]', (o) => o.map((x) => x.value)), ["help", "ride", "user", "monitor", "shien", "leave", "hwork", "shift", "other"], "ラベルの並び");
+  assert.deepStrictEqual(await A.pg.$$eval('input[name="f-label"]', (o) => o.map((x) => x.value)), ["help", "ride", "user", "extra", "monitor", "shien", "leave", "hwork", "shift", "other"], "ラベルの並び");
   assert.strictEqual(await A.pg.evaluate(() => { const c = document.querySelector('input[name="f-label"]:checked'); return c && c.value + (document.activeElement === c ? ":focus" : ""); }), "help:focus", "開いたときはヘルプ");
   await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
   const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-" + label); await A.pg.waitForTimeout(300); };
@@ -101,6 +101,10 @@ const D = path.join(__dirname, "../gas/out");
   // 利用者休み：欠席（理由つき）
   const absent = m.users.find((u) => !["森", "中村"].includes(u.name) && u.name.length >= 2).name;
   await add("user"); await pick("users", absent); await A.pg.click('[data-fill="w-reason"][data-v="体調不良"]'); await save();
+  // 利用日外利用：その日だけ利用（送迎は未割当に出る）
+  const exU = m.users.find((x) => !(x.days || []).includes(1) && !x.startDate && x.name !== absent);
+  await add("extra"); await pick("users", exU.name); await A.pg.check('input[name="w-send"][value="time"]'); await A.pg.waitForTimeout(200); await A.pg.fill("#w-sendt", "15:00");
+  await A.pg.locator(".sheet").screenshot({ path: "g_extra.png" }); await save();
   // 職員休みは理由の欄なし
   await add("leave"); assert.strictEqual(await A.pg.locator("#w-reason").count(), 0, "職員休みに理由の欄はない"); await A.pg.click("[data-close]"); await A.pg.waitForTimeout(300);
   // 勤務時間変更
@@ -118,6 +122,7 @@ const D = path.join(__dirname, "../gas/out");
   { const sr = s2.runs.find((r) => r.kind === "send" && r.userIds.includes(U("森"))); assert.ok(!sr || sr.places[U("森")] === "病院", "送り先（便に入っていれば）"); console.log("送り先:", sr ? sr.places[U("森")] : "（まだ便なし）"); }
   const hb = s2.blocks.find((x) => x.calId && x.kind === "help"); assert.ok(hb && hb.staffId === "__hold__" && hb.label === "中村" && hb.note === "○○病院" && hb.time === "14:00", JSON.stringify(hb));
   assert.strictEqual(s2.userAbsent[U(absent)], true, "欠席");
+  assert.strictEqual(s2.userExtra[exU.id], true, "利用日外利用 → 今日だけ利用"); assert.strictEqual(s2.userTime[exU.id].send, "15:00");
   assert.strictEqual(s2.staffOv[S("八壁")].end, "19:00", "勤務時間変更");
   const evs = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {}));
   const mt = evs.find((e) => e.title === "会議"); assert.ok(mt && mt.place === "2階" && mt.tanto[0] === "日野" && !mt.sg, "その他予定：場所・担当（送迎表には載せない）");

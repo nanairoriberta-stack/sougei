@@ -198,7 +198,7 @@ async function bootstrap() {
     const place = ev(mu.name + " 迎え先実家", "ride", { type: "user_time", users: [mu.name], meetPlace: "実家" });
     // 一般職員：利用者が関わるヘルプ・送迎は入れられない。休日出勤は自分の分だけ
     const ip = device(g); await ip.login(noOf(g, "八壁"), pinOf(g, "八壁"));
-    for (const [i, e] of [help, ride, ev("日野 休日出勤", "hwork", { type: "hwork", staff: ["日野"] }, ["09:00", "13:00"])].entries())
+    for (const [i, e] of [help, ride, ev("日野 休日出勤", "hwork", { type: "hwork", staff: ["日野"] }, ["09:00", "13:00"]), ev("森 利用日外利用", "extra", { type: "user_extra", users: ["森"] })].entries())
       await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl0000" + i, id: "ev_lbl0000" + i, baseRev: null, ev: e }).then(() => assert.fail("入れられないはず " + e.title), (x) => assert.strictEqual(x.code, "invalid_argument"));
     await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl00010", id: "ev_lbl00010", baseRev: null, ev: ev("八壁 休日出勤", "hwork", { type: "hwork", staff: ["八壁"], dept: "津田" }, ["09:00", "13:00"]) });
     await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl00011", id: "ev_lbl00011", baseRev: null, ev: ev("日野 勤務時間変更", "shift", { type: "shift", staff: ["日野"], wend: "15:00" }) }).then(() => assert.fail("他人の勤務時間変更"), (x) => assert.strictEqual(x.code, "invalid_argument"));
@@ -208,10 +208,12 @@ async function bootstrap() {
     // 送迎表の担当者：ヘルプ・送迎を入れる
     const row = idRows(g).find((r) => r[1] === "白戸"); row[2] = "送迎表";
     const sg = device(g); const me = await sg.login(noOf(g, "白戸"), pinOf(g, "白戸"));
-    const cal = sg.cal(me.no); cal.save(help, null); cal.save(ride, null); cal.save(place, null); await settleCal([sg]);
+    const exU = m.users.find((x) => !(x.days || []).includes(1) && !x.startDate);
+    const cal = sg.cal(me.no); cal.save(help, null); cal.save(ride, null); cal.save(place, null); cal.save(ev(exU.name + " 利用日外利用", "extra", { type: "user_extra", users: [exU.name] }), null); await settleCal([sg]);
     const s = (await admin.call("kv.get", "sheet:" + date)).value;
     const S = (n) => m.staff.find((x) => x.name === n).id, U = (n) => m.users.find((x) => x.name === n).id;
     assert.deepStrictEqual(s.noRide[U("森")], { meet: "家族送り", send: "家族迎え" }, "家族送り・家族迎え → 迎えなし・送りなし（理由つき）");
+    assert.strictEqual(s.userExtra[exU.id], true, "利用日外利用 → 送迎表の今日だけ利用");
     assert.strictEqual(s.runs.find((r) => r.id === mr.id).places[mu.id], "実家", "迎え先の変更 → 乗る便のその日だけの行き先");
     const hb = s.blocks.find((b) => b.calId && b.kind === "help");
     assert.ok(hb && hb.staffId === "__hold__" && hb.label === "中村" && hb.time === "10:00", "担当未定のヘルプは保留欄");

@@ -178,3 +178,19 @@ console.log('place OK');
  assert.strictEqual(T.normEvent({date:D,title:'会議',label:'meeting'},'abcdef13',0).label,'other','以前の「会議」は支援会議にならない');
 }
 console.log('monitor OK');
+// ===== 利用日外利用：その日だけ利用日にする（送迎表の「今日だけ利用」）。迎え・送りの変更も一緒に =====
+{
+ const D='2026-11-02', wd=1;
+ const u=m.users.find(x=>!(x.days||[]).includes(wd)&&!x.startDate); assert.ok(u,'月曜が利用日でない人');
+ const L=[{id:'ex1',rev:1,date:D,endDate:D,allDay:true,title:u.name+' 利用日外利用',sg:{type:'user_extra',users:[u.name],send:'15:00',noMeet:'家族送り'}}];
+ const x=C.reconcile(m,sheet,L,D);
+ assert.strictEqual(x.userExtra[u.id],true,'今日だけ利用'); assert.strictEqual(x.userTime[u.id].send,'15:00'); assert.strictEqual(x.noRide[u.id].meet,'家族送り');
+ const dm=E.applyDayDept(m,wd,x.staffOv,x.userDept,x.userExtra,D).users.find(y=>y.id===u.id); assert.ok(dm.extraUseDay&&dm.days.includes(wd),'送迎表でその日の利用者になる');
+ assert.strictEqual(C.reconcile(m,x,L,D),x,'同じ内容なら変更なし');
+ const wiped=Object.assign({},x,{userExtra:{}}); assert.strictEqual(C.reconcile(m,wiped,L,D).userExtra[u.id],true,'消えても入れ直す');
+ const g=C.reconcile(m,x,[],D); assert.ok(!(g.userExtra||{})[u.id]&&!(g.noRide||{})[u.id]&&!(g.userTime||{})[u.id],'予定を消すと元に戻る');
+ assert.ok(C.summary(m,x,L,D)[0].time.startsWith('今日だけ利用'));
+ const T=require('./calcore.js'); assert.strictEqual(T.normSg({type:'user_extra',users:[u.name],meetPlace:'実家'}).meetPlace,'実家');
+ assert.strictEqual(T.normEvent({date:D,title:'x',label:'extra'},'abcdef14',0).label,'extra');
+}
+console.log('extra OK');
