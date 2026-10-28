@@ -113,7 +113,9 @@ function logout() { const t = token; token = ""; store.del(TK); store.del(MK); m
 
 /* ---------- 右下の「ログイン中」 ---------- */
 let chip = null, menu = null;
-function url(q) { return BASE + q; }
+// 公開URLが分からないとき（BASEが空・テスト用）は、リンクを作らない。中身用のアドレス（googleusercontent）へ飛んで真っ白になるため
+const BASE_OK = /^https:\/\/script\.google\.com\/.*\/exec$/.test(BASE);
+function url(q) { return BASE_OK ? BASE + q : ""; }
 function renderChip() {
   if (!me) { if (chip) chip.remove(); chip = null; return; }
   if (!chip) {
@@ -128,8 +130,9 @@ function toggleMenu() {
   menu = document.createElement("div"); menu.className = "sgh-menu" + (chip && chip.classList.contains("in-slot") ? " top" : "");
   const page = G.__SG_PAGE || "calendar";
   const links = [];
-  if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar"))}" target="_top">📅 カレンダー</a>`);
-  if (me.canSougei || me.admin) [["v1", "現体制版"], ["v2", "新体制版"], ["v3", "りんく・ぷれいす版"]].forEach(([e, l]) => { if (!(page === "sougei" && e === ED)) links.push(`<a href="${esc(url("?page=sougei&e=" + e))}" target="_top">🚌 送迎表（${l}）</a>`); });
+  if (!BASE_OK) links.push(`<small style="color:#9a6a00">送迎表・カレンダーをメニューから開くには、スプレッドシートの「設定」シートのB2に公開URL（最後が /exec）を貼ってください</small>`);
+  else if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar"))}" target="_top">📅 カレンダー</a>`);
+  if (BASE_OK && (me.canSougei || me.admin)) [["v1", "現体制版"], ["v2", "新体制版"], ["v3", "りんく・ぷれいす版"]].forEach(([e, l]) => { if (!(page === "sougei" && e === ED)) links.push(`<a href="${esc(url("?page=sougei&e=" + e))}" target="_top">🚌 送迎表（${l}）</a>`); });
   menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
   menu.onclick = (e) => {
     const a = e.target.closest("[data-a]"); if (!a) return;

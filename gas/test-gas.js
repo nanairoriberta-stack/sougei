@@ -306,6 +306,8 @@ async function bootstrap() {
     const pub = "https://script.google.com/macros/s/AKfycbPUBLIC_123/exec";
     g.sheets.get("設定").data[1][1] = pub;
     assert.strictEqual(JSON.parse(boot()), pub, "設定した公開URLを使う");
+    g.sheets.get("設定").data[1][1] = pub + "?page=calendar";
+    assert.strictEqual(JSON.parse(boot()), pub, "後ろに ?page=… が付いていても使える");
     g.sheets.get("設定").data[1][1] = "https://evil.example.com/exec";
     assert.strictEqual(JSON.parse(boot()), "https://script.google.com/macros/s/HEADID/dev", "Googleの公開URL以外は使わない");
     g.ctx.ScriptApp = real;

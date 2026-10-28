@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.28h',
+  VERSION: '2026.10.28i',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -42,7 +42,11 @@ function doGet(e) {
    「設定」シートB2に貼った公開URLを優先する（2026-10-28 実機：スマホでメニューの送迎表が開けなかった） */
 var APP_URL_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/;
 function appUrl_() {
-  try { var sh = sheet_(APP.SH.conf); var v = sh ? String(sh.getRange(2, 2).getValue()).trim() : ''; if (APP_URL_RE.test(v)) return v; } catch (e) {}
+  try {
+    var sh = sheet_(APP.SH.conf); var v = sh ? String(sh.getRange(2, 2).getValue()).trim() : '';
+    v = v.replace(/[?#].*$/, '').replace(/\/+$/, '');   // 「…/exec?page=calendar」のように後ろに付いていても使えるように
+    if (APP_URL_RE.test(v)) return v;
+  } catch (e) {}
   return ScriptApp.getService().getUrl();
 }
 function confSheet_() {

@@ -25,7 +25,7 @@
     const hand = () => (window.__sgSetKV ? window.__sgSetKV(kv) : setTimeout(hand, 20)); hand();
     if (!me.canSougei) alertBar("閲覧のみです。送迎表を変更するには、管理者に「送迎表」の権限をもらってください。", "warn");
     if (!H.store.persistent) alertBar("このブラウザでは端末への一時保存が使えません（プライベートモードなど）。未送信の内容がある間は画面を閉じないでください。", "warn");
-    window.__sgOpenCalendar = (date) => { const a = document.createElement("a"); a.href = H.url("?page=calendar" + (date ? "&d=" + date : "")); a.target = "_top"; document.body.appendChild(a); a.click(); a.remove(); };
+    window.__sgOpenCalendar = (date) => { if (!H.url("")) { alertBar("カレンダーを開くには、スプレッドシートの「設定」シートのB2に公開URL（最後が /exec）を貼ってください。", "warn"); return; } const a = document.createElement("a"); a.href = H.url("?page=calendar" + (date ? "&d=" + date : "")); a.target = "_top"; document.body.appendChild(a); a.click(); a.remove(); };
     H.startPolling(20000);
   });
   // 画面の部品（いちばん大きいところ）が動かないとき、真っ白のままにせず理由を出す
