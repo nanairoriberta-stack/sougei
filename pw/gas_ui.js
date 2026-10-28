@@ -67,6 +67,10 @@ const D = path.join(__dirname, "../gas/out");
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
+  await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300);
+  assert.deepStrictEqual(await A.pg.$$eval('input[name="f-label"]', (o) => o.map((x) => x.value)), ["help", "ride", "user", "monitor", "shien", "leave", "hwork", "shift", "other"], "ラベルの並び");
+  assert.strictEqual(await A.pg.evaluate(() => { const c = document.querySelector('input[name="f-label"]:checked'); return c && c.value + (document.activeElement === c ? ":focus" : ""); }), "help:focus", "開いたときはヘルプ");
+  await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
   const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-" + label); await A.pg.waitForTimeout(300); };
   const save = async (ms) => { await A.pg.click("[data-save]"); await A.pg.waitForTimeout(ms || 1500); };
   // 送迎：迎えは「受診後送り」、送りは時間変更
@@ -75,7 +79,6 @@ const D = path.join(__dirname, "../gas/out");
   const sendOpts = await A.pg.$$eval('input[name="w-send"]', (o) => o.map((x) => x.parentElement.innerText));
   assert.deepStrictEqual(meetOpts, ["いつもどおり", "時間変更", "家族送り", "受診後送り"]); assert.deepStrictEqual(sendOpts, ["いつもどおり", "時間変更", "家族迎え"]);
   await A.pg.check('input[name="w-meet"][value="clinic"]'); await A.pg.waitForTimeout(200);
-  const lastLabel = await A.pg.$$eval('input[name="f-label"]', (o) => o[o.length - 1].value); assert.strictEqual(lastLabel, "other", "その他予定はラベルの最後");
   await A.pg.evaluate(() => { document.querySelector("#sheetRoot .sheet").scrollTop = 400; });
   const before = await A.pg.evaluate(() => document.querySelector("#sheetRoot .sheet").scrollTop);
   await A.pg.check('input[name="w-send"][value="time"]'); await A.pg.waitForTimeout(200);

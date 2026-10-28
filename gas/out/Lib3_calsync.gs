@@ -10,7 +10,7 @@ const toMinX = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); r
 const appTime = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); return m ? `${Number(m[1])}:${m[2]}` : ""; };
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const TYPE_LABEL = { staff_off: "職員の休み・不在", staff_plan: "職員の予定", user_absent: "利用者の欠席", user_time: "送迎の変更", help: "ヘルプ", hwork: "休日出勤", shift: "勤務時間変更" };
+const TYPE_LABEL = { staff_off: "職員の休み・不在", staff_plan: "職員の予定", user_absent: "利用者の欠席", user_time: "送迎の変更", help: "ヘルプ", hwork: "休日出勤", shift: "職員時間変更" };
 const HOLD_ID = "__hold__";                                  // 送迎表の「保留」欄（担当がまだ決まっていないヘルプ）
 
 function specsFor(master, events, date) {

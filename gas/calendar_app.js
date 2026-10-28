@@ -1,8 +1,8 @@
 
 "use strict";
-const APP_VERSION="2026.10.28d";
+const APP_VERSION="2026.10.28e";
 const C=window.TCCore;
-const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"leave",n:"職員休み"},{k:"user",n:"利用者休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"勤務時間変更"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"other",n:"その他予定"}];
+const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
 const HOL={
 "2026-01-01":"元日","2026-01-12":"成人の日","2026-02-11":"建国記念の日","2026-02-23":"天皇誕生日","2026-03-20":"春分の日","2026-04-29":"昭和の日","2026-05-03":"憲法記念日","2026-05-04":"みどりの日","2026-05-05":"こどもの日","2026-05-06":"振替休日","2026-07-20":"海の日","2026-08-11":"山の日","2026-09-21":"敬老の日","2026-09-22":"国民の休日","2026-09-23":"秋分の日","2026-10-12":"スポーツの日","2026-11-03":"文化の日","2026-11-23":"勤労感謝の日",
@@ -83,7 +83,7 @@ function renderNotices(){
   if(!S.canWrite&&S.dbState==="ok")n.push(["","閲覧のみの権限です。予定を追加・編集するには、共有メニューで「投稿者」以上の権限をもらってください。",""]);
   if(!store.persistent)n.push(["warn","このブラウザでは端末への一時保存が使えません（プライベートモードなど）。未送信の予定がある間は画面を閉じないでください。",""]);
   if(!S.online)n.push(["warn","オフラインです。追加・編集した予定は端末に保存され、接続が戻ると自動で送信されます。",""]);
-  const d=draftGet();if(d&&!ed)n.push(["warn",`書きかけの予定「${esc(d.form.title||"（無題）")}」が残っています（${fmtAt(d.savedAt)}）。`,`<button class="primary sm" data-draft-open>続きを書く</button><button class="ghost sm" data-draft-drop>破棄</button>`]);
+  const d=draftGet();if(d&&!ed)n.push(["warn",`書きかけの予定「${esc(d.form.title||LMAP[d.form.label]?.n||"（無題）")}」が残っています（${fmtAt(d.savedAt)}）。`,`<button class="primary sm" data-draft-open>続きを書く</button><button class="ghost sm" data-draft-drop>破棄</button>`]);
   $("notices").innerHTML=n.map(([c,t,a])=>`<div class="note ${c}"><p>${t}</p>${a}</div>`).join("");
 }
 function chip(e){const span=e.date!==e.endDate;
@@ -150,7 +150,7 @@ function draftDrop(){clearTimeout(dT);store.del(DKEY)}
    ・勤務時間変更 … 職員・出勤／退勤（いつもどおり or 時刻を変える）・その日の部署・理由 → その日の勤務時間
    ・モニタリング／支援会議 … 利用者・時間・場所・対応者 → 対応者の予定（その時間は送迎と重なると注意が出る） */
 const HALF={am:"AM休",pm:"PM休"};
-const SGT_SHORT={staff_off:"職員の休み",staff_plan:"職員の予定",user_absent:"欠席",user_time:"送迎の変更",help:"ヘルプ",hwork:"休日出勤",shift:"勤務時間変更"};
+const SGT_SHORT={staff_off:"職員の休み",staff_plan:"職員の予定",user_absent:"欠席",user_time:"送迎の変更",help:"ヘルプ",hwork:"休日出勤",shift:"職員時間変更"};
 const PICK={user:["体調不良","受診","家族の用事","ショートステイ"],shift:["早出","遅出","残業","遅刻・早退"]};
 const NO_MEET={fam:"家族送り",clinic:"受診後送り"},NO_SEND={fam:"家族迎え"};   // 送迎表の「迎えなし・送りなし」の理由としてそのまま出る
 const LABEL_OF_SG={staff_off:"leave",user_absent:"user",user_time:"ride",help:"help",hwork:"hwork",shift:"shift",staff_plan:"other"};
@@ -328,15 +328,17 @@ let ed=null;
 function openEditor(ev,day,draft){
   const ro=!(db&&S.canWrite&&core);
   const base=ev||null;
-  const d=draft?draft.form:ev?{...ev,members:[...ev.members]}:{title:"",date:day||S.sel,endDate:day||S.sel,allDay:false,start:"10:00",end:"11:00",label:"other",place:"",memo:"",members:S.me?[S.me]:[],sg:null};
+  // 新しい予定は「ヘルプ」から（ヘルプを入れられない一般職員は「職員休み」から）
+  const d=draft?draft.form:ev?{...ev,members:[...ev.members]}:{title:"",date:day||S.sel,endDate:day||S.sel,allDay:false,start:"10:00",end:"11:00",label:canLabel("help")?"help":"leave",place:"",memo:"",members:S.me?[S.me]:[],sg:null};
   if(d.sg&&LABEL_OF_SG[d.sg.type]&&!(d.sg.type==="staff_plan"&&PLAN_LABELS.includes(d.label)))d.label=LABEL_OF_SG[d.sg.type];
   if(!d.w)d.w=workOf(d);
+  if(!ev&&!draft)fixTimes(d);   // 最初に選ばれているラベルに合わせて終日・時刻をそろえる
   ed={id:draft?draft.id:ev?.id||null,base:draft?draft.base:base,d,ro:ro||(!!ev&&!canLabel(d.label)),confirmDel:false,comments:[],err:"",changed:false};
   if(!SGN.loaded)loadNames().then(()=>{if(ed)drawSg()});
   drawSheet();
   unsubCm?.();unsubCm=null;
   if(ed.id&&db&&ed.base){try{unsubCm=db.doc(C.cmPath(ed.base.cmKey||ed.base.date,ed.id)).onSnapshot(s=>{if(!ed)return;const cm=s.exists?C.normCm(s.data()):{};ed.comments=cm[ed.id]||[];drawComments()},()=>{})}catch{}}
-  setTimeout(()=>($("f-title")||{focus(){}}).focus(),30);
+  setTimeout(()=>{const c=document.querySelector('input[name="f-label"]:checked');(c||$("f-title")||{focus(){}}).focus()},30);   // 選んであるラベルに合わせる
 }
 function closeEditor(keepDraft){unsubCm?.();unsubCm=null;if(!keepDraft)draftDrop();ed=null;$("sheetRoot").innerHTML="";render()}
 function readForm(){
