@@ -248,6 +248,8 @@ const D = path.join(__dirname, "../gas/out");
     const before = await A.pg.locator("#panel .ev-row").count();
     await A.pg.click('[data-biz="houkago"]'); await A.pg.waitForTimeout(300);
     assert.strictEqual(await A.pg.locator("#panel .ev-row").count(), 0, "放課後デイのタブでは生活介護の予定は出ない");
+    const bgOf = async () => { await A.pg.waitForTimeout(300); return A.pg.evaluate(() => getComputedStyle(document.body).backgroundColor); };   // 色はなめらかに変わるので少し待つ
+    assert.strictEqual(await bgOf(), "rgb(251, 236, 241)", "放課後デイは薄ピンク"); await A.pg.screenshot({ path: "g_bg_houkago.png" });
     await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300);
     assert.ok(await A.pg.locator("#f-biz-houkago").isChecked(), "放課後デイのタブで作ると放課後デイ");
     // 放課後デイの予定：利用者の候補はりんく・ぷれいす版の利用者だけ。生活介護に変えると現体制版・新体制版の利用者
@@ -264,8 +266,10 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.locator(".sheet").screenshot({ path: "g_biz_editor.png" }); await save(2500);
     assert.deepStrictEqual(await A.pg.locator("#panel .ev-row .t").allInnerTexts(), ["放デイ会議"], "放課後デイのタブ");
     await A.pg.click('[data-biz="seikatsu"]'); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await bgOf(), "rgb(232, 245, 236)", "生活介護は薄緑"); await A.pg.screenshot({ path: "g_bg_seikatsu.png" });
     assert.strictEqual(await A.pg.locator("#panel .ev-row").count(), before, "生活介護のタブ（これまでの予定）");
     await A.pg.click('[data-biz="all"]'); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await bgOf(), "rgb(234, 242, 251)", "全体は薄い青");
     assert.strictEqual(await A.pg.locator("#panel .ev-row").count(), before + 1, "全体のタブ");
     assert.ok((await A.pg.locator(".ev-row", { hasText: "放デイ会議" }).innerHTML()).includes("tag-biz"), "全体では放デイの印");
     await A.pg.screenshot({ path: "g_biz_all.png" });
@@ -281,6 +285,20 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(!(await A.pg.locator("#evForm").count()), "もう一度押すと入る");
     assert.strictEqual(await A.pg.locator("#panel .ev-row", { hasText: "会議" }).count(), n0 + 1);
     console.log("二重の確認:", msg); }
+  { // 1つの予定に1人：休み・送迎・ヘルプなどは1人選ぶと検索の欄が消える（×で外すと戻る）。その他予定の担当は何人でも
+    await add("leave"); await pick("staff", "八壁");
+    assert.strictEqual(await A.pg.locator("#f-sgq-staff").count(), 0, "1人選んだら検索の欄は出ない");
+    assert.ok((await A.pg.locator(".sgbox").innerText()).includes("1つの予定に1人です"));
+    await A.pg.locator(".sgbox").screenshot({ path: "g_oneonly.png" });
+    await A.pg.click('[data-sgrm="staff"][data-name="八壁"]'); await A.pg.waitForTimeout(200);
+    assert.strictEqual(await A.pg.locator("#f-sgq-staff").count(), 1, "×で外すと選び直せる");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
+    await add("help"); await pick("users", "中村"); assert.strictEqual(await A.pg.locator("#f-sgq-users").count(), 0, "ヘルプも1人");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
+    await add("other"); await pick("staff", "八壁"); await pick("staff", "日野");
+    assert.strictEqual(await A.pg.locator('.sgbox [data-sgrm="staff"]').count(), 2, "その他予定の担当は何人でも");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
+    console.log("1つの予定に1人: 休み・ヘルプは1人 / その他予定の担当は複数"); }
   { // 予定の検索：上の🔍。ほかの月の予定も出る。押すと開いて、閉じると検索に戻る
     api(t, "cal.apply", [{ kind: "upsert", opId: "op_srch0001", id: "ev_srch0001", baseRev: null, ev: { title: "余村慎検診", date: "2026-12-23", endDate: "2026-12-23", allDay: true, start: "", end: "", label: "other", place: "", memo: "", members: [] } }]);
     await A.pg.click("#searchBtn"); await A.pg.waitForTimeout(300);

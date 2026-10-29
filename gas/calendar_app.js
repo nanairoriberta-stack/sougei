@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.29h";
+const APP_VERSION="2026.10.29j";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -30,7 +30,8 @@ const bizOf=e=>e&&e.biz==="houkago"?"houkago":"seikatsu";
 try{const b=ls&&ls.getItem("sg:biz");if(BIZ.some(x=>x.k===b))S.biz=b}catch{}
 const newBiz=()=>S.biz==="houkago"?"houkago":"seikatsu";
 const bizTag=e=>S.biz==="all"&&bizOf(e)==="houkago"?`<span class="tag-biz">放デイ</span>`:"";
-function renderBiz(){$("bizTabs").innerHTML=BIZ.map(b=>`<button role="tab" data-biz="${b.k}" aria-selected="${S.biz===b.k}">${b.n}</button>`).join("")}
+function renderBiz(){document.documentElement.dataset.biz=S.biz;   // タブごとに背景の色を少し変える（全体＝薄い青・生活介護＝薄緑・放課後デイ＝薄ピンク）
+  $("bizTabs").innerHTML=BIZ.map(b=>`<button role="tab" data-biz="${b.k}" aria-selected="${S.biz===b.k}">${b.n}</button>`).join("")}
 function gridRange(){const s=addDays(S.cursor,-S.cursor.getDay());return{start:s,end:addDays(s,41)}}
 function allEvents(){return core?Object.values(core.overlay(S.server)):Object.values(S.server)}
 function visible(){return allEvents().filter(e=>!e.deleted&&pass(e))}
@@ -292,7 +293,8 @@ function drawSg(){
   const d=ed.d,w=d.w,ro=ed.ro,me=meInfo(),L=d.label,dis=ro?"disabled":"";
   if(staffSelf(d)&&!ro)w.staff=me.name?[me.name]:[];
   const chips=(kind)=>{const list=w[kind];return list.length?`<div class="sgchips">${list.map(n=>`<span class="sgchip">${esc(n)}${ro?"":`<button type="button" data-sgrm="${kind}" data-name="${esc(n)}" aria-label="外す">×</button>`}</span>`).join("")}</div>`:""};
-  const picker=(kind,ph)=>ro?"":`<input class="input" id="f-sgq-${kind}" placeholder="${ph}" autocomplete="off"><div class="sghits" id="sghits-${kind}" hidden></div>`;
+  // 1つの予定に1人（休み・送迎・ヘルプなど）：1人選んだら検索の欄は出さない（変えるときは×で外す）
+  const picker=(kind,ph)=>ro?"":oneOnly(L,kind)&&(w[kind]||[]).length?hint("1つの予定に1人です。ほかの人は別の予定で入れてください（変えるときは×で外します）。"):`<input class="input" id="f-sgq-${kind}" placeholder="${ph}" autocomplete="off"><div class="sghits" id="sghits-${kind}" hidden></div>`;
   const who=(kind,title,ph,empty)=>`<div class="sgsub"><span class="lbl2">${title}</span>${chips(kind)||`<span class="by">${empty||"まだ選ばれていません"}</span>`}${picker(kind,ph)}</div>`;
   const self=`<div class="sgsub"><span class="lbl2">職員</span><div class="sgchips"><span class="sgchip" style="padding-right:10px">${esc(me.name||"")}（自分）</span></div></div>`;
   const radios=(name,cur,opts)=>`<div class="labels" role="radiogroup">${opts.map(([k,l])=>`<label style="--c:var(--l-${L})"><input type="radio" name="${name}" value="${k}" ${String(cur)===k?"checked":""} ${dis}><span>${l}</span></label>`).join("")}</div>`;
@@ -334,6 +336,8 @@ function drawSg(){
   box.innerHTML=h+(!SGN.loaded?`<span class="by">名前の一覧を読み込んでいます…</span>`:"");
 }
 /* 読みをそろえる：カタカナ→ひらがな、半角→全角、空白なし */
+/* 1つの予定に1人だけ（2026-10-29 依頼者）。その他予定の担当と、モニタリング・支援会議の対応者だけは何人でも */
+const oneOnly=(L,kind)=>!(L==="other"||(PLAN_LABELS.includes(L)&&kind==="staff"));
 function kanaNorm(s){return String(s||"").normalize("NFKC").replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/\s+/g,"").toLowerCase()}
 function sgHits(kind,q){
   const h=$("sghits-"+kind);if(!h||!ed)return;const sel=new Set(ed.d.w[kind]||[]);
@@ -505,6 +509,7 @@ function save(){
   readForm();const d=ed.d;
   d.sg=sgOf(d.label,d.w);
   const bad=checkSg(d,d.sg);if(bad)return showErr(bad);
+  if(!ed.base)for(const k of["staff","users"])if(oneOnly(d.label,k)&&(d.w[k]||[]).length>1)return showErr("1つの予定に1人です。ほかの人は×で外して、別の予定で入れてください。");
   // その他予定だけタイトルを入れてもらう。ほかのラベルは入力した内容から毎回付け直す（直したときに古い題名が残らない）
   if(d.label!=="other")d.title=autoTitle(d.label,d.sg)||LMAP[d.label]?.n||d.title;
   if(!d.title)return showErr("タイトルを入力してください。");
@@ -638,7 +643,7 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-do-del]")){core.remove(ed.base);closeEditor();toast("ゴミ箱に移しました（30日間は元に戻せます）");return}
   if(t.closest("[data-revert]")){const p=ed.base.prev;core.save({title:p.title,date:p.date,endDate:p.endDate,allDay:p.allDay,start:p.start,end:p.end,label:p.label,biz:bizOf(p),place:p.place,memo:p.memo,members:p.members,tanto:p.tanto||[],sg:p.sg||null},ed.base);closeEditor();toast("1つ前の内容に戻しました");return}
   const fl=t.closest("[data-fill]");if(fl){const i=$(fl.dataset.fill);if(i){i.value=i.value===fl.dataset.v?"":fl.dataset.v;readSg();drawSg();draftSave()}return}
-  const sgp=t.closest("[data-sgpick]");if(sgp){readSg();const k=sgp.dataset.sgpick;const w=ed.d.w;if(!w[k].includes(sgp.dataset.name))w[k].push(sgp.dataset.name);drawSg();setTimeout(()=>{const i=$("f-sgq-"+k);if(i){i.focus();sgHits(k,"")}},0);draftSave();return}
+  const sgp=t.closest("[data-sgpick]");if(sgp){readSg();const k=sgp.dataset.sgpick;const w=ed.d.w;if(oneOnly(ed.d.label,k))w[k]=[sgp.dataset.name];else if(!w[k].includes(sgp.dataset.name))w[k].push(sgp.dataset.name);drawSg();setTimeout(()=>{const i=$("f-sgq-"+k);if(i){i.focus();sgHits(k,"")}},0);draftSave();return}
   const sgr=t.closest("[data-sgrm]");if(sgr){readSg();const k=sgr.dataset.sgrm;ed.d.w[k]=ed.d.w[k].filter(n=>n!==sgr.dataset.name);drawSg();draftSave();return}
   if(!t.closest(".sgsub")){for(const k of["staff","users"]){const h=$("sghits-"+k);if(h)h.hidden=true}}
   const rm=t.closest("[data-rm]");if(rm){ed.d.members=ed.d.members.filter(i=>i!==rm.dataset.rm);drawMembers();draftSave();return}
