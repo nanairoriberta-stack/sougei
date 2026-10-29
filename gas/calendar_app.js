@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.29c";
+const APP_VERSION="2026.10.29d";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -61,7 +61,7 @@ async function renderSafe(){
     const ps=await profiles(vis.flatMap(e=>e.members));
     if(my!==seq)return;
     if(S.view==="month")renderGrid(vis);else if(S.view==="list")renderList(vis,ps);else renderTrash();
-    renderPanel(vis,ps);
+    renderPanel(vis,ps);renderDay(vis);
     if(ed)liveCheck();
   }catch(e){
     $("app").insertAdjacentHTML("afterbegin",`<div class="render-err" style="grid-column:1/-1">画面を表示できませんでした（${esc(e&&e.message)}）。入力済みのデータは端末に保存されています。再読み込みしてください。</div>`);
@@ -101,7 +101,7 @@ function renderGrid(vis){
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
   for(let i=0;i<42;i++){const d=addDays(start,i),k=ymd(d),evs=on(vis,k),hol=HOL[k];
     const cls=["cell",d.getMonth()!==tm&&"out",k===TODAY&&"today",k===S.sel&&"sel",d.getDay()===0&&"su",d.getDay()===6&&"sa",hol&&"hol"].filter(Boolean).join(" ");
-    html+=`<div class="${cls}" role="button" tabindex="0" data-day="${k}" aria-label="${d.getMonth()+1}月${d.getDate()}日 ${evs.length}件"><div class="cell-head"><span class="num">${d.getDate()}</span>${hol?`<span class="hol-name">${hol}</span>`:""}</div>${evs.slice(0,3).map(chip).join("")}${evs.length>3?`<span class="more">他${evs.length-3}件</span>`:""}</div>`}
+    html+=`<div class="${cls}" role="button" tabindex="0" data-day="${k}" aria-label="${d.getMonth()+1}月${d.getDate()}日 ${evs.length}件"><div class="cell-head"><span class="num">${d.getDate()}</span>${hol?`<span class="hol-name">${hol}</span>`:""}</div>${evs.slice(0,MAXC()).map(chip).join("")}${evs.length>MAXC()?`<span class="more">他${evs.length-MAXC()}件</span>`:""}</div>`}
   $("grid").innerHTML=html;
 }
 function evRow(e,ps){
@@ -115,6 +115,24 @@ function renderPanel(vis,ps){
   else body=`<ul class="ev-list">${evs.map(e=>evRow(e,ps)).join("")}</ul>`;
   const q=quickHtml();
   $("panel").innerHTML=`<div class="panel-head"><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${q}${body}`;
+}
+/* スマホ：日付を押すと、その日の予定の一覧が下から出る（TimeTreeのように）。右上の＋でその日に予定を入れる */
+const MAXC=()=>matchMedia("(max-width:560px)").matches?4:3;
+function dsRow(e){
+  const tm=e.allDay||e.date!==e.endDate&&!(e.date===S.sel&&e.start)?`<span class="ds-time">終日</span>`:`<span class="ds-time">${esc(e.start)}<small>${esc(e.end)}</small></span>`;
+  const sub=[LMAP[e.label]?.n||"その他",e.place,(e.tanto||[]).length?"担当："+e.tanto.join("・"):""].filter(Boolean).map(esc).join(" ・ ");
+  return`<li><button class="ds-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${bizTag(e)}${esc(e.title)}</b><small>${sub}</small></span></button></li>`;
+}
+function renderDay(vis){
+  const root=$("dayRoot");if(!S.dayOpen){if(root.innerHTML)root.innerHTML="";return}
+  const d=parse(S.sel),evs=on(vis,S.sel),hol=HOL[S.sel],can=db&&S.canWrite&&core;
+  const keep=root.querySelector(".ds-list")?.scrollTop||0;
+  root.innerHTML=`<div class="overlay day-ov" id="dayOv"><div class="sheet daysheet" role="dialog" aria-modal="true" aria-label="${d.getMonth()+1}月${d.getDate()}日の予定"><div class="ds-grip"></div>
+    <div class="ds-head"><h2>${d.getMonth()+1}月${d.getDate()}日 ${WD[d.getDay()]}曜日${hol?`<small>${esc(hol)}</small>`:""}</h2>
+      <button class="ds-add" data-add-day aria-label="この日に予定を追加" ${can?"":"disabled"}>＋</button><button class="icon-btn" data-day-close aria-label="閉じる">×</button></div>
+    ${evs.length?`<ul class="ds-list">${evs.map(dsRow).join("")}</ul>`:`<div class="empty">${S.loaded?"この日の予定はまだありません。":"予定を読み込んでいます…"}${can&&S.loaded?"<br>右上の＋から入れられます。":""}</div>`}
+  </div></div>`;
+  const l=root.querySelector(".ds-list");if(l)l.scrollTop=keep;
 }
 function renderList(vis,ps){
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
@@ -511,6 +529,9 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-reload]")){location.reload();return}
   if(t.closest("[data-draft-open]")){const d=draftGet();if(d){const cur=d.id?allEvents().find(x=>x.id===d.id):null;openEditor(cur||d.base||null,null,d)}return}
   if(t.closest("[data-draft-drop]")){draftDrop();render();return}
+  if(t.id==="dayOv"||t.closest("[data-day-close]")){S.dayOpen=false;render();return}
+  const cellEl=t.closest(".cell[data-day]");
+  if(cellEl&&matchMedia("(max-width:560px)").matches){S.sel=cellEl.dataset.day;S.dayOpen=true;render();return}   // スマホは日を押すとその日の一覧
   const evEl=t.closest("[data-ev]");
   if(evEl&&!t.closest("#sheetRoot")){const x=allEvents().find(z=>z.id===evEl.dataset.ev);if(x)openEditor(x);return}
   const day=t.closest("[data-day]");if(day){S.sel=day.dataset.day;render();return}
@@ -550,6 +571,7 @@ document.addEventListener("click",async e=>{
 document.addEventListener("keydown",e=>{
   if(e.key==="Enter"&&(e.target.id==="f-sgq-staff"||e.target.id==="f-sgq-users")){e.preventDefault();const b=$("sghits-"+e.target.id.slice(6))?.querySelector("[data-sgpick]");if(b)b.click();return}
   if(e.key==="Escape"&&$("ov")){if(ed)closeEditor(true);else $("sheetRoot").innerHTML="";return}
+  if(e.key==="Escape"&&S.dayOpen){S.dayOpen=false;render();return}
   const day=e.target.closest?.("[data-day]");if(day&&(e.key==="Enter"||e.key===" ")){e.preventDefault();S.sel=day.dataset.day;render()}
 });
 document.addEventListener("change",e=>{

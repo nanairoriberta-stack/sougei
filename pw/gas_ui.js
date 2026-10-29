@@ -178,6 +178,22 @@ const D = path.join(__dirname, "../gas/out");
   for (const x of ["森 受診後送り・送り15:30・送り先病院", "中村 ヘルプ（○○病院）", `${absent} 欠席（体調不良）`, "八壁 退勤19:00（残業）", "会議", "モニタリング（森）"]) assert.ok(tl.includes(x), x + " / " + tl.join(","));
   assert.ok((await A.pg.locator(".ev-row", { hasText: "会議" }).innerText()).includes("担当：日野"), "一覧に担当");
   console.log("管理者が入力 →", tl.join(" / "), "→ 送迎表: 迎え", s2.noRide[U("森")].meet, "・送り", s2.userTime[U("森")].send, "・ヘルプ(保留欄)", hb.time, "・欠席", absent, "・八壁の退勤", s2.staffOv[S("八壁")].end, "/ 画面エラー:", real(A.errs));
+  { // スマホの月表示：バーに題名。日付を押すとその日の一覧が下から出て、右上の＋で予定を入れる
+    const chipTxt = await A.pg.locator(`.cell[data-day="${date}"] .ev-chip span`).first().innerText();
+    assert.ok(chipTxt.length > 0 && await A.pg.locator(`.cell[data-day="${date}"] .ev-chip span`).first().isVisible(), "バーに題名が見える");
+    await A.pg.locator(`.cell[data-day="${date}"]`).screenshot({ path: "g_cell.png" });
+    await A.pg.click(`.cell[data-day="${date}"] .ev-chip >> nth=0`); await A.pg.waitForTimeout(300);
+    assert.ok(await A.pg.locator(".daysheet").isVisible(), "日を押すとその日の一覧");
+    const rows = await A.pg.locator(".daysheet .ds-row b").allInnerTexts(); assert.strictEqual(rows.length, await A.pg.locator("#panel .ev-row").count(), "その日の予定がぜんぶ並ぶ");
+    await A.pg.screenshot({ path: "g_daysheet.png" });
+    await A.pg.click(".daysheet [data-add-day]"); await A.pg.waitForTimeout(300);
+    assert.ok(await A.pg.locator("#evForm").isVisible(), "＋で入力画面"); assert.strictEqual(await A.pg.inputValue("#f-date"), date, "その日の予定として");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+    assert.ok(await A.pg.locator(".daysheet").isVisible(), "入力画面を閉じると一覧に戻る");
+    await A.pg.click(".daysheet .ds-row >> nth=0"); await A.pg.waitForTimeout(300); assert.ok(await A.pg.locator("#evForm").isVisible(), "一覧の予定を押すと開く");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200); await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await A.pg.locator(".daysheet").count(), 0, "×で閉じる");
+    console.log("スマホの日の一覧:", rows.length, "件 / バー:", chipTxt); }
   { // 事業のタブ：全体／生活介護／放課後デイ。これまでの予定は生活介護
     assert.deepStrictEqual(await A.pg.$$eval("#bizTabs [data-biz]", (b) => b.map((x) => x.textContent)), ["全体", "生活介護", "放課後デイ"]);
     const before = await A.pg.locator("#panel .ev-row").count();

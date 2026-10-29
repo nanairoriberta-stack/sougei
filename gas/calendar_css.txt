@@ -253,3 +253,31 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
   .sghits{max-height:min(200px,32vh)}
 }
 @media (max-width:560px){.biztabs button{flex:1 1 0;padding:0 6px;font-size:13px}}
+/* スマホの月表示：バーに題名、日付の数字は小さめ。日を押すと下からその日の一覧（TimeTreeのように） */
+@media (max-width:560px){
+  .cell{min-height:86px;padding:2px 1px 3px;gap:2px}
+  .num{font-size:11px;width:18px;height:18px}
+  .ev-chip{height:auto;padding:1px 2px;font-size:9.5px;line-height:1.25;border-radius:3px;background:color-mix(in srgb,var(--c) 22%,var(--surface));border-left:2px solid var(--c);color:var(--ink);text-overflow:clip}
+  .ev-chip.span{background:var(--c);color:#fff}
+  .ev-chip span{display:block;overflow:hidden;white-space:nowrap;text-overflow:clip}
+  .ev-chip b,.ev-chip .tag-biz{display:none}
+  .more{font-size:9.5px}
+}
+.day-ov{align-items:flex-end;padding:0}
+.daysheet{width:min(580px,100%);max-height:88%;height:auto;border-radius:16px 16px 0 0;padding:0 0 max(12px,env(safe-area-inset-bottom,0px))}
+.ds-grip{width:40px;height:5px;border-radius:3px;background:var(--line);margin:8px auto 0}
+.ds-head{display:flex;align-items:center;gap:8px;padding:10px 16px 8px}
+.ds-head h2{flex:1;margin:0;font-size:19px}
+.ds-head h2 small{display:block;font-size:12px;font-weight:500;color:var(--sun)}
+.ds-add{width:38px;height:38px;border-radius:50%;border:0;background:var(--ink);color:var(--surface);font-size:22px;line-height:1;display:grid;place-items:center}
+.ds-add:disabled{opacity:.4}
+.ds-list{list-style:none;margin:0;padding:0 8px 8px;overflow:auto;max-height:calc(88vh - 90px)}
+.ds-row{display:flex;align-items:stretch;gap:10px;width:100%;border:0;background:none;text-align:left;padding:10px 8px;border-radius:10px;color:var(--ink)}
+.ds-row:active,.ds-row:hover{background:var(--sunken)}
+.ds-time{flex:none;width:44px;text-align:right;font-family:var(--mono);font-size:13px;font-weight:600;line-height:1.5}
+.ds-time small{display:block;font-weight:400;color:var(--muted)}
+.ds-bar{flex:none;width:4px;border-radius:2px;background:var(--c)}
+.ds-body{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.ds-body b{font-size:16px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds-body small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.daysheet .empty{padding:20px 16px 28px;text-align:center}
