@@ -18,6 +18,7 @@
   <button class="primary" id="addBtn">＋ 予定を追加</button>
 </div></header>
 
+<nav class="biztabs gutter" id="bizTabs" role="tablist" aria-label="事業の切り替え"></nav>
 <div class="filters gutter" id="filters"></div>
 <div class="notices gutter" id="notices"></div>
 

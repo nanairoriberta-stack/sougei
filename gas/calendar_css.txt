@@ -54,6 +54,14 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
 .primary{height:34px;padding:0 14px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:13px}
 
+/* 事業のタブ（全体／生活介護／放課後デイ） */
+:root{--b-seikatsu:#2f8f6b;--b-houkago:#d9822b}
+.biztabs{max-width:1240px;margin:0 auto;padding-block:12px 0;display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.biztabs button{flex:0 0 auto;height:38px;padding:0 18px;border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--sunken);color:var(--muted);font-size:14px;font-weight:700;margin-bottom:-1px}
+.biztabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:inset 0 3px 0 var(--accent)}
+.biztabs button[data-biz="seikatsu"][aria-selected="true"]{box-shadow:inset 0 3px 0 var(--b-seikatsu)}
+.biztabs button[data-biz="houkago"][aria-selected="true"]{box-shadow:inset 0 3px 0 var(--b-houkago)}
+.tag-biz{display:inline-block;font-size:10px;font-weight:700;color:#fff;background:var(--b-houkago);border-radius:4px;padding:0 4px;margin-right:4px;vertical-align:1px}
 .filters{max-width:1240px;margin:0 auto;padding-block:12px 0;display:flex;flex-wrap:wrap;gap:6px}
 .chip{height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:12px;display:inline-flex;align-items:center;gap:6px}
 .chip[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--surface)}
@@ -236,7 +244,7 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
   .sheet-head{padding:max(8px,env(safe-area-inset-top,0px)) 10px 8px;gap:6px}
   .sheet-head .icon-btn{order:-1}
   .sheet-head h2{flex:1;text-align:center;font-size:15px}
-  .head-save{display:inline-flex;height:36px;padding:0 16px;font-size:15px}
+  .head-save{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 16px;font-size:15px}
   .sheet{border-radius:0}
   .overlay{padding-top:0}
   html.kb .overlay{bottom:auto;top:var(--vvt,0px);height:var(--vvh,100%)}
@@ -244,3 +252,4 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
   html.kb .sheet-body{padding-bottom:70vh}
   .sghits{max-height:min(200px,32vh)}
 }
+@media (max-width:560px){.biztabs button{flex:1 1 0;padding:0 6px;font-size:13px}}

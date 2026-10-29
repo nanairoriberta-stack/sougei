@@ -178,6 +178,25 @@ const D = path.join(__dirname, "../gas/out");
   for (const x of ["森 受診後送り・送り15:30・送り先病院", "中村 ヘルプ（○○病院）", `${absent} 欠席（体調不良）`, "八壁 退勤19:00（残業）", "会議", "モニタリング（森）"]) assert.ok(tl.includes(x), x + " / " + tl.join(","));
   assert.ok((await A.pg.locator(".ev-row", { hasText: "会議" }).innerText()).includes("担当：日野"), "一覧に担当");
   console.log("管理者が入力 →", tl.join(" / "), "→ 送迎表: 迎え", s2.noRide[U("森")].meet, "・送り", s2.userTime[U("森")].send, "・ヘルプ(保留欄)", hb.time, "・欠席", absent, "・八壁の退勤", s2.staffOv[S("八壁")].end, "/ 画面エラー:", real(A.errs));
+  { // 事業のタブ：全体／生活介護／放課後デイ。これまでの予定は生活介護
+    assert.deepStrictEqual(await A.pg.$$eval("#bizTabs [data-biz]", (b) => b.map((x) => x.textContent)), ["全体", "生活介護", "放課後デイ"]);
+    const before = await A.pg.locator("#panel .ev-row").count();
+    await A.pg.click('[data-biz="houkago"]'); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await A.pg.locator("#panel .ev-row").count(), 0, "放課後デイのタブでは生活介護の予定は出ない");
+    await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300);
+    assert.ok(await A.pg.locator("#f-biz-houkago").isChecked(), "放課後デイのタブで作ると放課後デイ");
+    await A.pg.check("#f-label-other"); await A.pg.waitForTimeout(300); await A.pg.fill("#f-title", "放デイ会議"); await A.pg.fill("#f-start", "15:00"); await A.pg.fill("#f-end", "16:00");
+    await A.pg.locator(".sheet").screenshot({ path: "g_biz_editor.png" }); await save(2500);
+    assert.deepStrictEqual(await A.pg.locator("#panel .ev-row .t").allInnerTexts(), ["放デイ会議"], "放課後デイのタブ");
+    await A.pg.click('[data-biz="seikatsu"]'); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await A.pg.locator("#panel .ev-row").count(), before, "生活介護のタブ（これまでの予定）");
+    await A.pg.click('[data-biz="all"]'); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await A.pg.locator("#panel .ev-row").count(), before + 1, "全体のタブ");
+    assert.ok((await A.pg.locator(".ev-row", { hasText: "放デイ会議" }).innerHTML()).includes("tag-biz"), "全体では放デイの印");
+    await A.pg.screenshot({ path: "g_biz_all.png" });
+    const evs2 = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {}));
+    assert.strictEqual(evs2.find((e) => e.title === "放デイ会議").biz, "houkago"); assert.strictEqual(evs2.find((e) => e.title === "会議").biz || "seikatsu", "seikatsu");
+    console.log("事業のタブ: 生活介護", before, "件 / 放課後デイ 1件 / 全体", before + 1, "件"); }
   assert.deepStrictEqual(real(A.errs), []);
   // 送迎表を開き直す → カレンダーから入った便・ヘルプが表に出る（画面エラーなし）
   P.errs.length = 0; await P.pg.reload(); await P.pg.waitForTimeout(5000);   // ログインは端末に残っている

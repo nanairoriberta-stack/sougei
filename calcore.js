@@ -42,6 +42,7 @@ function normEvent(r, id, depth) {
     id: String(id), title: str(r.title, 80) || "（無題）", date, endDate, allDay,
     start: allDay ? "" : start, end: allDay ? "" : end,
     label: LABEL_KEYS.includes(r.label) ? r.label : "other",
+    biz: r.biz === "houkago" ? "houkago" : "seikatsu",   // 事業：生活介護（これまでの予定）／放課後デイ
     place: str(r.place, 80), memo: str(r.memo, 2000),
     tanto: Array.isArray(r.tanto) ? [...new Set(r.tanto.filter(x => typeof x === "string" && x && x.length <= 40))].slice(0, 20) : [],  // 担当（職員の名前。その他予定）
     members: Array.isArray(r.members) ? [...new Set(r.members.filter(x => typeof x === "string" && x.length <= 64))].slice(0, 100) : [],

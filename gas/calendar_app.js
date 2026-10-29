@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.29b";
+const APP_VERSION="2026.10.29c";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -21,13 +21,20 @@ let ls=null;try{ls=window.localStorage}catch{}
 const store=C.makeStore(ls||{getItem(){throw 0},setItem(){throw 0},removeItem(){},key(){return null},length:0});
 let db=null,user=null,downloads=null,core=null,unsub=null,unsubCm=null;
 let TODAY=ymd(new Date());
-const S={cursor:new Date(new Date().getFullYear(),new Date().getMonth(),1),sel:TODAY,view:"month",mine:false,label:"all",
+const S={cursor:new Date(new Date().getFullYear(),new Date().getMonth(),1),sel:TODAY,view:"month",mine:false,label:"all",biz:"all",
   server:{},loaded:false,me:null,canWrite:true,isAdmin:false,dbState:"connecting",online:navigator.onLine!==false};
 
+/* 事業のタブ：全体／生活介護／放課後デイ。これまでの予定（biz なし）は生活介護。選んだタブはこの端末に覚える */
+const BIZ=[{k:"all",n:"全体"},{k:"seikatsu",n:"生活介護"},{k:"houkago",n:"放課後デイ"}],BIZN={seikatsu:"生活介護",houkago:"放課後デイ"};
+const bizOf=e=>e&&e.biz==="houkago"?"houkago":"seikatsu";
+try{const b=ls&&ls.getItem("sg:biz");if(BIZ.some(x=>x.k===b))S.biz=b}catch{}
+const newBiz=()=>S.biz==="houkago"?"houkago":"seikatsu";
+const bizTag=e=>S.biz==="all"&&bizOf(e)==="houkago"?`<span class="tag-biz">放デイ</span>`:"";
+function renderBiz(){$("bizTabs").innerHTML=BIZ.map(b=>`<button role="tab" data-biz="${b.k}" aria-selected="${S.biz===b.k}">${b.n}</button>`).join("")}
 function gridRange(){const s=addDays(S.cursor,-S.cursor.getDay());return{start:s,end:addDays(s,41)}}
 function allEvents(){return core?Object.values(core.overlay(S.server)):Object.values(S.server)}
 function visible(){return allEvents().filter(e=>!e.deleted&&pass(e))}
-function pass(e){if(S.label!=="all"&&e.label!==S.label)return false;if(S.mine&&!isMine(e))return false;return true}
+function pass(e){if(S.biz!=="all"&&bizOf(e)!==S.biz)return false;if(S.label!=="all"&&e.label!==S.label)return false;if(S.mine&&!isMine(e))return false;return true}
 function isMine(e){const nm=(window.SGHost&&window.SGHost.me||{}).name;return!!((S.me&&e.members.includes(S.me))||(nm&&((e.tanto||[]).includes(nm)||(e.sg&&e.sg.staff||[]).includes(nm))))}
 /* 予定の並び：ラベルの順（ヘルプ・送迎・利用者休み…その他予定）→ 何日も続く予定 → 終日 → 開始時刻 → タイトル。予定が入るたびにこの順で並び直る */
 const LORDER=Object.fromEntries(LABELS.map((l,i)=>[l.k,i]));
@@ -49,7 +56,7 @@ async function renderSafe(){
     for(const[id,v]of[["vMonth","month"],["vList","list"],["vTrash","trash"]])$(id).setAttribute("aria-pressed",S.view===v);
     $("monthView").hidden=S.view!=="month";$("listView").hidden=S.view==="month";
     $("addBtn").disabled=!(db&&S.canWrite&&core&&!core.status().paused);
-    renderSync();renderFilters();renderNotices();
+    renderSync();renderBiz();renderFilters();renderNotices();
     const vis=visible();
     const ps=await profiles(vis.flatMap(e=>e.members));
     if(my!==seq)return;
@@ -89,7 +96,7 @@ function renderNotices(){
   $("notices").innerHTML=n.map(([c,t,a])=>`<div class="note ${c}"><p>${t}</p>${a}</div>`).join("");
 }
 function chip(e){const span=e.date!==e.endDate;
-  return`<button class="ev-chip${span?" span":""}${e.pending?" pend":""}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})" aria-label="${esc(e.title)}">${!span&&!e.allDay?`<b>${esc(e.start)}</b>`:""}<span>${esc(e.title)}</span></button>`}
+  return`<button class="ev-chip${span?" span":""}${e.pending?" pend":""}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})" aria-label="${esc(e.title)}">${bizTag(e)}${!span&&!e.allDay?`<b>${esc(e.start)}</b>`:""}<span>${esc(e.title)}</span></button>`}
 function renderGrid(vis){
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
   for(let i=0;i<42;i++){const d=addDays(start,i),k=ymd(d),evs=on(vis,k),hol=HOL[k];
@@ -99,7 +106,7 @@ function renderGrid(vis){
 }
 function evRow(e,ps){
   const av=e.members.slice(0,6).map(id=>ps[id]?`<img src="${esc(ps[id].avatarUrl)}" alt="${esc(ps[id].name||"メンバー")}" title="${esc(ps[id].name||"メンバー")}">`:"").join("");
-  return`<li><button class="ev-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${esc(e.title)}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
+  return`<li><button class="ev-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${bizTag(e)}${esc(e.title)}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
 function renderPanel(vis,ps){
   const d=parse(S.sel),evs=on(vis,S.sel),hol=HOL[S.sel],can=db&&S.canWrite&&core;
   let body;
@@ -323,7 +330,7 @@ function quickOff(half){
   const exist=allEvents().find(e=>!e.deleted&&e.sg&&e.sg.type==="staff_off"&&e.sg.staff.includes(name)&&e.date<=S.sel&&e.endDate>=S.sel);
   if(exist){toast("この日はすでに「"+exist.title+"」が入っています。変更はその予定を開いてください");openEditor(exist);return}
   const label=half?HALF[half]:"休み";
-  core.save({title:`${name} ${label}`,date:S.sel,endDate:S.sel,allDay:true,start:"",end:"",label:"leave",place:"",memo:"",members:[],sg:{type:"staff_off",staff:[name],users:[],meet:"",send:"",noMeet:"",noSend:"",half:half||""}},null);
+  core.save({title:`${name} ${label}`,date:S.sel,endDate:S.sel,allDay:true,start:"",end:"",label:"leave",biz:newBiz(),place:"",memo:"",members:[],sg:{type:"staff_off",staff:[name],users:[],meet:"",send:"",noMeet:"",noSend:"",half:half||""}},null);
   toast(`${name}さんの${label}を入れました（送迎表に反映されます）`);render();
 }
 
@@ -333,7 +340,7 @@ function openEditor(ev,day,draft){
   const ro=!(db&&S.canWrite&&core);
   const base=ev||null;
   // 新しい予定は「ヘルプ」から（ヘルプを入れられない一般職員は「職員休み」から）
-  const d=draft?draft.form:ev?{...ev,members:[...ev.members]}:{title:"",date:day||S.sel,endDate:day||S.sel,allDay:false,start:"10:00",end:"11:00",label:canLabel("help")?"help":"leave",place:"",memo:"",members:S.me?[S.me]:[],sg:null};
+  const d=draft?draft.form:ev?{...ev,members:[...ev.members]}:{title:"",date:day||S.sel,endDate:day||S.sel,allDay:false,start:"10:00",end:"11:00",label:canLabel("help")?"help":"leave",place:"",memo:"",members:S.me?[S.me]:[],sg:null,biz:newBiz()};
   if(d.sg&&LABEL_OF_SG[d.sg.type]&&!(d.sg.type==="staff_plan"&&PLAN_LABELS.includes(d.label)))d.label=LABEL_OF_SG[d.sg.type];
   if(!d.w)d.w=workOf(d);
   if(!ev&&!draft)fixTimes(d);   // 最初に選ばれているラベルに合わせて終日・時刻をそろえる
@@ -347,7 +354,7 @@ function openEditor(ev,day,draft){
 function closeEditor(keepDraft){unsubCm?.();unsubCm=null;if(!keepDraft)draftDrop();ed=null;$("sheetRoot").innerHTML="";render()}
 function readForm(){
   if(!$("f-date"))return;const d=ed.d;if($("f-title"))d.title=$("f-title").value.trim();d.allDay=$("f-allday").checked;d.date=$("f-date").value;d.endDate=$("f-enddate").value||d.date;
-  d.start=$("f-start").value;d.end=$("f-end").value;d.label=document.querySelector('input[name="f-label"]:checked')?.value||"other";d.place=$("f-place")?$("f-place").value.trim():d.place;d.memo=$("f-memo").value;readSg();fixTimes(d);
+  d.start=$("f-start").value;d.end=$("f-end").value;d.label=document.querySelector('input[name="f-label"]:checked')?.value||"other";d.biz=document.querySelector('input[name="f-biz"]:checked')?.value||bizOf(d);d.place=$("f-place")?$("f-place").value.trim():d.place;d.memo=$("f-memo").value;readSg();fixTimes(d);
 }
 function liveCheck(){
   if(!ed||!ed.base||!ed.id)return;const cur=core?core.overlay(S.server)[ed.id]:S.server[ed.id];
@@ -363,6 +370,7 @@ function drawSheet(){
   <div class="sheet-head"><h2 id="sh-t">${ed.id?"予定の詳細":"新しい予定"}</h2><button class="icon-btn" data-close aria-label="閉じる">×</button>${ro||ed.confirmDel?"":`<button type="button" class="primary head-save" data-hsave>保存</button>`}</div>
   <form class="sheet-body" id="evForm" novalidate>
     <div class="note warn" id="liveNote" ${ed.changed?"":"hidden"}><p>この予定は、開いている間に他の人が変更または削除しました。このまま保存すると、どちらを残すか確認する画面が出ます。</p></div>
+    <div class="field"><span class="lbl">事業</span><div class="labels bizpick">${["seikatsu","houkago"].map(k=>`<label style="--c:var(--b-${k})"><input type="radio" name="f-biz" id="f-biz-${k}" value="${k}" ${bizOf(d)===k?"checked":""} ${ro?"disabled":""}><span>${BIZN[k]}</span></label>`).join("")}</div></div>
     <div class="field"><span class="lbl">ラベル</span><div class="labels lblpick">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
     ${d.label==="other"?"":box}
     ${d.label==="other"?`<div class="field"><label for="f-title">タイトル</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="例：週次定例" ${v()}></div>`:""}
@@ -417,7 +425,7 @@ function save(){
   if(d.endDate<d.date)return showErr("終了日は開始日以降にしてください。");
   if(!d.allDay&&!d.start)return showErr("開始時刻を入れてください。");
   if(!d.allDay&&d.endDate===d.date&&d.end<=d.start)return showErr("終了時刻は開始時刻より後にしてください。");
-  const ev={title:d.title,date:d.date,endDate:d.endDate,allDay:d.allDay,start:d.allDay?"":d.start,end:d.allDay?"":d.end,label:lab(d.label),place:d.place,memo:d.memo,members:d.members,tanto:d.label==="other"?[...d.w.staff]:[],sg:d.sg||null};
+  const ev={title:d.title,date:d.date,endDate:d.endDate,allDay:d.allDay,start:d.allDay?"":d.start,end:d.allDay?"":d.end,label:lab(d.label),biz:bizOf(d),place:d.place,memo:d.memo,members:d.members,tanto:d.label==="other"?[...d.w.staff]:[],sg:d.sg||null};
   const r=core.save(ev,ed.base);
   closeEditor();S.sel=ev.date;
   const dd=parse(ev.date);if(dd.getMonth()!==S.cursor.getMonth()||dd.getFullYear()!==S.cursor.getFullYear()){S.cursor=new Date(dd.getFullYear(),dd.getMonth(),1);subscribe()}
@@ -469,7 +477,7 @@ async function doExport(kind){
     if(kind==="json"){const comments={};for(const c of cms){const m=C.normCm(c);for(const k in m)comments[k]=(comments[k]||[]).concat(m[k])}
       data=JSON.stringify({app:"team-calendar",schema:C.SCHEMA,version:APP_VERSION,exportedAt:new Date().toISOString(),events,comments},null,1);filename=`チームカレンダー_バックアップ_${stamp}.json`}
     else{const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;const ps=await profiles(events.flatMap(e=>e.members));
-      const rows=[["開始日","終了日","終日","開始","終了","タイトル","ラベル","場所","担当","参加者","メモ","状態","更新日時"]].concat(events.sort((a,b)=>a.date.localeCompare(b.date)||cmp(a,b)).map(e=>[e.date,e.endDate,e.allDay?"終日":"",e.start,e.end,e.title,LMAP[e.label].n,e.place,(e.tanto||[]).join("、"),e.members.map(id=>ps[id]?.name||"メンバー").join("、"),e.memo,e.deleted?"削除済み":"",fmtAt(e.updatedAt)]));
+      const rows=[["開始日","終了日","終日","開始","終了","タイトル","事業","ラベル","場所","担当","参加者","メモ","状態","更新日時"]].concat(events.sort((a,b)=>a.date.localeCompare(b.date)||cmp(a,b)).map(e=>[e.date,e.endDate,e.allDay?"終日":"",e.start,e.end,e.title,BIZN[bizOf(e)],LMAP[e.label].n,e.place,(e.tanto||[]).join("、"),e.members.map(id=>ps[id]?.name||"メンバー").join("、"),e.memo,e.deleted?"削除済み":"",fmtAt(e.updatedAt)]));
       data="﻿"+rows.map(r=>r.map(q).join(",")).join("\r\n");filename=`チームカレンダー_一覧_${stamp}.csv`}
     if(!downloads){slot.innerHTML=`<p class="err">この画面では保存機能が使えません。</p>`;return}
     await downloads.save({filename,data});slot.innerHTML=`<p class="by">保存しました（予定 ${events.length}件）。</p>`;
@@ -495,6 +503,7 @@ $("todayBtn").onclick=()=>{TODAY=ymd(new Date());S.sel=TODAY;const c=new Date(ne
 $("vMonth").onclick=()=>{S.view="month";render()};$("vList").onclick=()=>{S.view="list";render()};$("vTrash").onclick=()=>{S.view="trash";render()};
 $("addBtn").onclick=()=>openEditor(null,S.sel);
 $("syncBtn").onclick=openSync;
+$("bizTabs").addEventListener("click",e=>{const b=e.target.closest("[data-biz]");if(!b)return;S.biz=b.dataset.biz;try{ls&&ls.setItem("sg:biz",S.biz)}catch{}render()});
 $("filters").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;if(b.hasAttribute("data-mine"))S.mine=!S.mine;else S.label=b.dataset.label;render()});
 $("restoreFile").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(f)planRestore(f)});
 document.addEventListener("click",async e=>{
@@ -529,7 +538,7 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-del]")){readForm();ed.confirmDel=true;drawSheet();return}
   if(t.closest("[data-cancel-del]")){ed.confirmDel=false;drawSheet();return}
   if(t.closest("[data-do-del]")){core.remove(ed.base);closeEditor();toast("ゴミ箱に移しました（30日間は元に戻せます）");return}
-  if(t.closest("[data-revert]")){const p=ed.base.prev;core.save({title:p.title,date:p.date,endDate:p.endDate,allDay:p.allDay,start:p.start,end:p.end,label:p.label,place:p.place,memo:p.memo,members:p.members,tanto:p.tanto||[],sg:p.sg||null},ed.base);closeEditor();toast("1つ前の内容に戻しました");return}
+  if(t.closest("[data-revert]")){const p=ed.base.prev;core.save({title:p.title,date:p.date,endDate:p.endDate,allDay:p.allDay,start:p.start,end:p.end,label:p.label,biz:bizOf(p),place:p.place,memo:p.memo,members:p.members,tanto:p.tanto||[],sg:p.sg||null},ed.base);closeEditor();toast("1つ前の内容に戻しました");return}
   const fl=t.closest("[data-fill]");if(fl){const i=$(fl.dataset.fill);if(i){i.value=i.value===fl.dataset.v?"":fl.dataset.v;readSg();drawSg();draftSave()}return}
   const sgp=t.closest("[data-sgpick]");if(sgp){readSg();const k=sgp.dataset.sgpick;const w=ed.d.w;if(!w[k].includes(sgp.dataset.name))w[k].push(sgp.dataset.name);drawSg();setTimeout(()=>{const i=$("f-sgq-"+k);if(i){i.focus();sgHits(k,"")}},0);draftSave();return}
   const sgr=t.closest("[data-sgrm]");if(sgr){readSg();const k=sgr.dataset.sgrm;ed.d.w[k]=ed.d.w[k].filter(n=>n!==sgr.dataset.name);drawSg();draftSave();return}
