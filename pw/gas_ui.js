@@ -67,6 +67,8 @@ const D = path.join(__dirname, "../gas/out");
   const P = await open("sougei.html", { width: 1400, height: 900 }, boot);
   await P.pg.waitForTimeout(500); await P.pg.fill("#sghNo", "000"); await P.pg.fill("#sghPin", "5829"); await P.pg.click("#sghGo"); await P.pg.waitForTimeout(5000);
   await P.pg.screenshot({ path: "g_sougei.png" });
+  { const body0 = await P.pg.locator("#root").innerText();   // 見ていない箱（送迎の抜け・使える車）は出さない
+    assert.ok(!body0.includes("送迎の抜けがあります") && !body0.includes("🚗 使える車") && !body0.includes("全員に迎え・送りが入っています"), "右の箱を出さない"); }
   // 日付ボタンの📅：カレンダーはボタンのすぐ下・左そろえに出る。日を押すとその日に
   { await P.pg.click("[data-datepop]"); await P.pg.waitForTimeout(200);
     const r = await P.pg.evaluate(() => { const b = document.querySelector("[data-datepop]").getBoundingClientRect(), p = document.querySelector('[aria-label="日付を選ぶ"]').getBoundingClientRect(); return { dx: Math.round(p.left - b.left), dy: Math.round(p.top - b.bottom) }; });

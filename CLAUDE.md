@@ -111,6 +111,9 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 送迎表は右をあける（画面幅1000px以上）。`doGet` は calendar かつ `embed=1` のときだけ `XFrameOptionsMode.ALLOWALL`（ほかは今までどおり DEFAULT）。
 中のカレンダーは送り終わると `postMessage({sg:"cal-saved"})` → 送迎表がすぐ読み直す（`refreshCalendar`・`pollOnce`）。公開URLが分からないときは「設定シートB2」の案内
 
+## 送迎表の右の欄から外したもの（2026-10-29 依頼者「見ていない」）
+「⚠ 送迎の抜けがあります／全員に迎え・送りが入っています」の箱（`MissingAlert` は2名体制の不足 `twoBox` だけ出す）と「🚗 使える車」（`VehicleNowPanel`）は出さない。抜けは未割当の一覧とExcel出力前の確認で分かる
+
 ## データの置き方（スプレッドシート）
 - `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）
   - 送迎表：`kv/<encKey(キー)>`。キーは `master`（利用者・職員・車両・部署・ルール）/ `sheet:YYYY-MM-DD` / `pattern:0〜6`（週間パターン）。版の頭 `v2:`/`v3:`

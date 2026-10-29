@@ -6922,31 +6922,8 @@ function MissingAlert({ master, sheet, date }) {
       {twoShort.map((w, i) => <div key={i}>・{w}</div>)}
     </div>
   );
-  if (!missMeet.length && !missSend.length) {
-    return (
-      <>
-      {twoBox}
-      <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2 mb-3">
-        ✓ 本日({DAYS[wd]})利用予定の{scheduled.length}名全員に迎え・送りが入っています。
-      </div>
-      </>
-    );
-  }
-  return (
-    <>
-    {twoBox}
-    <div className="text-sm text-rose-800 bg-rose-50 border-2 border-rose-300 rounded-lg p-3 mb-3">
-      <div className="font-bold mb-1">⚠ 送迎の抜けがあります(本日 {DAYS[wd]}曜日に利用予定)</div>
-      {missMeet.length > 0 && (
-        <div className="mb-0.5"><span className="font-semibold">迎え未入力({missMeet.length}名):</span> {missMeet.map((u) => u.name).join("・")}</div>
-      )}
-      {missSend.length > 0 && (
-        <div><span className="font-semibold">送り未入力({missSend.length}名):</span> {missSend.map((u) => u.name).join("・")}</div>
-      )}
-      <div className="text-xs text-rose-600 mt-1">{aiApiOn() ? "下の未割当一覧から名前をクリックするとAI調整(その人の割り当て)が開きます。" : "下の未割当一覧から名前を表の便へドラッグして割り当ててください。"}欠席の場合は欠席にしてください。</div>
-    </div>
-    </>
-  );
+  // 「送迎の抜けがあります」「全員に迎え・送りが入っています」の箱は見ていないので出さない（2026-10-29 依頼者）。抜けは下の未割当とExcel出力前の確認で分かる
+  return twoBox || null;
 }
 
 /* ============================================================
@@ -9955,7 +9932,7 @@ function AppInner() {
     addG("🆘", "通常外のヘルプ・その他予定の確認", extraList, "画面下の「通常外のヘルプ・その他予定」欄と、送迎表に入っている予定が合っていません。入れ忘れ・書き忘れがないか確認してください");
     addG("🏥", "送迎なしの人の最終確認", noRideList, "受診後来所・家族送迎などで送迎を入れていない人です。本当にこの扱いでよいか確認してください");
     addG("🏠", "いつもと違う送り先・迎え先(最終確認)", placeList, "利用者タブの「いつもの迎え先・送り先」(自宅・ﾘﾍﾞ・家族送り・家族迎えなど)と違っています。この内容で合っていれば、そのまま進めてください");
-    addG("🚗", "車両のエラー(定員・重複・位置)", vehErr, "🚗使える車パネルで空き車を確認して差し替えてください");
+    addG("🚗", "車両のエラー(定員・重複・位置)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
     addG("⏰", "時間のエラー(勤務時間外・重複)", timeErr, "職員名クリックで勤務時間の確認、または担当の変更を");
     addG("🚻", "男性不在・職員数の区間", maleErr, "人数・男性カバー表で該当時間帯の色を確認してください");
     addG("📋", "その他の警告", otherErr, "");
@@ -10478,7 +10455,7 @@ function AppInner() {
                       <div className="whitespace-pre-wrap text-xs mt-1 max-h-48 overflow-y-auto">{sheet.aiLog}</div>
                     </div>
                   )}
-                  <VehicleNowPanel master={sheetMaster} data={dataForGrid} hoverTime={gridHoverTime} />
+                  {/* 「使える車」の箱は見ていないので出さない（2026-10-29 依頼者） */}
                   <UnassignedPanel
                     master={sheetMaster}
                     data={dataForGrid}
@@ -10578,7 +10555,7 @@ function AppInner() {
                       <div className="whitespace-pre-wrap text-xs mt-1 max-h-48 overflow-y-auto">{sheet.aiLog}</div>
                     </div>
                   )}
-                    <VehicleNowPanel master={sheetMaster} data={dataForGrid} hoverTime={gridHoverTime} />
+                  {/* 「使える車」の箱は見ていないので出さない（2026-10-29 依頼者） */}
                     <UnassignedPanel
                       master={sheetMaster}
                       data={dataForGrid}
@@ -11932,7 +11909,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
     addG("🆘", "通常外のヘルプ・その他予定の確認", extraList, "画面下の「通常外のヘルプ・その他予定」欄と、送迎表に入っている予定が合っていません。入れ忘れ・書き忘れがないか確認してください");
     addG("🏥", "送迎なしの人の最終確認", noRideList, "受診後来所・家族送迎などで送迎を入れていない人です。本当にこの扱いでよいか確認してください");
     addG("🏠", "いつもと違う送り先・迎え先(最終確認)", placeList, "利用者タブの「いつもの迎え先・送り先」(自宅・ﾘﾍﾞ・家族送り・家族迎えなど)と違っています。この内容で合っていれば、そのまま進めてください");
-    addG("🚗", "車両のエラー(定員・重複・位置)", vehErr, "🚗使える車パネルで空き車を確認して差し替えてください");
+    addG("🚗", "車両のエラー(定員・重複・位置)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
     addG("⏰", "時間のエラー(勤務時間外・重複)", timeErr, "職員名クリックで勤務時間の確認、または担当の変更を");
     addG("🚻", "男性不在・職員数の区間", maleErr, "人数・男性カバー表で該当時間帯の色を確認してください");
     addG("📋", "その他の警告", otherErr, "");
