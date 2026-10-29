@@ -57,7 +57,7 @@ bash test.sh         # Nodeのテスト全部
 bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ```
 - テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-excel.js`（送迎表のExcel出力に版が入る）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎の変更/迎え先・送り先/休日出勤/勤務時間変更）、`test-agent.js`（AIと相談の適用 10件）、
-  `gas/test-gas.js`（サーバー 30件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
+  `gas/test-gas.js`（サーバー 31件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
   `mcp/test-mcp.js`（公式MCPクライアントで35件。Googleの302転送も再現）、`pw/gas_ui.js`・`pw/agent_ui.js`（画面）
 - `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
 - `sougei.jsx` の関数をテスト/サーバーで使うときは `build.sh` の `EXP` と `mcp/engine_entry.js` に名前を足す
@@ -105,6 +105,11 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - 今の `calApplied` と比べた追加・変更・取り消し＝`SGCal.exportChanges`。サーバーの `docSet_` が送迎表の文書の meta に `expChg`（数）と `date` を付け、`sg.exportAlerts`（版ごと、昨日以降）が一覧だけで探す
 - 送迎表の画面は30秒ごとに聞き、右上にお知らせ「11月3日(火)のカレンダーに変更があります：白戸 休み（追加）」［この日を開く］［閉じる］（`data-exp-popup`。閉じたら同じ内容は出さない＝端末に `sg:expDismiss:<版>`）。
   開いている日は上に赤い帯（`data-exp-banner`）。もう一度出力すると消える
+
+## 送迎表の右にカレンダー（パソコン、2026-10-29）
+送迎表の上の「📅 右にカレンダーを出す」（`data-calside-btn`）→ 右側に `…/exec?page=calendar&embed=1` を iframe で出す（`data-calside`、幅はドラッグで360〜800px、開いているか・幅は端末に `sg:calSide`/`sg:calSideW`）。
+送迎表は右をあける（画面幅1000px以上）。`doGet` は calendar かつ `embed=1` のときだけ `XFrameOptionsMode.ALLOWALL`（ほかは今までどおり DEFAULT）。
+中のカレンダーは送り終わると `postMessage({sg:"cal-saved"})` → 送迎表がすぐ読み直す（`refreshCalendar`・`pollOnce`）。公開URLが分からないときは「設定シートB2」の案内
 
 ## データの置き方（スプレッドシート）
 - `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）

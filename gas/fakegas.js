@@ -65,8 +65,8 @@ function makeGas(files) {
     Session: { getScriptTimeZone: () => "Asia/Tokyo" },
     Logger: { log() {} },
     ScriptApp: { getService: () => ({ getUrl: () => "https://script.google.com/macros/s/TEST/exec" }) },
-    HtmlService: (() => { const out = (html) => { const o = { html, title: "", setTitle(t) { o.title = t; return o; }, addMetaTag() { return o; }, setXFrameOptionsMode() { return o; }, getContent: () => html }; return o; };
-      return { XFrameOptionsMode: { DEFAULT: 1 }, createHtmlOutputFromFile: (n) => out(fs.readFileSync(require("path").join(__dirname, "out", n + ".html"), "utf8")), createHtmlOutput: out }; })(),
+    HtmlService: (() => { const out = (html) => { const o = { html, title: "", setTitle(t) { o.title = t; return o; }, addMetaTag() { return o; }, setXFrameOptionsMode(m) { o.xfo = m; return o; }, getContent: () => html }; return o; };
+      return { XFrameOptionsMode: { DEFAULT: 1, ALLOWALL: 2 }, createHtmlOutputFromFile: (n) => out(fs.readFileSync(require("path").join(__dirname, "out", n + ".html"), "utf8")), createHtmlOutput: out }; })(),
   };
   ctx.globalThis = ctx;
   vm.createContext(ctx);

@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.29l";
+const APP_VERSION="2026.10.29m";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -70,6 +70,8 @@ async function renderSafe(){
 }
 function renderSync(){
   const b=$("syncBtn"),t=$("syncText");let s="ok",txt="保存済み ✓";
+  // 送迎表の右側に出ているときは、送り終わったら送迎表に知らせる（すぐ読み直して反映を見せる）
+  if(core){const q=core.status().queued;if(S.lastQ>0&&!q&&window.parent!==window){try{window.parent.postMessage({sg:"cal-saved"},"*")}catch{}}S.lastQ=q}
   if(S.dbState==="none"){s="bad";txt="共有に接続できません"}
   else if(!core){s="busy";txt="接続中…"}
   else{const st=core.status();

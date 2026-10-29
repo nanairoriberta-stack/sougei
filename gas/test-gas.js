@@ -535,6 +535,15 @@ async function bootstrap() {
     return `出力のあと「${al[0].changes.map((c) => c.title + "（" + c.what + "）").join("・")}」→ もう一度出力で消える`;
   });
 
+  await test("送迎表の右に出すカレンダーだけ、ほかの画面の中に出せる（embed=1）", async () => {
+    const { g } = await bootstrap();
+    const xfo = (p) => g.ctx.doGet({ parameter: p }).xfo;
+    assert.strictEqual(xfo({ page: "calendar", embed: "1" }), 2, "右に出すカレンダーは中に出せる");
+    assert.strictEqual(xfo({ page: "calendar" }), 1, "ふつうのカレンダーは今までどおり");
+    assert.strictEqual(xfo({ page: "sougei", embed: "1" }), 1, "送迎表は中に出さない");
+    return "page=calendar&embed=1 だけ ALLOWALL";
+  });
+
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
     const { g, admin } = await bootstrap();
     const date = "2026-11-25"; const E = engFor("v1"); const m = await admin.kv().get("master"); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);

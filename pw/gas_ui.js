@@ -131,6 +131,20 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(await P.pg.locator("[data-exp-popup]").isVisible(), "ほかの日を見ているとお知らせ");
     await P.pg.click("[data-exp-close]"); await P.pg.waitForTimeout(300); assert.strictEqual(await P.pg.locator("[data-exp-popup]").count(), 0, "閉じる");
     console.log("Excel出力後の変更:", pop.replace(/\n/g, " ")); }
+  // 送迎表の右にカレンダーを出す（パソコン）。開いている間、送迎表はその分よける。幅と開いているかは端末に覚える
+  { const calHtml = fs.readFileSync(path.join(D, "calendar.html"), "utf8").replace("/*__BOOT__*/", boot);
+    await P.pg.route("https://script.google.com/**", (r) => r.fulfill({ body: calHtml, contentType: "text/html" }));   // 公開URLの代わりに、ここで作ったカレンダーを出す
+    await P.pg.click("[data-calside-btn]"); await P.pg.waitForTimeout(400);
+    assert.ok(await P.pg.locator("[data-calside]").isVisible(), "右にカレンダー");
+    const src = await P.pg.locator("[data-calside-frame]").getAttribute("src"); assert.ok(/\/exec\?page=calendar&embed=1$/.test(src), src);
+    const mr = await P.pg.evaluate(() => getComputedStyle(document.querySelector("#root > div")).marginRight); assert.strictEqual(mr, "440px", "送迎表は右をあける");
+    const fr = P.pg.frameLocator("[data-calside-frame]");
+    await fr.locator("#sghNo").waitFor({ timeout: 10000 }); await fr.locator("#sghNo").fill("000"); await fr.locator("#sghPin").fill("5829"); await fr.locator("#sghGo").click();
+    await fr.locator(".cell").first().waitFor({ timeout: 10000 }); await P.pg.waitForTimeout(1500);
+    assert.ok(await fr.locator("#addBtn").isVisible(), "右のカレンダーが動く（狭いのでスマホと同じ形）");
+    await P.pg.screenshot({ path: "g_calside.png" });
+    await P.pg.click("[data-calside-close]"); await P.pg.waitForTimeout(300); assert.strictEqual(await P.pg.locator("[data-calside]").count(), 0, "閉じる");
+    console.log("右のカレンダー:", src); }
   // りんく・ぷれいす版：担当を「生活介護へ依頼」にした便 → 生活介護（11/1からは新体制版）の保留欄に【りんく依頼】。担当・車が決まるとりんく側の便に出る
   { const v3m = api(t, "kv.get", ["v3:master"]).data.value, kid = v3m.users[0];
     api(t, "kv.merge", [{ key: "v3:sheet:" + date, base: null, baseKnown: false, mine: { runs: [{ id: "rqUI", kind: "meet", time: "15:00", staffId: "__req__", vehicleId: "", userIds: [kid.id], staffRiderIds: [], note: "" }], blocks: [] } }]);

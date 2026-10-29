@@ -8963,6 +8963,26 @@ function EditionSwitcher() {
 
 function AppInner() {
   const [tab, setTab] = useState("sheet");
+  // 送迎表の右側にカレンダーを出す（パソコン向け）。開いているか・幅はこの端末に覚える
+  const [calSide, setCalSide] = useState(() => { try { return localStorage.getItem("sg:calSide") === "1"; } catch (e) { return false; } });
+  const [calSideW, setCalSideW] = useState(() => { try { return Math.min(800, Math.max(360, Number(localStorage.getItem("sg:calSideW")) || 440)); } catch (e) { return 440; } });
+  const [calDrag, setCalDrag] = useState(false);
+  const toggleCalSide = () => setCalSide((v) => { try { localStorage.setItem("sg:calSide", v ? "0" : "1"); } catch (e) {} return !v; });
+  useEffect(() => {   // 右のカレンダーで保存したら、すぐ読み直して送迎表に反映を出す
+    const f = (e) => { if (e && e.data && e.data.sg === "cal-saved") { try { window.SGHost && window.SGHost.refreshCalendar && window.SGHost.refreshCalendar(); window.SGHost && window.SGHost.pollOnce && window.SGHost.pollOnce(); } catch (er) {} } };
+    window.addEventListener("message", f); return () => window.removeEventListener("message", f);
+  }, []);
+  useEffect(() => {   // 名前のボタン（右下）が右のカレンダーに重ならないように、左へよける
+    const c = typeof document !== "undefined" && document.querySelector(".sgh-chip:not(.in-slot)");
+    if (c) c.style.right = calSide ? (calSideW + 10) + "px" : "";
+  }, [calSide, calSideW]);
+  useEffect(() => {
+    if (!calDrag) return;
+    const mv = (e) => setCalSideW(Math.min(800, Math.max(360, window.innerWidth - e.clientX)));
+    const up = () => { setCalDrag(false); setCalSideW((w) => { try { localStorage.setItem("sg:calSideW", String(w)); } catch (e) {} return w; }); };
+    window.addEventListener("mousemove", mv); window.addEventListener("mouseup", up);
+    return () => { window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up); };
+  }, [calDrag]);
   // Excel出力のあとにカレンダーの変更があった日（サーバーの sg.exportAlerts を30秒ごとに聞く）。閉じたお知らせは同じ内容なら出さない
   const [expAlerts, setExpAlerts] = useState([]);
   const expDismissKey = "sg:expDismiss:" + EDITION;
@@ -10075,7 +10095,24 @@ function AppInner() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-100 font-sans text-stone-800 pb-10">
+    <div className="min-h-screen bg-stone-100 font-sans text-stone-800 pb-10" style={calSide && typeof window !== "undefined" && window.innerWidth >= 1000 ? { marginRight: calSideW } : undefined}>
+      {calSide && (() => {   // 右側のカレンダー
+        const src = typeof window !== "undefined" && window.SGHost && window.SGHost.url ? window.SGHost.url("?page=calendar&embed=1") : "";
+        const full = typeof window !== "undefined" && window.SGHost && window.SGHost.url ? window.SGHost.url("?page=calendar") : "";
+        return (
+          <div className="fixed top-0 right-0 bottom-0 z-40 bg-white border-l border-stone-300 shadow-xl flex flex-col" style={{ width: calSideW }} data-calside>
+            <div className="absolute left-0 top-0 bottom-0 w-1.5 -ml-0.5 cursor-col-resize hover:bg-sky-300" onMouseDown={(e) => { e.preventDefault(); setCalDrag(true); }} title="ドラッグで幅を変える" />
+            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-stone-200 text-sm">
+              <b className="flex-1">📅 カレンダー</b>
+              {full && <a className="text-xs px-2 py-1 rounded border border-stone-300 hover:bg-stone-50" href={full} target="_blank" rel="noopener">別の画面で開く</a>}
+              <button className="text-xs px-2 py-1 rounded border border-stone-300 hover:bg-stone-50" onClick={toggleCalSide} data-calside-close>× 閉じる</button>
+            </div>
+            {src
+              ? <iframe title="カレンダー" src={src} className="flex-1 w-full border-0" style={calDrag ? { pointerEvents: "none" } : undefined} data-calside-frame />
+              : <div className="p-4 text-sm text-stone-600">公開URLが分からないため、ここにカレンダーを出せません。スプレッドシートの「設定」シートB2に公開URL（…/exec）を貼ってください。</div>}
+          </div>
+        );
+      })()}
       <div className="bg-white border-b border-stone-300 sticky top-0 z-40">
         <div className="px-3 pt-2 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-baseline gap-2">
@@ -10127,6 +10164,8 @@ function AppInner() {
           <div className="text-xs flex items-center gap-2 flex-wrap">
             <CalBadge master={master} sheet={sheet} calEvents={calEvents} date={date} />
             <SyncBadge />
+            <button className={`text-xs px-2 py-1 rounded border ${calSide ? "bg-violet-600 text-white border-violet-600" : "border-violet-300 text-violet-700 hover:bg-violet-50"}`} onClick={toggleCalSide} data-calside-btn
+              title="送迎表を見ながら、右側でカレンダーを見たり入力したりできます">📅 {calSide ? "右のカレンダーを閉じる" : "右にカレンダーを出す"}</button>
           </div>
         </div>
         <div className="px-3 flex gap-1 overflow-x-auto">
@@ -10783,7 +10822,7 @@ function AppInner() {
         if (!list.length) return null;
         const md = (d) => { const x = new Date(d + "T00:00:00"); return `${x.getMonth() + 1}月${x.getDate()}日(${DAYS[x.getDay()]})`; };
         return (
-          <div className="fixed right-3 top-20 z-50 w-80 max-w-[calc(100vw-24px)] rounded-xl border-2 border-rose-400 bg-white shadow-xl p-3 text-sm" role="alert" data-exp-popup>
+          <div className="fixed right-3 top-20 z-50 w-80 max-w-[calc(100vw-24px)] rounded-xl border-2 border-rose-400 bg-white shadow-xl p-3 text-sm" role="alert" data-exp-popup style={calSide ? { right: calSideW + 12 } : undefined}>
             <div className="font-bold text-rose-700 mb-1">⚠ Excel出力のあとにカレンダーの変更があります</div>
             {list.map((a) => (
               <div key={a.date} className="border-t border-stone-200 pt-1.5 mt-1.5">

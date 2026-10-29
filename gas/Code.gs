@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.29l',
+  VERSION: '2026.10.29m',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -35,7 +35,8 @@ function doGet(e) {
   return HtmlService.createHtmlOutput(html)
     .setTitle(page === 'sougei' ? '送迎表（' + APP.EDITION_LABEL[ed] + '）' : 'カレンダー')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+    // 送迎表の画面の右側に出すカレンダー（?page=calendar&embed=1）だけは、ほかの画面の中に出せるようにする
+    .setXFrameOptionsMode(page === 'calendar' && p.embed === '1' ? HtmlService.XFrameOptionsMode.ALLOWALL : HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
 /* 公開URL（…/exec）。Googleの getUrl() はテスト用の …/dev（作った人しか開けない）を返すことがあるので、
