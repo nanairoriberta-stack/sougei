@@ -2360,7 +2360,7 @@ function buildExcelHtml(master, sheet, date) {
   const known = new Set(master.staff.map((s) => s.id));
   const holdItems = [
     ...sheet.runs.filter((r) => r.staffId === HOLD_ID || !known.has(r.staffId)),
-    ...sheet.blocks.filter((b) => b.staffId === HOLD_ID || !known.has(b.staffId)),
+    ...sheet.blocks.filter((b) => !b.noteOnly && (b.staffId === HOLD_ID || !known.has(b.staffId))),
   ];
   const cols = [...actives, ...offs];
   const totalCols = 1 + cols.length + (holdItems.length ? 1 : 0);
@@ -2391,7 +2391,7 @@ function buildExcelHtml(master, sheet, date) {
     (cellMap[k] = cellMap[k] || []).push(txt);
   };
   sheet.runs.forEach((r) => putIt(r.staffId, r.time, itemText(r, true)));
-  sheet.blocks.forEach((b) => putIt(b.staffId, b.time, itemText(b, false)));
+  sheet.blocks.filter((b) => !b.noteOnly).forEach((b) => putIt(b.staffId, b.time, itemText(b, false)));
 
   const usedSlots = [];
   for (let m = GRID_START; m < GRID_END; m += SLOT) {
@@ -3265,7 +3265,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   const known = new Set(master.staff.map((s) => s.id));
   const holdCount =
     sheet.runs.filter((r) => r.staffId === HOLD_ID || !known.has(r.staffId) || !workingSet.has(r.staffId)).length +
-    sheet.blocks.filter((b) => b.staffId === HOLD_ID || !known.has(b.staffId) || !workingSet.has(b.staffId)).length;
+    sheet.blocks.filter((b) => !b.noteOnly && (b.staffId === HOLD_ID || !known.has(b.staffId) || !workingSet.has(b.staffId))).length;
   const cols = [...actives, ...offs];
   const hasHold = holdCount > 0;
   const nCols = 1 + cols.length + (hasHold ? 1 : 0);
@@ -3398,7 +3398,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     const st2 = master.staff.find((s) => s.id === r.staffId);
     put(rid, r.time, `${st2 ? st2.name : ""}便に同乗`, (RANK[r.kind] != null ? RANK[r.kind] : 1) + 0.05, r.ord != null ? r.ord + 0.05 : null, ownCarRankOf(r));
   }));
-  sheet.blocks.forEach((b) => put(b.staffId, b.time, itemText(b, false), b.kind === "help" ? RANK.help : RANK.block, b.ord, ownCarRankOf(b)));
+  sheet.blocks.filter((b) => !b.noteOnly).forEach((b) => put(b.staffId, b.time, itemText(b, false), b.kind === "help" ? RANK.help : RANK.block, b.ord, ownCarRankOf(b)));
   // 予定がある時間の範囲を求め、その範囲を30分刻みで全て行にする(8:00と8:30は別の行)
   const HOUR = 60;
   let minT = null, maxT = null;
@@ -4358,6 +4358,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
   const [staffRiderIds, setStaffRiderIds] = useState(initial.staffRiderIds || []);
   const [durMin, setDurMin] = useState(initial.durMin ? String(initial.durMin) : "");
   const [destDeptId, setDestDeptId] = useState(initial.destDeptId || "");
+  const [noteOnly, setNoteOnly] = useState(!!initial.noteOnly); // 表にはコマを出さず、特記事項・連絡事項にだけ残す(その他予定・ヘルプ)
   const [places, setPlaces] = useState({ ...(initial.places || {}) }); // その日だけの行き先変更 {利用者ID: 行き先}
   const [trainIds, setTrainIds] = useState(initial.trainUserIds || []); // この便の中で訓練迎え/訓練送りの人(別枠)
   const [bothIds, setBothIds] = useState(initial.trainBothIds || []); // 訓練だが通常の迎え/送りも兼ねる人
@@ -4380,7 +4381,8 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
   const cap = veh ? (wcCount > 0 ? veh.capWc : veh.capNormal) : null;
   const totalRide = userIds.length + staffRiderIds.length + 1; // 運転手を含める
 
-  const save = () => {
+  const save = (opt) => {
+    const no = opt && opt.noteOnly !== undefined ? opt.noteOnly : noteOnly;
     if (toMin(time) == null) { notify("時刻を「8:30」の形式で入力してください", "warn"); return; }
     if (!effStaffId) { notify("担当職員(または保留)を選んでください", "warn"); return; }
     if (isOwn) {
@@ -4412,10 +4414,10 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
       const autoLabel = uNames.length ? uNames.join("・") + "ヘルプ" : (label.trim() || "ヘルプ");
       // 自車が選択されていれば、現在の担当職員の自車に合わせる
       const vId = String(vehicleId).startsWith("own:") && effStaffId && effStaffId !== HOLD_ID ? "own:" + effStaffId : vehicleId;
-      onSave({ target: "blocks", item: { id: initial.id || uid(), kind: baseKind, time, staffId: effStaffId, label: autoLabel, vehicleId: vId, userIds, note: note.trim() || undefined, durMin: durMin ? Number(durMin) : undefined, destDeptId: destDeptId || undefined } });
+      onSave({ target: "blocks", item: { id: initial.id || uid(), kind: baseKind, time, staffId: effStaffId, label: autoLabel, vehicleId: vId, userIds, note: note.trim() || undefined, durMin: durMin ? Number(durMin) : undefined, destDeptId: destDeptId || undefined, noteOnly: no || undefined } });
     } else {
       if (!label.trim()) { notify("内容を入力してください", "warn"); return; }
-      onSave({ target: "blocks", item: { id: initial.id || uid(), kind: baseKind, time, staffId: effStaffId, label: label.trim(), vehicleId: vehicleId && !String(vehicleId).startsWith("own:") ? vehicleId : "", durMin: durMin ? Number(durMin) : undefined, destDeptId: destDeptId || undefined } });
+      onSave({ target: "blocks", item: { id: initial.id || uid(), kind: baseKind, time, staffId: effStaffId, label: label.trim(), vehicleId: vehicleId && !String(vehicleId).startsWith("own:") ? vehicleId : "", durMin: durMin ? Number(durMin) : undefined, destDeptId: destDeptId || undefined, noteOnly: no || undefined } });
     }
   };
 
@@ -4771,10 +4773,21 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
         </Field>
       )}
 
+      {(isHelp || baseKind === "block") && (
+        <label className="flex items-start gap-2 mt-3 text-sm text-stone-700 cursor-pointer" data-noteonly-box>
+          <input type="checkbox" className="mt-0.5" checked={noteOnly} onChange={(e) => setNoteOnly(e.target.checked)} data-noteonly />
+          <span>送迎表の<b>表にはコマを出さない</b>(下の特記事項・連絡事項にだけ残す。例:黒田給食利用)</span>
+        </label>
+      )}
       <div className="flex justify-between mt-4 sticky bottom-0 bg-white border-t border-stone-200 py-2 -mx-4 px-4 rounded-b-xl">
-        <div>
+        <div className="flex gap-2">
           {initial.id && (
             <button className={btnDanger} onClick={() => onDelete()}>削除</button>
+          )}
+          {initial.id && (isHelp || baseKind === "block") && (
+            initial.noteOnly
+              ? <button className={btnSec} data-note-back onClick={() => save({ noteOnly: false })}>表に戻す</button>
+              : <button className={btnSec} data-note-only onClick={() => { save({ noteOnly: true }); notify("表からコマだけ消しました。特記事項・連絡事項には残っています(下の「特記事項・男性カバー・配車を表示」の中から表に戻せます)"); }} title="表からはコマを消し、下の特記事項・連絡事項にだけ残します">コマだけ消す(特記事項に残す)</button>
           )}
         </div>
         <div className="flex gap-2">
@@ -6374,7 +6387,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
   data.runs.forEach((r) => put(r.staffId, r.time, { type: "run", item: r }));
   // 同乗職員の列にも表示(クリックで元の便を編集)
   data.runs.forEach((r) => (r.staffRiderIds || []).forEach((rid) => put(rid, r.time, { type: "rider", item: r, riderId: rid })));
-  data.blocks.forEach((b) => put(b.staffId, b.time, { type: "block", item: b }));
+  data.blocks.filter((b) => !b.noteOnly).forEach((b) => put(b.staffId, b.time, { type: "block", item: b }));   // 「コマだけ消す」にしたものは表に出さない
 
   const holdCount = Object.keys(cellMap).filter((k) => k.startsWith(HOLD_ID)).reduce((a, k) => a + cellMap[k].length, 0);
 
@@ -6857,7 +6870,7 @@ function maleOnlyHelpWarn(master, sheetData) {
 
 function blockOverlapWarn(master, sheetData) {
   const out = [];
-  const bl = (sheetData.blocks || []).filter((b) => b.staffId && b.staffId !== HOLD_ID && toMin(b.time) != null);
+  const bl = (sheetData.blocks || []).filter((b) => !b.noteOnly && b.staffId && b.staffId !== HOLD_ID && toMin(b.time) != null);
   const byStaff = {};
   bl.forEach((b) => { (byStaff[b.staffId] = byStaff[b.staffId] || []).push(b); });
   Object.entries(byStaff).forEach(([sid, list]) => {
@@ -9768,7 +9781,7 @@ function AppInner() {
     );
     const isHold = (sid) => sid !== REQ_ID && (sid === HOLD_ID || !known.has(sid) || !working.has(sid));
     const holdCount =
-      sheetData.runs.filter((r) => isHold(r.staffId)).length + sheetData.blocks.filter((b) => isHold(b.staffId)).length;
+      sheetData.runs.filter((r) => isHold(r.staffId)).length + sheetData.blocks.filter((b) => !b.noteOnly && isHold(b.staffId)).length;
     // 送迎漏れ(利用予定日なのに迎え・送りが未入力)
     const absent = sheetData.userAbsent || {};
     const scheduled = sheetMaster.users.filter((u) => (u.days || []).includes(wd) && !absent[u.id]);
@@ -10255,8 +10268,21 @@ function AppInner() {
 
                 {panelsOpen && (() => {
                   const { userNotes, bizNotes } = buildAutoNotes(sheetMaster, sheet.blocks || []);
+                  const noteOnlyList = (sheet.blocks || []).filter((b) => b.noteOnly);
                   return (
                   <div className="bg-white border border-stone-300 rounded-lg p-3 mt-3">
+                    {noteOnlyList.length > 0 && (
+                      <div className="mb-3 bg-stone-50 border border-stone-300 rounded p-2" data-noteonly-list>
+                        <div className="text-[11px] font-bold text-stone-700 mb-1">📝 表にはコマを出していない予定(特記事項・連絡事項にだけ出ます)</div>
+                        {noteOnlyList.map((b) => (
+                          <div key={b.id} className="flex items-center gap-2 text-xs py-0.5">
+                            <button className="text-left underline decoration-dotted text-stone-700 hover:text-sky-700" onClick={() => setModal({ type: "item", initial: { ...b }, editTarget: "blocks" })}>{b.label} {b.time}〜</button>
+                            <button className="px-1.5 py-0.5 rounded border border-stone-300 bg-white hover:bg-sky-50" data-note-restore={b.id}
+                              onClick={() => updateSheet((prev) => ({ ...prev, blocks: (prev.blocks || []).map((x) => (x.id === b.id ? (({ noteOnly, ...rest }) => rest)(x) : x)) }))}>表に戻す</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="font-bold text-stone-700 text-sm mb-2">特記事項(利用者)</div>
                     <textarea className={`${inputCls} h-16`} value={sheet.notes}
                       onChange={(e) => updateSheet((prev) => ({ ...prev, notes: e.target.value }))}
@@ -11678,7 +11704,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
     );
     const isHold = (sid) => sid !== REQ_ID && (sid === HOLD_ID || !known.has(sid) || !working.has(sid));
     const holdCount =
-      sheetData.runs.filter((r) => isHold(r.staffId)).length + sheetData.blocks.filter((b) => isHold(b.staffId)).length;
+      sheetData.runs.filter((r) => isHold(r.staffId)).length + sheetData.blocks.filter((b) => !b.noteOnly && isHold(b.staffId)).length;
     // 送迎漏れ(利用予定日なのに迎え・送りが未入力)
     const absent = sheetData.userAbsent || {};
     const scheduled = sheetMaster.users.filter((u) => (u.days || []).includes(wd) && !absent[u.id]);

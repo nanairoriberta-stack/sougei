@@ -96,6 +96,10 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - 生活介護のその日の表がまだ無いときは作らない（りんく側に「表ができたら入ります」`pending`）。表ができた保存のときに入る
 - りんく側の便に `🤝生活介護：八壁・セレナで対応`（`reqStatusText`・`data-reqst`）。依頼の便は「担当未定」の警告・保留の数に入れない
 
+## 送迎表の「コマだけ消す」（2026-10-29）
+その他予定・ヘルプの `noteOnly:true` は表（画面の `TimeGrid`・Excel `buildWorkbook`・`buildExcelHtml`）にコマを出さず、`buildAutoNotes`（特記事項・連絡事項の自動欄）にだけ出る（例：黒田給食利用）。
+編集画面のチェック／「コマだけ消す(特記事項に残す)」ボタン（`data-note-only`）。保留の数・重なりの警告にも数えない。下の「特記事項…を表示」の中に一覧（`data-noteonly-list`）と「表に戻す」
+
 ## データの置き方（スプレッドシート）
 - `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）
   - 送迎表：`kv/<encKey(キー)>`。キーは `master`（利用者・職員・車両・部署・ルール）/ `sheet:YYYY-MM-DD` / `pattern:0〜6`（週間パターン）。版の頭 `v2:`/`v3:`

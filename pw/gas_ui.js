@@ -15,6 +15,8 @@ const D = path.join(__dirname, "../gas/out");
   const date = "2026-11-02";
   for (const ed of ["v1", "v2"]) { const E = engFor(ed), ns = ed === "v1" ? "" : "v2:"; const m = E.mergeSeedMaster(null, E.seedMaster()); api(t, "kv.cas", [{ key: ns + "master", rev: 0, value: m }]); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.mon); api(t, "kv.cas", [{ key: ns + "sheet:" + date, rev: 0, value: Object.assign(E.emptySheet(), { runs: p.runs, blocks: p.blocks }) }]); }
   { const m1 = api(t, "kv.get", ["master"]).data.value; api(t, "kv.cas", [{ key: "v3:master", rev: 0, value: { ...m1, users: [{ ...m1.users[0], id: "k_hoshino", name: "星野こども" }], staff: m1.staff.slice(0, 3) } }]); }   // りんく・ぷれいす版（放課後デイ）の利用者
+  { const s0 = api(t, "kv.get", ["sheet:" + date]).data.value, m0 = api(t, "kv.get", ["master"]).data.value;   // その他予定「黒田給食利用」（コマだけ消すの試し）
+    api(t, "kv.merge", [{ key: "sheet:" + date, base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, { id: "blkNote1", kind: "block", time: "12:00", staffId: m0.staff.find((x) => x.name === "八壁").id, label: "黒田給食利用", vehicleId: "" }] } }]); }
   const yo = rows().find((r) => r[1] === "余村慎");
   const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js" };
   const b = await chromium.launch();
@@ -97,6 +99,20 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.locator("[data-rulefrom]").screenshot({ path: "g_rulefrom.png" });
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(400);
     console.log("ルールの使い始める日:", txt.split("\n")[1]); }
+  // その他予定「コマだけ消す」：表からは消えて、特記事項には残る。下の一覧から表に戻せる
+  { assert.ok(await P.pg.locator('[data-item-id="blkNote1"]').isVisible(), "はじめは表にコマ");
+    await P.pg.click('[data-item-id="blkNote1"]'); await P.pg.waitForTimeout(300);
+    await P.pg.click("[data-note-only]"); await P.pg.waitForTimeout(800);
+    assert.strictEqual(await P.pg.locator('[data-item-id="blkNote1"]').count(), 0, "表からコマが消える");
+    let b1 = null; for (let i = 0; i < 20 && !(b1 && b1.noteOnly); i++) { await P.pg.waitForTimeout(500); b1 = api(t, "kv.get", ["sheet:" + date]).data.value.blocks.find((b) => b.id === "blkNote1"); }
+    assert.ok(b1 && b1.noteOnly, "データは残る（サーバーにも保存）");
+    const tg = P.pg.locator('button:has-text("特記事項・男性カバー・配車を表示")'); if (await tg.count()) { await tg.click(); await P.pg.waitForTimeout(300); }
+    assert.ok((await P.pg.locator("[data-noteonly-list]").innerText()).includes("黒田給食利用"), "表に出していない予定の一覧");
+    assert.ok((await P.pg.locator("#root").innerText()).includes("黒田給食利用 12:00〜"), "特記事項（自動）に残る");
+    await P.pg.locator("[data-noteonly-list]").screenshot({ path: "g_noteonly.png" });
+    await P.pg.click('[data-note-restore="blkNote1"]'); await P.pg.waitForTimeout(800);
+    assert.ok(await P.pg.locator('[data-item-id="blkNote1"]').isVisible(), "表に戻す");
+    console.log("コマだけ消す: 表から消えて特記事項に残る → 表に戻す"); }
   // りんく・ぷれいす版：担当を「生活介護へ依頼」にした便 → 生活介護（11/1からは新体制版）の保留欄に【りんく依頼】。担当・車が決まるとりんく側の便に出る
   { const v3m = api(t, "kv.get", ["v3:master"]).data.value, kid = v3m.users[0];
     api(t, "kv.merge", [{ key: "v3:sheet:" + date, base: null, baseKnown: false, mine: { runs: [{ id: "rqUI", kind: "meet", time: "15:00", staffId: "__req__", vehicleId: "", userIds: [kid.id], staffRiderIds: [], note: "" }], blocks: [] } }]);
