@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.29f";
+const APP_VERSION="2026.10.29g";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -61,7 +61,7 @@ async function renderSafe(){
     const ps=await profiles(vis.flatMap(e=>e.members));
     if(my!==seq)return;
     if(S.view==="month")renderGrid(vis);else if(S.view==="list")renderList(vis,ps);else renderTrash();
-    renderPanel(vis,ps);renderDay(vis);
+    renderPanel(vis,ps);renderDay(vis);if(SR.open)drawSearchResults();
     if(ed)liveCheck();
   }catch(e){
     $("app").insertAdjacentHTML("afterbegin",`<div class="render-err" style="grid-column:1/-1">画面を表示できませんでした（${esc(e&&e.message)}）。入力済みのデータは端末に保存されています。再読み込みしてください。</div>`);
@@ -152,6 +152,47 @@ document.addEventListener("touchend",()=>{if(!dsDrag)return;const d=dsDrag;dsDra
   if(d.dy>90||(d.dy>30&&Date.now()-d.t<250)){sh.style.transform="translateY(100%)";setTimeout(()=>{S.dayOpen=false;render()},180)}
   else sh.style.transform="";
 });
+/* ---------- 予定の検索（TimeTreeのように）：上の🔍から。1年前〜2年先の予定を、題名・名前・場所・メモなどで探す ----------
+   サーバー（cal.search）の結果に、この端末の最新（まだ送っていない変更・削除）を重ねる。いまの事業のタブの予定だけ */
+const SR={open:false,q:"",items:[],loading:false,err:"",more:false,seq:0,timer:0};
+function openSearch(){SR.open=true;document.documentElement.classList.add("srchopen");renderSearch();setTimeout(()=>{const i=$("sq");if(i)i.focus()},30)}
+function closeSearch(){SR.open=false;clearTimeout(SR.timer);SR.seq++;$("searchRoot").innerHTML="";document.documentElement.classList.remove("srchopen")}
+const srTerms=()=>SR.q.split(/[\s\u3000]+/).map(kanaNorm).filter(Boolean);
+function srMatch(e,terms){const sg=e.sg||{};const hay=kanaNorm([e.title,e.place,e.memo,(e.tanto||[]).join(" "),(sg.staff||[]).join(" "),(sg.users||[]).join(" "),sg.reason,sg.note,sg.meetPlace,sg.sendPlace,LMAP[e.label]?.n].join(" "));return terms.every(t=>hay.includes(t))}
+function srList(){
+  const terms=srTerms();if(!terms.length)return[];
+  const ok=e=>e&&!e.deleted&&srMatch(e,terms)&&(S.biz==="all"||bizOf(e)===S.biz);
+  const local=new Map(allEvents().map(e=>[e.id,e])),out=new Map();
+  for(const e of SR.items){const l=local.get(e.id)||e;if(ok(l))out.set(l.id,l)}
+  for(const e of local.values())if(ok(e))out.set(e.id,e);
+  return[...out.values()].sort((a,b)=>a.date.localeCompare(b.date)||cmp(a,b));
+}
+function doSearch(){
+  clearTimeout(SR.timer);const q=SR.q.trim();const my=++SR.seq;
+  if(!q){SR.items=[];SR.loading=false;SR.more=false;drawSearchResults();return}
+  SR.loading=true;drawSearchResults();
+  SR.timer=setTimeout(async()=>{let r=null,err="";
+    try{if(window.SGHost)r=await window.SGHost.call("cal.search",{q,biz:S.biz==="all"?"":S.biz})}catch(e){err="通信できないため、この端末で読み込んだ月の予定だけから探しています。"}
+    if(my!==SR.seq)return;SR.items=r?r.items||[]:[];SR.more=!!(r&&r.more);SR.err=err;SR.loading=false;drawSearchResults()},300);
+}
+function hl(t){let h=esc(t);for(const w of SR.q.split(/[\s\u3000]+/).filter(Boolean)){const ew=esc(w);if(ew&&!/[&;]/.test(ew))h=h.split(ew).join(`<b>${ew}</b>`)}return h}   // 題名の中の言葉を太字に
+function drawSearchResults(){
+  const box=$("sres");if(!box)return;
+  const clr=document.querySelector("[data-sr-clear]");if(clr)clr.hidden=!SR.q;
+  if(!SR.q.trim()){box.innerHTML=`<div class="empty">名前・題名・場所などで探せます（1年前〜2年先の予定）。<br>空白で区切ると、すべての言葉を含む予定だけ出ます。</div>`;return}
+  const list=srList(),g=new Map();for(const e of list){if(!g.has(e.date))g.set(e.date,[]);g.get(e.date).push(e)}
+  let h="";for(const[d,evs]of g){const x=parse(d);
+    h+=`<div class="sr-day"><div class="sr-date"><b>${x.getFullYear()}年${x.getMonth()+1}月${x.getDate()}日(${WD[x.getDay()]})</b><span>${evs.length}件の予定</span></div>${evs.map(e=>`<button class="sr-row" data-srev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="ds-bar"></span><span class="ds-body"><span class="sr-t">${bizTag(e)}${hl(e.title)}</span><small>${esc(timeText(e))}${e.place?" ・ "+esc(e.place):""}</small></span></button>`).join("")}</div>`}
+  box.innerHTML=(SR.err?`<p class="sr-note">${esc(SR.err)}</p>`:"")+(h||`<div class="empty">${SR.loading?"探しています…":"見つかりませんでした"}</div>`)+(SR.loading&&h?`<p class="sr-note">ほかの月も探しています…</p>`:"")+(SR.more?`<p class="sr-note">300件より多く見つかりました。言葉を足してしぼってください。</p>`:"");
+}
+function renderSearch(){
+  if(!SR.open)return;
+  if(!$("sq"))$("searchRoot").innerHTML=`<div class="overlay sr-ov" id="srOv"><div class="sheet srsheet" role="dialog" aria-modal="true" aria-label="予定を検索">
+    <div class="sr-head"><button class="icon-btn" data-sr-close aria-label="閉じる">×</button><h2>予定を検索</h2><span class="sr-sp"></span></div>
+    <div class="sr-bar"><span class="sr-ico" aria-hidden="true">🔍</span><input id="sq" class="input" type="search" enterkeyhint="search" placeholder="名前・題名・場所など" autocomplete="off" value="${esc(SR.q)}"><button type="button" class="sr-clear" data-sr-clear aria-label="消す" hidden>×</button></div>
+    <div class="sr-res" id="sres"></div></div></div>`;
+  drawSearchResults();
+}
 function renderList(vis,ps){
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
   for(let i=0;i<42;i++){const d=addDays(start,i);if(d.getMonth()!==tm)continue;const k=ymd(d),evs=on(vis,k);if(!evs.length)continue;
@@ -395,7 +436,7 @@ function readForm(){
   d.start=$("f-start").value;d.end=$("f-end").value;d.label=document.querySelector('input[name="f-label"]:checked')?.value||"other";d.biz=document.querySelector('input[name="f-biz"]:checked')?.value||bizOf(d);d.place=$("f-place")?$("f-place").value.trim():d.place;d.memo=$("f-memo").value;readSg();fixTimes(d);
 }
 function liveCheck(){
-  if(!ed||!ed.base||!ed.id)return;const cur=core?core.overlay(S.server)[ed.id]:S.server[ed.id];
+  if(!ed||!ed.base||!ed.id||!S.loaded)return;const cur=core?core.overlay(S.server)[ed.id]:S.server[ed.id];
   const changed=!cur||cur.deleted||(cur.rev!==ed.base.rev&&!cur.pending);
   if(changed!==ed.changed){ed.changed=changed;const b=$("liveNote");if(b)b.hidden=!changed}
 }
@@ -546,6 +587,7 @@ async function planRestore(file){
 
 /* ---------- 操作 ---------- */
 $("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
+$("searchBtn").onclick=openSearch;
 $("todayBtn").onclick=()=>{TODAY=ymd(new Date());S.sel=TODAY;const c=new Date(new Date().getFullYear(),new Date().getMonth(),1);if(+c!==+S.cursor){S.cursor=c;subscribe()}render()};
 $("vMonth").onclick=()=>{S.view="month";render()};$("vList").onclick=()=>{S.view="list";render()};$("vTrash").onclick=()=>{S.view="trash";render()};
 $("addBtn").onclick=()=>openEditor(null,S.sel);
@@ -559,6 +601,12 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-draft-open]")){const d=draftGet();if(d){const cur=d.id?allEvents().find(x=>x.id===d.id):null;openEditor(cur||d.base||null,null,d)}return}
   if(t.closest("[data-draft-drop]")){draftDrop();render();return}
   if(t.id==="dayOv"||t.closest("[data-day-close]")){S.dayOpen=false;render();return}
+  if(t.closest("[data-sr-close]")){closeSearch();return}
+  if(t.closest("[data-sr-clear]")){SR.q="";const i=$("sq");if(i){i.value="";i.focus()}doSearch();return}
+  const srEl=t.closest("[data-srev]");
+  if(srEl){const e=srList().find(x=>x.id===srEl.dataset.srev);if(e){   // 検索した予定を開く。その月のカレンダーへ移ってから開く（閉じると検索に戻る）
+    const d=parse(e.date);S.sel=e.date;if(d.getMonth()!==S.cursor.getMonth()||d.getFullYear()!==S.cursor.getFullYear()){S.cursor=new Date(d.getFullYear(),d.getMonth(),1);subscribe()}
+    openEditor((allEvents().find(x=>x.id===e.id))||e)}return}
   const cellEl=t.closest(".cell[data-day]");
   if(cellEl&&matchMedia("(max-width:560px)").matches){S.sel=cellEl.dataset.day;S.dayOpen=true;render();return}   // スマホは日を押すとその日の一覧
   const evEl=t.closest("[data-ev]");
@@ -601,6 +649,8 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Enter"&&(e.target.id==="f-sgq-staff"||e.target.id==="f-sgq-users")){e.preventDefault();const b=$("sghits-"+e.target.id.slice(6))?.querySelector("[data-sgpick]");if(b)b.click();return}
   if(e.key==="Escape"&&$("ov")){if(ed)closeEditor(true);else $("sheetRoot").innerHTML="";return}
   if(e.key==="Escape"&&S.dayOpen){S.dayOpen=false;render();return}
+  if(e.key==="Escape"&&SR.open){closeSearch();return}
+  if(e.key==="Enter"&&e.target.id==="sq"){e.target.blur();return}   // 検索ボタンでキーボードを閉じて結果を見る
   const day=e.target.closest?.("[data-day]");if(day&&(e.key==="Enter"||e.key===" ")){e.preventDefault();S.sel=day.dataset.day;render()}
 });
 document.addEventListener("change",e=>{if(ed&&e.target.name==="f-biz"){ed.d.biz=e.target.value;["users"].forEach(k=>{const i=$("f-sgq-"+k);if(i&&document.activeElement===i)sgHits(k,i.value)})}
@@ -616,7 +666,7 @@ document.addEventListener("change",e=>{if(ed&&e.target.name==="f-biz"){ed.d.biz=
   draftSave()});
 async function search(q){const h=$("hits");if(!h||!user)return;let res=[];try{res=await user.search(q)}catch{}if(!ed)return;res=res.filter(p=>!ed.d.members.includes(p.id));
   h.innerHTML=res.length?res.map(p=>`<button type="button" data-pick="${esc(p.id)}"><img src="${esc(p.avatarUrl)}" alt=""><span>${esc(p.name)}${p.isMe?"（自分）":""}</span></button>`).join(""):`<div class="by" style="padding:6px 8px">${q?"見つかりません":"名前を入力してください"}</div>`;h.hidden=false}
-document.addEventListener("input",e=>{if(e.target.id==="f-sgq-staff"||e.target.id==="f-sgq-users"){sgHits(e.target.id.slice(6),e.target.value);return}if(e.target.id==="f-member")search(e.target.value);else if(ed&&e.target.closest("#evForm"))draftSave()});
+document.addEventListener("input",e=>{if(e.target.id==="sq"){SR.q=e.target.value;doSearch();return}if(e.target.id==="f-sgq-staff"||e.target.id==="f-sgq-users"){sgHits(e.target.id.slice(6),e.target.value);return}if(e.target.id==="f-member")search(e.target.value);else if(ed&&e.target.closest("#evForm"))draftSave()});
 // スマホ：キーボードが出たら画面の高さを見えている所に合わせ、打っている欄を上の方へ（TimeTreeのように）
 const MOB=()=>matchMedia("(max-width:560px)").matches;
 function fitVV(){const vv=window.visualViewport,r=document.documentElement;if(!vv)return;

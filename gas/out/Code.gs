@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.29f',
+  VERSION: '2026.10.29g',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -195,6 +195,7 @@ var HANDLERS = {
   'kv.get': function (me, a) { return kvGet_(String(a[0])); },
   'kv.getMany': function (me, a) { var idx = docIndex_(); return (a[0] || []).slice(0, 60).map(function (k) { var d = docGet_(kvPath_(String(k)), idx); return { key: String(k), rev: d ? d.rev : 0, value: d ? d.value.v : null }; }); },
   'names.list': function (me) { return namesList_(); },
+  'cal.search': function (me, a) { return calSearch_(a[0] || {}); },
   'app.base': function (me) { return appUrl_(); },   // 画面どうしのリンクに使う公開URL（開いたときに届かなかった場合の予備）
   'kv.importMany': function (me, a) { return kvImportMany_(me, a[0] || []); },
   'kv.list': function (me, a) { return kvList_(String(a[0] || '')); },
@@ -316,6 +317,25 @@ function staffList_() {
     .map(function (r) { return { no: normNo_(r[0]), name: String(r[1]).trim() }; });
 }
 /* カレンダーで選ぶ利用者名（3つの版の合計）。マスタ全体（住所などのメモ）は配らない */
+/* 予定の検索（1年前〜2年先）。題名・場所・メモ・担当・送迎表の対象（職員・利用者・理由・行き先）から探す。
+   ひらがな・カタカナ・全角半角・空白の違いはそろえ、空白で区切った言葉はすべて含むものだけ。300件まで */
+function calSearch_(q) {
+  var norm = function (s) { return String(s || '').normalize('NFKC').replace(/[\u30a1-\u30f6]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0x60); }).replace(/\s+/g, '').toLowerCase(); };
+  var terms = String(q.q || '').slice(0, 40).split(/[\s\u3000]+/).map(norm).filter(Boolean);
+  if (!terms.length) return { items: [], more: false };
+  var day = function (n) { var d = new Date(today_() + 'T00:00:00'); d.setDate(d.getDate() + n); return Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd'); };
+  var events = TCCore.mergeDays(docsQuery_({ col: 'days', from: day(-366), to: day(731) }));
+  var biz = q.biz === 'houkago' || q.biz === 'seikatsu' ? q.biz : '';
+  var hits = Object.keys(events).map(function (k) { return events[k]; }).filter(function (e) {
+    if (!e || e.deleted) return false;
+    if (biz && (e.biz === 'houkago' ? 'houkago' : 'seikatsu') !== biz) return false;
+    var sg = e.sg || {};
+    var hay = norm([e.title, e.place, e.memo, (e.tanto || []).join(' '), (sg.staff || []).join(' '), (sg.users || []).join(' '), sg.reason, sg.note, sg.meetPlace, sg.sendPlace].join(' '));
+    return terms.every(function (t) { return hay.indexOf(t) >= 0; });
+  });
+  hits.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.start || '').localeCompare(String(b.start || '')); });
+  return { items: hits.slice(0, 300), more: hits.length > 300 };
+}
 function namesList_() {
   var c = CacheService.getScriptCache(), hit = c.get('names3');
   if (hit) return JSON.parse(hit);

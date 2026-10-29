@@ -57,7 +57,7 @@ bash test.sh         # Nodeのテスト全部
 bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ```
 - テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-excel.js`（送迎表のExcel出力に版が入る）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎の変更/迎え先・送り先/休日出勤/勤務時間変更）、`test-agent.js`（AIと相談の適用 10件）、
-  `gas/test-gas.js`（サーバー 28件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
+  `gas/test-gas.js`（サーバー 29件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
   `mcp/test-mcp.js`（公式MCPクライアントで35件。Googleの302転送も再現）、`pw/gas_ui.js`・`pw/agent_ui.js`（画面）
 - `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
 - `sougei.jsx` の関数をテスト/サーバーで使うときは `build.sh` の `EXP` と `mcp/engine_entry.js` に名前を足す
@@ -158,6 +158,8 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 スマホの月表示（2026-10-29）：バーに題名（1マス4件まで）、日付の数字は小さめ。日を押すと下からその日の一覧（`renderDay`・`#dayRoot`・`S.dayOpen`、TimeTree風：時刻・色の線・題名・ラベル/場所）、右上の＋（`data-add-day`）でその日に予定を入れる。入力画面（`#sheetRoot`）は一覧の上に重なり、閉じると一覧に戻る。つまみ・日付の部分（一覧がいちばん上なら一覧も）を下へ引くと閉じる（`dsDrag`、90px以上か素早く引く）。開いている間は `html.dayopen` で裏の画面を止め、一覧の外の `touchmove` は止める。
 二重に入れない（2026-10-29）：新しい予定の保存時に `dupOf`（同じラベル・事業・種類・半休・開始時刻・日が重なる・同じ職員/利用者（いなければ同じ題名））があれば「同じ予定がもう入っています」と出し、もう一度「保存」で入れる（`ed.dupWarned`）。
 新しい予定を開いたときに `SGHost.pollOnce()`、カレンダーの読み直しは20秒ごと（以前は60秒）。
+予定の検索（2026-10-29）：上の🔍（`#searchBtn`）→ 全画面（PCは真ん中）の「予定を検索」（`#searchRoot`・`SR`）。サーバー `cal.search`（`calSearch_`：1年前〜2年先、題名・場所・メモ・担当・送迎表の対象（職員・利用者・理由・行き先）、`kanaNorm` と同じそろえ方、空白で区切った言葉はすべて含む、300件まで、事業のタブでしぼる）に、端末の最新（未送信・削除）を重ねる（`srList`）。
+日付ごとに「◯件の予定」、題名の言葉を太字。押すとその月へ移って開き、閉じると検索に戻る。読み込み前は `liveCheck` しない（ほかの月の予定で「変更されました」が出ないように）。
 参加者（members）の入力欄は出さない（既存のデータは残す）。「自分の予定」は参加者・担当・送迎表の対象職員に自分が入っているもの。
 
 ## AI

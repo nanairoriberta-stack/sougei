@@ -9,6 +9,7 @@
     <div class="month-label" id="monthLabel"></div>
     <button class="icon-btn" id="next" aria-label="次の月">›</button>
     <button class="ghost" id="todayBtn">今日</button>
+    <button class="icon-btn" id="searchBtn" aria-label="予定を検索" title="予定を検索">🔍</button>
   </div>
   <div class="seg" role="group" aria-label="表示切替">
     <button id="vMonth" aria-pressed="true">月</button>
@@ -32,6 +33,7 @@
 </main>
 
 <div id="dayRoot"></div>
+<div id="searchRoot"></div>
 <div id="sheetRoot"></div>
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="restoreFile" accept=".json,application/json" hidden>

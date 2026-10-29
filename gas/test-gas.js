@@ -491,6 +491,27 @@ async function bootstrap() {
     return `依頼→保留欄に【りんく依頼】→ 担当「${st.name}・${veh.name}」がりんく側に → 時刻変更・取り消し（【取消】）・表がまだ無い日も`;
   });
 
+  await test("予定の検索（ほかの月も・ひらがな/カタカナ・空白で絞る・事業・削除は出ない）", async () => {
+    const { admin } = await bootstrap();
+    const ev = (id, date, title, o) => admin.call("cal.apply", { kind: "upsert", opId: "op_s" + id, id: "ev_s" + id, baseRev: null, ev: Object.assign({ title, date, endDate: date, allDay: true, start: "", end: "", label: "other", place: "", memo: "", members: [] }, o || {}) });
+    await ev("0000001", "2026-10-25", "黒田さんパソコン支援　余村慎　翌週に変更", { allDay: false, start: "14:00", end: "16:00" });
+    await ev("0000002", "2026-11-01", "黒田さんパソコン支援　余村慎", { allDay: false, start: "14:00", end: "16:00" });
+    await ev("0000003", "2026-12-23", "余村慎検診");
+    await ev("0000004", "2027-03-03", "会議", { place: "ヘルプ室", biz: "houkago" });
+    await ev("0000005", "2026-11-10", "八壁 休み", { label: "leave", sg: { type: "staff_off", staff: ["余村慎"] } });
+    await ev("0000006", "2026-11-11", "消した予定 余村慎");
+    await admin.call("cal.apply", { kind: "delete", opId: "op_sdel0001", id: "ev_s0000006", date: "2026-11-11", baseRev: 1 });
+    const q = async (text, biz) => (await admin.call("cal.search", { q: text, biz })).items.map((e) => e.date + " " + e.title);
+    const r1 = await q("余村");
+    assert.deepStrictEqual(r1, ["2026-10-25 黒田さんパソコン支援　余村慎　翌週に変更", "2026-11-01 黒田さんパソコン支援　余村慎", "2026-11-10 八壁 休み", "2026-12-23 余村慎検診"], r1.join(" / "));
+    assert.deepStrictEqual(await q("余村 パソコン 翌週"), ["2026-10-25 黒田さんパソコン支援　余村慎　翌週に変更"], "空白で区切ると全部の言葉を含むもの");
+    assert.deepStrictEqual(await q("へるぷ"), ["2027-03-03 会議"], "ひらがなでカタカナの場所");
+    assert.deepStrictEqual(await q("会議", "seikatsu"), [], "事業のタブでしぼる");
+    assert.deepStrictEqual(await q("会議", "houkago"), ["2027-03-03 会議"]);
+    assert.deepStrictEqual(await q(" "), []);
+    return `「余村」で${r1.length}件（10月〜12月、職員休みの対象も）・削除した予定は出ない`;
+  });
+
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
     const { g, admin } = await bootstrap();
     const date = "2026-11-25"; const E = engFor("v1"); const m = await admin.kv().get("master"); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);

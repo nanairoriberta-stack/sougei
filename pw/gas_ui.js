@@ -265,6 +265,22 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(!(await A.pg.locator("#evForm").count()), "もう一度押すと入る");
     assert.strictEqual(await A.pg.locator("#panel .ev-row", { hasText: "会議" }).count(), n0 + 1);
     console.log("二重の確認:", msg); }
+  { // 予定の検索：上の🔍。ほかの月の予定も出る。押すと開いて、閉じると検索に戻る
+    api(t, "cal.apply", [{ kind: "upsert", opId: "op_srch0001", id: "ev_srch0001", baseRev: null, ev: { title: "余村慎検診", date: "2026-12-23", endDate: "2026-12-23", allDay: true, start: "", end: "", label: "other", place: "", memo: "", members: [] } }]);
+    await A.pg.click("#searchBtn"); await A.pg.waitForTimeout(300);
+    assert.ok(await A.pg.locator("#sq").isVisible() && await A.pg.evaluate(() => document.activeElement && document.activeElement.id === "sq"), "検索の欄にすぐ打てる");
+    await A.pg.fill("#sq", "余村"); await A.pg.waitForTimeout(1500);
+    const dates = await A.pg.locator(".sr-date b").allInnerTexts(), titles = await A.pg.locator(".sr-row .sr-t").allInnerTexts();
+    assert.ok(dates.includes("2026年12月23日(水)") && titles.some((x) => x.includes("余村慎検診")), "ほかの月も: " + dates.join(","));
+    assert.ok((await A.pg.locator(".sr-row .sr-t b").first().innerText()) === "余村", "言葉を太字");
+    await A.pg.screenshot({ path: "g_search.png" });
+    await A.pg.click('.sr-row:has-text("余村慎検診")'); await A.pg.waitForTimeout(800);
+    assert.ok(await A.pg.locator("#evForm").isVisible(), "押すと開く"); assert.strictEqual(await A.pg.inputValue("#f-date"), "2026-12-23");
+    assert.ok(await A.pg.locator("#liveNote").isHidden(), "ほかの月の予定でも「変更されました」は出ない");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); assert.ok(await A.pg.locator("#sq").isVisible(), "閉じると検索に戻る");
+    await A.pg.click("[data-sr-close]"); await A.pg.waitForTimeout(200); assert.strictEqual(await A.pg.locator("#sq").count(), 0);
+    await A.pg.click("#todayBtn"); await A.pg.waitForTimeout(300); await A.pg.evaluate((d) => { }, date);
+    console.log("検索「余村」:", dates.join(" / ")); }
   assert.deepStrictEqual(real(A.errs), []);
   // 送迎表を開き直す → カレンダーから入った便・ヘルプが表に出る（画面エラーなし）
   P.errs.length = 0; await P.pg.reload(); await P.pg.waitForTimeout(5000);   // ログインは端末に残っている

@@ -287,3 +287,26 @@ html.dayopen,html.dayopen body{overflow:hidden;overscroll-behavior:none}
 .ds-list{overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}
 .ds-grip{width:48px;height:5px;margin:10px auto 2px;position:relative}
 .ds-grip::after{content:"";position:absolute;inset:-12px -40px}
+/* 予定の検索（スマホは全画面、パソコンは真ん中） */
+html.srchopen,html.srchopen body{overflow:hidden}
+.sr-ov{align-items:flex-start;padding:0}
+.srsheet{width:min(640px,100%);height:100%;max-height:100%;border-radius:0;display:flex;flex-direction:column;overflow:hidden}
+@media (min-width:561px){.sr-ov{padding:24px}.srsheet{height:calc(100% - 48px);border-radius:14px}}
+.sr-head{display:flex;align-items:center;gap:8px;padding:max(10px,env(safe-area-inset-top,0px)) 12px 6px}
+.sr-head h2{flex:1;text-align:center;margin:0;font-size:17px}
+.sr-sp{width:36px;flex:none}
+.sr-bar{display:flex;align-items:center;gap:6px;margin:4px 14px 10px;padding:0 10px;background:var(--sunken);border-radius:12px}
+.sr-bar .input{border:0;background:transparent;flex:1;height:44px;font-size:16px;box-shadow:none;outline:none;padding:0;min-width:0}
+.sr-bar .input::-webkit-search-cancel-button{display:none}
+.sr-ico{opacity:.6}
+.sr-clear{flex:none;width:24px;height:24px;border-radius:50%;border:0;background:var(--muted);color:var(--surface);font-size:13px;line-height:1}
+.sr-res{flex:1;overflow:auto;overscroll-behavior:contain;border-top:1px solid var(--line);padding-bottom:max(16px,env(safe-area-inset-bottom,0px))}
+.sr-day{border-bottom:1px solid var(--line)}
+.sr-date{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:12px 16px 2px}
+.sr-date span{font-size:12px;color:var(--muted)}
+.sr-row{display:flex;gap:10px;width:100%;border:0;background:none;text-align:left;padding:8px 16px 10px;color:var(--ink)}
+.sr-row:hover,.sr-row:active{background:var(--sunken)}
+.sr-t{font-size:16px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr-t b{font-weight:800}
+.sr-note{font-size:12px;color:var(--muted);padding:8px 16px;margin:0}
+.srsheet .empty{padding:24px 16px;text-align:center}
