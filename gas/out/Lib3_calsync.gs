@@ -25,13 +25,14 @@ function specsFor(master, events, date) {
     const to = whole ? "" : (ev.endDate === date ? appTime(ev.end) : "24:00");
     const staff = (ev.sg.staff || []).map((n) => staffBy.get(n)).filter(Boolean);
     const users = (ev.sg.users || []).map((n) => userBy.get(n)).filter(Boolean);
-    const missing = [...(ev.sg.staff || []).filter((n) => !staffBy.has(n)), ...(ev.sg.users || []).filter((n) => !userBy.has(n))];
+    const missingStaff = (ev.sg.staff || []).filter((n) => !staffBy.has(n)), missingUsers = (ev.sg.users || []).filter((n) => !userBy.has(n));
+    const missing = [...missingStaff, ...missingUsers];
     const half = ev.sg.type === "staff_off" && (ev.sg.half === "am" || ev.sg.half === "pm") ? ev.sg.half : "";
     // ヘルプは、この版の職員も利用者（行き先）もいなければ、この版の送迎表には入れない（ほかの事業所の予定）
     if (ev.sg.type === "help" && !users.length && !staff.length) continue;
     const dept = (ev.sg.type === "hwork" || ev.sg.type === "shift") && ev.sg.dept ? (master.departments || []).find((d) => d.name === ev.sg.dept) : null;
-    if ((ev.sg.type === "hwork" || ev.sg.type === "shift") && ev.sg.dept && !dept) missing.push(ev.sg.dept);
-    out.push({ id: ev.id, rev: ev.rev, type: ev.sg.type, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date),
+    if ((ev.sg.type === "hwork" || ev.sg.type === "shift") && ev.sg.dept && !dept) { missing.push(ev.sg.dept); missingStaff.push(ev.sg.dept); }
+    out.push({ id: ev.id, rev: ev.rev, type: ev.sg.type, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(ev.sg.meet), send: appTime(ev.sg.send), noMeet: ev.sg.noMeet || "", noSend: ev.sg.noSend || "", missing,
       reason: ev.sg.reason || "", note: ev.sg.note || "", deptId: dept ? dept.id : "",
       wstart: appTime(ev.sg.wstart), wend: appTime(ev.sg.wend), meetPlace: ev.sg.meetPlace || "", sendPlace: ev.sg.sendPlace || "" });
@@ -244,7 +245,7 @@ function summary(master, sheet, events, date) {
 }
 function summary0(master, sheet, events, date) {
   return specsFor(master, events, date).filter((s) => s.staff.length || s.users.length).map((s) => ({ id: s.id, type: s.type, typeLabel: TYPE_LABEL[s.type], title: s.title,
-    who: [...s.staff.map((x) => x.name), ...s.users.map((x) => x.name)], missing: s.missing,
+    who: [...s.staff.map((x) => x.name), ...s.users.map((x) => x.name)], missing: s.missing, missingStaff: s.missingStaff, biz: s.biz,
     time: s.half ? (s.half === "am" ? "AM休（午後から出勤）" : "PM休（午前で退勤）") :
       s.type === "help" ? `${s.from}〜${s.note ? `・${s.note}` : ""}${s.staff.length ? "" : "・担当は未定（保留欄）"}` :
       s.type === "shift" ? [s.wstart && `出勤${s.wstart}`, s.wend && `退勤${s.wend}`].filter(Boolean).join("・") || "部署の変更" :

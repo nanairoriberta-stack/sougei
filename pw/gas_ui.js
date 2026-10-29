@@ -14,6 +14,7 @@ const D = path.join(__dirname, "../gas/out");
   let t = api("", "auth.login", ["000", pin0, "node"]).data.token; api(t, "auth.changePin", [pin0, "5829"]);
   const date = "2026-11-02";
   for (const ed of ["v1", "v2"]) { const E = engFor(ed), ns = ed === "v1" ? "" : "v2:"; const m = E.mergeSeedMaster(null, E.seedMaster()); api(t, "kv.cas", [{ key: ns + "master", rev: 0, value: m }]); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.mon); api(t, "kv.cas", [{ key: ns + "sheet:" + date, rev: 0, value: Object.assign(E.emptySheet(), { runs: p.runs, blocks: p.blocks }) }]); }
+  { const m1 = api(t, "kv.get", ["master"]).data.value; api(t, "kv.cas", [{ key: "v3:master", rev: 0, value: { ...m1, users: [{ ...m1.users[0], id: "k_hoshino", name: "星野こども" }], staff: m1.staff.slice(0, 3) } }]); }   // りんく・ぷれいす版（放課後デイ）の利用者
   const yo = rows().find((r) => r[1] === "余村慎");
   const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js" };
   const b = await chromium.launch();
@@ -102,7 +103,7 @@ const D = path.join(__dirname, "../gas/out");
   // よみがな：送迎表の名前は「よみがな」シートに自動で並ぶ。読みを入れると、ひらがなで予測が出る
   const ys = g.sheets.get("よみがな"); assert.ok(ys && ys.data.some((r) => r[0] === "中村" && r[2] === "利用者"), "よみがなシートに利用者が並ぶ");
   ys.data.forEach((r) => { if (r[0] === "中村") r[1] = "なかむら"; if (r[0] === "日野") r[1] = "ひの"; });
-  for (const k of [...g.cache.keys()]) if (k === "names2") g.cache.delete(k);
+  for (const k of [...g.cache.keys()]) if (k === "names3") g.cache.delete(k);
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
@@ -201,6 +202,16 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await A.pg.locator("#panel .ev-row").count(), 0, "放課後デイのタブでは生活介護の予定は出ない");
     await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300);
     assert.ok(await A.pg.locator("#f-biz-houkago").isChecked(), "放課後デイのタブで作ると放課後デイ");
+    // 放課後デイの予定：利用者の候補はりんく・ぷれいす版の利用者だけ。生活介護に変えると現体制版・新体制版の利用者
+    await A.pg.check("#f-label-user"); await A.pg.waitForTimeout(300);
+    await A.pg.fill("#f-sgq-users", ""); await A.pg.waitForTimeout(200);
+    const kidHits = await A.pg.$$eval("#sghits-users [data-sgpick]", (b) => b.map((x) => x.dataset.name));
+    assert.deepStrictEqual(kidHits, ["星野こども"], "放課後デイは放課後デイの利用者だけ: " + kidHits.join(","));
+    await A.pg.check("#f-biz-seikatsu"); await A.pg.fill("#f-sgq-users", "なか"); await A.pg.waitForTimeout(200);
+    const adHits = await A.pg.$$eval("#sghits-users [data-sgpick]", (b) => b.map((x) => x.dataset.name));
+    assert.ok(adHits.includes("中村") && !adHits.includes("星野こども"), "生活介護は生活介護の利用者: " + adHits.join(","));
+    await A.pg.check("#f-biz-houkago");
+    await A.pg.check("#f-label-other"); await A.pg.waitForTimeout(300); if (await A.pg.isChecked("#f-allday")) { await A.pg.uncheck("#f-allday"); await A.pg.waitForTimeout(200); }
     await A.pg.check("#f-label-other"); await A.pg.waitForTimeout(300); await A.pg.fill("#f-title", "放デイ会議"); await A.pg.fill("#f-start", "15:00"); await A.pg.fill("#f-end", "16:00");
     await A.pg.locator(".sheet").screenshot({ path: "g_biz_editor.png" }); await save(2500);
     assert.deepStrictEqual(await A.pg.locator("#panel .ev-row .t").allInnerTexts(), ["放デイ会議"], "放課後デイのタブ");
@@ -213,6 +224,15 @@ const D = path.join(__dirname, "../gas/out");
     const evs2 = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {}));
     assert.strictEqual(evs2.find((e) => e.title === "放デイ会議").biz, "houkago"); assert.strictEqual(evs2.find((e) => e.title === "会議").biz || "seikatsu", "seikatsu");
     console.log("事業のタブ: 生活介護", before, "件 / 放課後デイ 1件 / 全体", before + 1, "件"); }
+  { // 二重に入れない：同じ予定がもう入っていたら知らせる。もう一度「保存」でそのまま入れられる
+    const n0 = await A.pg.locator("#panel .ev-row", { hasText: "会議" }).count();
+    await add("other"); await A.pg.fill("#f-title", "会議"); await A.pg.fill("#f-start", "13:00"); await A.pg.fill("#f-end", "14:00");
+    await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(300);
+    const msg = await A.pg.locator("#f-err").innerText(); assert.ok(msg.includes("同じ予定がもう入っています"), msg);
+    await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(1500);
+    assert.ok(!(await A.pg.locator("#evForm").count()), "もう一度押すと入る");
+    assert.strictEqual(await A.pg.locator("#panel .ev-row", { hasText: "会議" }).count(), n0 + 1);
+    console.log("二重の確認:", msg); }
   assert.deepStrictEqual(real(A.errs), []);
   // 送迎表を開き直す → カレンダーから入った便・ヘルプが表に出る（画面エラーなし）
   P.errs.length = 0; await P.pg.reload(); await P.pg.waitForTimeout(5000);   // ログインは端末に残っている

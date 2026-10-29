@@ -11486,7 +11486,8 @@ function CalBadge({ master, sheet, calEvents, date }) {
                   <div className="text-[11px] text-violet-700 font-bold">{it.typeLabel}</div>
                   <div className="font-bold">{it.title}</div>
                   <div className="text-[12px] text-stone-600">{it.who.join("、") || "(対象者なし)"}・{it.time}</div>
-                  {it.missing.length > 0 && <div className="text-[12px] text-rose-700">送迎表に見つからない名前: {it.missing.join("、")}(反映されていません)</div>}
+                  {/* ほかの事業の予定(りんく・ぷれいす版の放課後デイ／それ以外の版の生活介護)の利用者は、この版にいなくて当然なので出さない */}
+                  {(() => { const miss = (EDITION === "v3") !== (it.biz === "houkago") ? (it.missingStaff || []) : it.missing; return miss.length > 0 && <div className="text-[12px] text-rose-700">送迎表に見つからない名前: {miss.join("、")}(反映されていません)</div>; })()}
                 </div>
               ))}
               <button className="px-3 py-1 rounded bg-violet-600 text-white" onClick={() => { setOpen(false); window.__sgOpenCalendar && window.__sgOpenCalendar(date); }}>カレンダーを開く</button>

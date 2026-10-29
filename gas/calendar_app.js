@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.29d";
+const APP_VERSION="2026.10.29e";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -188,7 +188,7 @@ async function loadNames(){
   const H=window.SGHost;if(!H)return;
   let r=null;try{r=await H.call("names.list")}catch{}
   if(!H.directory().length)await H.loadDirectory();
-  SGN={staff:H.directory().filter(d=>d.no!=="000").map(d=>({name:d.name,dept:d.no})),users:r?r.users||[]:SGN.users,depts:r?r.depts||[]:SGN.depts,places:r?r.places||[]:SGN.places,yomi:r?r.yomi||{}:SGN.yomi,loaded:true};
+  SGN={staff:H.directory().filter(d=>d.no!=="000").map(d=>({name:d.name,dept:d.no})),users:r?r.users||[]:SGN.users,kids:r?r.kids||[]:(SGN.kids||[]),depts:r?r.depts||[]:SGN.depts,places:r?r.places||[]:SGN.places,yomi:r?r.yomi||{}:SGN.yomi,loaded:true};
 }
 const meInfo=()=>window.SGHost&&window.SGHost.me||{};
 const canLabel=k=>{const me=meInfo();return!USER_LABELS.includes(k)||!!(me.canSougei||me.admin)};
@@ -278,14 +278,16 @@ function drawSg(){
 function kanaNorm(s){return String(s||"").normalize("NFKC").replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/\s+/g,"").toLowerCase()}
 function sgHits(kind,q){
   const h=$("sghits-"+kind);if(!h||!ed)return;const sel=new Set(ed.d.w[kind]||[]);
-  const src=kind==="staff"?SGN.staff:SGN.users;const qq=String(q||"").trim();
+  // 利用者の候補：放課後デイの予定は送迎表のりんく・ぷれいす版の利用者、生活介護は現体制版・新体制版の利用者
+  const kidsMode=kind!=="staff"&&bizOf(ed.d)==="houkago";
+  const src=kind==="staff"?SGN.staff:kidsMode?(SGN.kids||[]):SGN.users;const qq=String(q||"").trim();
   // 予測：「た」→ 田中・田原（「よみがな」シートの読みの頭）、「田」→ 田中（名前の頭）。頭が合うものを先に
   const qn=kanaNorm(qq),Y=SGN.yomi||{};
   const scored=src.filter(x=>!sel.has(x.name)).map(x=>{const n=kanaNorm(x.name),y=kanaNorm(Y[x.name]||"");
     const s=!qn?2:(n.startsWith(qn)||(y&&y.startsWith(qn)))?0:(n.includes(qn)||(y&&y.includes(qn)))?1:String(x.dept).includes(qq)?2:9;return{x,s,k:y||n}}).filter(o=>o.s<9);
   scored.sort((a,b)=>a.s-b.s||a.k.localeCompare(b.k,"ja"));
   const list=scored.slice(0,qn?12:40).map(o=>o.x);
-  h.innerHTML=list.length?list.map(x=>`<button type="button" data-sgpick="${kind}" data-name="${esc(x.name)}"><span>${esc(x.name)}${Y[x.name]?` <small>${esc(Y[x.name])}</small>`:""}</span><small>${esc(x.dept)}</small></button>`).join(""):`<div class="by" style="padding:6px 10px">${SGN.loaded?"見つかりません":"読み込み中…"}</div>`;h.hidden=false;
+  h.innerHTML=list.length?list.map(x=>`<button type="button" data-sgpick="${kind}" data-name="${esc(x.name)}"><span>${esc(x.name)}${Y[x.name]?` <small>${esc(Y[x.name])}</small>`:""}</span><small>${esc(x.dept)}</small></button>`).join(""):`<div class="by" style="padding:6px 10px">${!SGN.loaded?"読み込み中…":kidsMode&&!(SGN.kids||[]).length?"放課後デイ（りんく・ぷれいす）の利用者がまだいません。送迎表の「りんく・ぷれいす版」の利用者タブで登録すると、ここに出ます。":"見つかりません"}</div>`;h.hidden=false;
 }
 function readSg(){
   if(!ed||!$("sgArea"))return;const w=ed.d.w;
@@ -361,7 +363,7 @@ function openEditor(ev,day,draft){
   const d=draft?draft.form:ev?{...ev,members:[...ev.members]}:{title:"",date:day||S.sel,endDate:day||S.sel,allDay:false,start:"10:00",end:"11:00",label:canLabel("help")?"help":"leave",place:"",memo:"",members:S.me?[S.me]:[],sg:null,biz:newBiz()};
   if(d.sg&&LABEL_OF_SG[d.sg.type]&&!(d.sg.type==="staff_plan"&&PLAN_LABELS.includes(d.label)))d.label=LABEL_OF_SG[d.sg.type];
   if(!d.w)d.w=workOf(d);
-  if(!ev&&!draft)fixTimes(d);   // 最初に選ばれているラベルに合わせて終日・時刻をそろえる
+  if(!ev&&!draft){fixTimes(d);try{window.SGHost&&window.SGHost.pollOnce&&window.SGHost.pollOnce()}catch{}}   // 新しい予定を入れる前に、ほかの人の分を読み直す   // 最初に選ばれているラベルに合わせて終日・時刻をそろえる
   ed={id:draft?draft.id:ev?.id||null,base:draft?draft.base:base,d,ro:ro||(!!ev&&!canLabel(d.label)),confirmDel:false,comments:[],err:"",changed:false};
   if(!SGN.loaded)loadNames().then(()=>{if(ed)drawSg()});
   drawSheet();
@@ -431,7 +433,15 @@ async function drawComments(){
   const ps=await profiles(all.map(c=>c.by).filter(Boolean));if(!ed)return;
   box.innerHTML=all.map(c=>{const p=ps[c.by]||{};return`<div class="cmt"><img src="${esc(p.avatarUrl||"")}" alt=""><div><div class="who">${esc(p.name||"メンバー")}<small>${fmtAt(c.at)}</small>${c.pending?` <span class="tag-pend">未送信</span>`:""}${c.failed?` <span class="tag-pend">送信できません</span>`:""}</div><p>${esc(c.text)}</p></div></div>`}).join("");
 }
-function showErr(m){ed.err=m;const e=$("f-err");if(e){e.textContent=m;e.hidden=!m}}
+function showErr(m){ed.err=m;const e=$("f-err");if(e){e.textContent=m;e.hidden=!m;if(m&&e.scrollIntoView)e.scrollIntoView({block:"center"})}}
+/* 同じ予定がもう入っていないか（ほかの人が先に入れた・続けて二度入れたなど）。新しい予定のときだけ見る。
+   同じラベル・事業・種類・半休・開始時刻で、日が重なり、同じ職員・利用者（いなければ同じ題名）なら同じとみなす */
+function dupOf(ev){
+  const key=e=>[lab(e.label),bizOf(e),e.sg?e.sg.type:"",e.sg?e.sg.half||"":"",e.allDay?"":e.start].join("|");
+  const who=e=>new Set([...((e.sg&&e.sg.staff)||[]),...((e.sg&&e.sg.users)||[])]);
+  const k=key(ev),w=who(ev);
+  return allEvents().find(e=>!e.deleted&&e.date<=ev.endDate&&e.endDate>=ev.date&&key(e)===k&&(w.size?[...w].some(n=>who(e).has(n)):e.title===ev.title));
+}
 function save(){
   readForm();const d=ed.d;
   d.sg=sgOf(d.label,d.w);
@@ -444,6 +454,7 @@ function save(){
   if(!d.allDay&&!d.start)return showErr("開始時刻を入れてください。");
   if(!d.allDay&&d.endDate===d.date&&d.end<=d.start)return showErr("終了時刻は開始時刻より後にしてください。");
   const ev={title:d.title,date:d.date,endDate:d.endDate,allDay:d.allDay,start:d.allDay?"":d.start,end:d.allDay?"":d.end,label:lab(d.label),biz:bizOf(d),place:d.place,memo:d.memo,members:d.members,tanto:d.label==="other"?[...d.w.staff]:[],sg:d.sg||null};
+  if(!ed.base){const dup=dupOf(ev);if(dup&&ed.dupWarned!==dup.id){ed.dupWarned=dup.id;return showErr(`同じ予定がもう入っています（${dup.date.slice(5).replace("-","/")}「${dup.title}」）。それでも入れるときは、もう一度「保存」を押してください。`)}}
   const r=core.save(ev,ed.base);
   closeEditor();S.sel=ev.date;
   const dd=parse(ev.date);if(dd.getMonth()!==S.cursor.getMonth()||dd.getFullYear()!==S.cursor.getFullYear()){S.cursor=new Date(dd.getFullYear(),dd.getMonth(),1);subscribe()}
@@ -574,7 +585,8 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape"&&S.dayOpen){S.dayOpen=false;render();return}
   const day=e.target.closest?.("[data-day]");if(day&&(e.key==="Enter"||e.key===" ")){e.preventDefault();S.sel=day.dataset.day;render()}
 });
-document.addEventListener("change",e=>{
+document.addEventListener("change",e=>{if(ed&&e.target.name==="f-biz"){ed.d.biz=e.target.value;["users"].forEach(k=>{const i=$("f-sgq-"+k);if(i&&document.activeElement===i)sgHits(k,i.value)})}
+
   if(e.target.id==="qStaff"){S.qStaff=e.target.value;return}
   if(e.target.id==="qKind"){S.qKind=e.target.value;return}
   if(!ed)return;
@@ -623,7 +635,7 @@ render();
   if(!db){S.dbState="none";render();return}
   core=C.createCore({db,store,me:S.me,runOp:window.SGHost.runOp});
   loadNames().then(()=>render());
-  window.SGHost.startPolling(60000);
+  window.SGHost.startPolling(20000);   // ほかの人が入れた予定が早く出るように（二重に入れるのを防ぐ）
   window.SGHost.onLogin(()=>core.kick());
   core.on(()=>{render();if(ed)drawComments();else if($("ov")&&$("sy-t"))openSync()});
   S.dbState="ok";subscribe();core.kick();render();   // 起動時に未送信を自動で再送（障害D）
