@@ -39,7 +39,9 @@ const D = path.join(__dirname, "../gas/out");
   await pg.fill("#sghOld", String(yo[3])); await pg.fill("#sghNew", "3871"); await pg.fill("#sghNew2", "3871");
   await pg.evaluate(() => { const f = document.getElementById("sghPinF"); f.requestSubmit(); f.requestSubmit(); });   // 2回押し（Enterとクリック）でもエラーにならない await pg.waitForTimeout(2500);
   await pg.screenshot({ path: "g_cal.png" });
+  await pg.click(`.cell[data-day="${date}"]`); await pg.waitForTimeout(400);   // スマホは日を押すと一覧が出て、その中に「休みを入れる」
   await pg.selectOption("#qKind", "am"); await pg.locator('.quick').screenshot({ path: 'g_quick.png' }); await pg.click('[data-quick]'); await pg.waitForTimeout(2500);
+  await pg.keyboard.press("Escape"); await pg.waitForTimeout(300);
   await pg.screenshot({ path: "g_cal_after.png" });
   await pg.click("#addBtn"); await pg.waitForTimeout(400); await pg.screenshot({ path: "g_editor.png" });
   // 一般職員：利用者が関わるラベル（ヘルプ・送迎・利用者休み）は選べない。休日出勤は自分の分だけ
@@ -210,6 +212,14 @@ const D = path.join(__dirname, "../gas/out");
   for (const x of ["森 受診後送り・送り15:30・送り先病院", "中村 ヘルプ（○○病院）", `${absent} 欠席（体調不良）`, "八壁 退勤19:00（残業）", "会議", "モニタリング（森）"]) assert.ok(tl.includes(x), x + " / " + tl.join(","));
   assert.ok((await A.pg.locator(".ev-row", { hasText: "会議" }).innerText()).includes("担当：日野"), "一覧に担当");
   console.log("管理者が入力 →", tl.join(" / "), "→ 送迎表: 迎え", s2.noRide[U("森")].meet, "・送り", s2.userTime[U("森")].send, "・ヘルプ(保留欄)", hb.time, "・欠席", absent, "・八壁の退勤", s2.staffOv[S("八壁")].end, "/ 画面エラー:", real(A.errs));
+  { // スマホの月表示：スクロールしなくても1か月が見える（ブラウザの帯で画面が低いときも）。＋は右下の丸いボタン
+    const fits = () => A.pg.evaluate(() => { scrollTo(0, 0); const g = document.getElementById("grid").getBoundingClientRect(); return { bottom: Math.round(g.bottom), vh: innerHeight }; });
+    let f = await fits(); assert.ok(f.bottom <= f.vh, "1か月が画面に収まる " + JSON.stringify(f));
+    await A.pg.setViewportSize({ width: 390, height: 640 }); await A.pg.waitForTimeout(600);
+    f = await fits(); assert.ok(f.bottom <= f.vh, "画面が低くても収まる " + JSON.stringify(f)); await A.pg.screenshot({ path: "g_month_fit.png" });
+    await A.pg.setViewportSize({ width: 390, height: 844 }); await A.pg.waitForTimeout(600);
+    const fab = await A.pg.locator("#addBtn").boundingBox(); assert.ok(fab.x > 300 && fab.y > 700, "＋は右下 " + JSON.stringify(fab));
+    console.log("スマホの月表示: 1画面に収まる"); }
   { // スマホの月表示：バーに題名。日付を押すとその日の一覧が下から出て、右上の＋で予定を入れる
     const chipTxt = await A.pg.locator(`.cell[data-day="${date}"] .ev-chip span`).first().innerText();
     assert.ok(chipTxt.length > 0 && await A.pg.locator(`.cell[data-day="${date}"] .ev-chip span`).first().isVisible(), "バーに題名が見える");

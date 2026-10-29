@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.29j";
+const APP_VERSION="2026.10.29k";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -99,10 +99,11 @@ function renderNotices(){
 function chip(e){const span=e.date!==e.endDate;
   return`<button class="ev-chip${span?" span":""}${e.pending?" pend":""}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})" aria-label="${esc(e.title)}">${bizTag(e)}${!span&&!e.allDay?`<b>${esc(e.start)}</b>`:""}<span>${esc(e.title)}</span></button>`}
 function renderGrid(vis){
+  fitGrid();
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
   for(let i=0;i<42;i++){const d=addDays(start,i),k=ymd(d),evs=on(vis,k),hol=HOL[k];
     const cls=["cell",d.getMonth()!==tm&&"out",k===TODAY&&"today",k===S.sel&&"sel",d.getDay()===0&&"su",d.getDay()===6&&"sa",hol&&"hol"].filter(Boolean).join(" ");
-    html+=`<div class="${cls}" role="button" tabindex="0" data-day="${k}" aria-label="${d.getMonth()+1}月${d.getDate()}日 ${evs.length}件"><div class="cell-head"><span class="num">${d.getDate()}</span>${hol?`<span class="hol-name">${hol}</span>`:""}</div>${evs.slice(0,MAXC()).map(chip).join("")}${evs.length>MAXC()?`<span class="more">他${evs.length-MAXC()}件</span>`:""}</div>`}
+    html+=`<div class="${cls}" role="button" tabindex="0" data-day="${k}" aria-label="${d.getMonth()+1}月${d.getDate()}日 ${evs.length}件"><div class="cell-head"><span class="num">${d.getDate()}</span>${hol?`<span class="hol-name">${hol}</span>`:""}</div>${(n=>evs.length>n?evs.slice(0,Math.max(1,n-1)).map(chip).join("")+`<span class="more">他${evs.length-Math.max(1,n-1)}件</span>`:evs.map(chip).join(""))(MAXC())}</div>`}
   $("grid").innerHTML=html;
 }
 function evRow(e,ps){
@@ -114,11 +115,22 @@ function renderPanel(vis,ps){
   if(!S.loaded&&S.dbState==="connecting")body=`<div class="empty">予定を読み込んでいます…</div>`;
   else if(!evs.length)body=`<div class="empty">この日の予定はまだありません。${can?"<br>「この日に追加」から登録できます。":""}</div>`;
   else body=`<ul class="ev-list">${evs.map(e=>evRow(e,ps)).join("")}</ul>`;
-  const q=quickHtml();
+  const q=isMob()?"":quickHtml();   // スマホでは日の一覧（下から出る）の中に出す
   $("panel").innerHTML=`<div class="panel-head"><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${q}${body}`;
 }
 /* スマホ：日付を押すと、その日の予定の一覧が下から出る（TimeTreeのように）。右上の＋でその日に予定を入れる */
-const MAXC=()=>matchMedia("(max-width:560px)").matches?4:3;
+const isMob=()=>matchMedia("(max-width:560px)").matches;
+// スマホの月表示はスクロールしなくても1か月が見えるように、マスの高さを画面に合わせ、入るだけの予定を出す
+let CELLH=0;
+const MAXC=()=>isMob()&&CELLH?Math.max(1,Math.floor((CELLH-20)/15)):isMob()?4:3;
+function fitGrid(){
+  const g=$("grid");if(!g)return;
+  if(!isMob()||S.view!=="month"){CELLH=0;g.style.removeProperty("--cellh");return}
+  const vh=window.visualViewport?visualViewport.height:innerHeight;
+  const top=g.getBoundingClientRect().top+(window.scrollY||0);   // いちばん上まで戻したときの位置で合わせる
+  CELLH=Math.max(48,Math.floor((vh-Math.max(0,top)-10)/6));
+  g.style.setProperty("--cellh",CELLH+"px");
+}
 function dsRow(e){
   const tm=e.allDay||e.date!==e.endDate&&!(e.date===S.sel&&e.start)?`<span class="ds-time">終日</span>`:`<span class="ds-time">${esc(e.start)}<small>${esc(e.end)}</small></span>`;
   const sub=[LMAP[e.label]?.n||"その他",e.place,(e.tanto||[]).length?"担当："+e.tanto.join("・"):""].filter(Boolean).map(esc).join(" ・ ");
@@ -133,6 +145,7 @@ function renderDay(vis){
     <div class="ds-head"><h2>${d.getMonth()+1}月${d.getDate()}日 ${WD[d.getDay()]}曜日${hol?`<small>${esc(hol)}</small>`:""}</h2>
       <button class="ds-add" data-add-day aria-label="この日に予定を追加" ${can?"":"disabled"}>＋</button><button class="icon-btn" data-day-close aria-label="閉じる">×</button></div>
     ${evs.length?`<ul class="ds-list">${evs.map(dsRow).join("")}</ul>`:`<div class="empty">${S.loaded?"この日の予定はまだありません。":"予定を読み込んでいます…"}${can&&S.loaded?"<br>右上の＋から入れられます。":""}</div>`}
+    ${isMob()?`<div class="ds-quick">${quickHtml()}</div>`:""}
   </div></div>`;
   const l=root.querySelector(".ds-list");if(l)l.scrollTop=keep;
 }
@@ -676,6 +689,7 @@ document.addEventListener("input",e=>{if(e.target.id==="sq"){SR.q=e.target.value
 const MOB=()=>matchMedia("(max-width:560px)").matches;
 function fitVV(){const vv=window.visualViewport,r=document.documentElement;if(!vv)return;
   r.style.setProperty("--vvh",vv.height+"px");r.style.setProperty("--vvt",vv.offsetTop+"px")}
+let rzT=0;window.addEventListener("resize",()=>{clearTimeout(rzT);rzT=setTimeout(()=>{if(S.view==="month")render()},150)});   // 画面の向き・大きさが変わったらマスの高さを合わせ直す
 if(window.visualViewport){visualViewport.addEventListener("resize",fitVV);visualViewport.addEventListener("scroll",fitVV);fitVV()}
 const TYPING=el=>el&&el.closest&&el.closest("#sheetRoot .sheet")&&(el.tagName==="TEXTAREA"||(el.tagName==="INPUT"&&!/^(checkbox|radio|button|submit)$/.test(el.type)));
 function bringUp(el){const sh=el.closest(".sheet"),hd=sh&&sh.querySelector(".sheet-head");if(!sh||!hd)return;

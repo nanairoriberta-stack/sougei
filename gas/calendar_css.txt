@@ -327,3 +327,32 @@ html[data-biz] .bar{background:var(--bar);box-shadow:inset 0 4px 0 var(--bz)}
 body,.bar,.biztabs button{transition:background-color .25s ease}
 html[data-biz] .biztabs{border-bottom:2px solid var(--bz)}
 html[data-biz] .biztabs button[aria-selected="true"]{color:var(--bz);box-shadow:inset 0 4px 0 var(--bz);border-color:var(--bz);border-bottom-color:var(--bg)}
+/* スマホの月表示：スクロールしなくても1か月が見える（TimeTreeのように）。上は2段にまとめ、＋は右下の丸いボタン */
+@media (max-width:560px){
+  .bar-in{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-block:6px}
+  .bar-in::before{content:"";flex-basis:100%;height:0;order:5}   /* ここで2段目へ */
+  .brand{display:none}
+  .nav{display:contents}
+  #prev{order:1;width:32px;height:32px} #monthLabel{order:2;font-size:18px;min-width:0;white-space:nowrap} #next{order:3;width:32px;height:32px}
+  #sghChipSlot{order:4;margin-left:auto}
+  .bar-in .seg{order:6;flex:none} .seg button{height:30px;padding:0 8px;font-size:12px;white-space:nowrap}
+  #syncBtn{order:7;margin-left:auto;height:28px;padding:0 8px;font-size:11px}
+  #todayBtn{order:8;height:30px;padding:0 10px;margin:0} #searchBtn{order:9;width:32px;height:30px}
+  .bar-in #addBtn{order:10;position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom,0px));width:58px;height:58px;padding:0;border-radius:50%;font-size:0;z-index:15;box-shadow:0 6px 18px color-mix(in srgb,#000 28%,transparent)}
+  .bar-in #addBtn::before{content:"＋";font-size:30px;line-height:1;font-weight:400}
+  .biztabs{padding-block:6px 0}
+  .biztabs button{height:30px;font-size:13px}
+  .filters{padding-block:6px 0;gap:5px}
+  .filters .chip{height:24px;font-size:11px;padding:0 8px}
+  .app{padding-block:6px 90px;gap:8px}
+  #panel{display:none}
+  .cal .dow div{padding:2px 0;font-size:11px}
+  .grid .cell{height:var(--cellh,86px);min-height:0;overflow:hidden;padding:1px 1px 2px;gap:1px}
+  .cell-head{min-height:16px}
+  .num{font-size:11px;width:17px;height:17px}
+  .ev-chip{height:14px;line-height:14px;padding:0 2px;font-size:10px;font-weight:700;border-radius:3px;border-left:0;background:var(--c);color:#fff}
+  .ev-chip span{text-overflow:clip}
+  .more{font-size:9.5px;line-height:13px;padding-left:2px}
+  .ds-quick{padding:0 12px 6px}
+  .ds-quick:empty{display:none}
+}
