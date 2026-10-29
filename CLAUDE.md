@@ -57,7 +57,7 @@ bash test.sh         # Nodeのテスト全部
 bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ```
 - テスト：`test-kv.js`（保存エンジン・同時編集/通信断 10件）、`test-excel.js`（送迎表のExcel出力に版が入る）、`test-cal.js`（反映・AM/PM休・ヘルプ/送迎の変更/迎え先・送り先/休日出勤/勤務時間変更）、`test-agent.js`（AIと相談の適用 10件）、
-  `gas/test-gas.js`（サーバー 29件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
+  `gas/test-gas.js`（サーバー 30件。`gas/fakegas.js` が本物のスプレッドシートの癖まで再現）、`gas/test-ai.js`、
   `mcp/test-mcp.js`（公式MCPクライアントで35件。Googleの302転送も再現）、`pw/gas_ui.js`・`pw/agent_ui.js`（画面）
 - `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
 - `sougei.jsx` の関数をテスト/サーバーで使うときは `build.sh` の `EXP` と `mcp/engine_entry.js` に名前を足す
@@ -99,6 +99,12 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ## 送迎表の「コマだけ消す」（2026-10-29）
 その他予定・ヘルプの `noteOnly:true` は表（画面の `TimeGrid`・Excel `buildWorkbook`・`buildExcelHtml`）にコマを出さず、`buildAutoNotes`（特記事項・連絡事項の自動欄）にだけ出る（例：黒田給食利用）。
 編集画面のチェック／「コマだけ消す(特記事項に残す)」ボタン（`data-note-only`）。保留の数・重なりの警告にも数えない。下の「特記事項…を表示」の中に一覧（`data-noteonly-list`）と「表に戻す」
+
+## Excel出力のあとのカレンダーの変更のお知らせ（2026-10-29）
+- Excelを出力すると、その日の送迎表に `exportedAt` と `exportSnap`（そのとき反映していたカレンダーの予定 ID→{rev,title}、`SGCal.exportSnapOf`）を残す（`markExported`）
+- 今の `calApplied` と比べた追加・変更・取り消し＝`SGCal.exportChanges`。サーバーの `docSet_` が送迎表の文書の meta に `expChg`（数）と `date` を付け、`sg.exportAlerts`（版ごと、昨日以降）が一覧だけで探す
+- 送迎表の画面は30秒ごとに聞き、右上にお知らせ「11月3日(火)のカレンダーに変更があります：白戸 休み（追加）」［この日を開く］［閉じる］（`data-exp-popup`。閉じたら同じ内容は出さない＝端末に `sg:expDismiss:<版>`）。
+  開いている日は上に赤い帯（`data-exp-banner`）。もう一度出力すると消える
 
 ## データの置き方（スプレッドシート）
 - `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）

@@ -302,6 +302,24 @@ function linkStatus(sheet, master) {
   return out;
 }
 
-const API = { reconcile, specsFor, summary, TYPE_LABEL, appTime, REQ_ID, linkReqs, linkApply, linkStatus };
+/* ===== Excel出力のあとのカレンダーの変更 =====
+   出力したときに、その日に反映していたカレンダーの予定（calApplied の ID と版）を exportSnap に残す。
+   いまの calApplied と比べて、追加・変更・取り消しを返す（送迎表の画面のお知らせに使う） */
+function exportSnapOf(sheet) {
+  return Object.fromEntries(Object.entries((sheet && sheet.calApplied) || {}).map(([id, r]) => [id, { rev: r.rev, title: r.title || "" }]));
+}
+function exportChanges(sheet) {
+  if (!sheet || !sheet.exportedAt || !sheet.exportSnap) return [];
+  const snap = sheet.exportSnap, cur = sheet.calApplied || {}, out = [];
+  for (const [id, r] of Object.entries(cur)) {
+    const s = snap[id];
+    if (!s) out.push({ id, title: r.title || "", what: "追加" });
+    else if (s.rev !== r.rev) out.push({ id, title: r.title || s.title || "", what: "変更" });
+  }
+  for (const [id, s] of Object.entries(snap)) if (!cur[id]) out.push({ id, title: s.title || "", what: "取り消し" });
+  return out;
+}
+
+const API = { reconcile, specsFor, summary, TYPE_LABEL, appTime, REQ_ID, linkReqs, linkApply, linkStatus, exportSnapOf, exportChanges };
 if (typeof module !== "undefined" && module.exports) module.exports = API; else G.SGCal = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);

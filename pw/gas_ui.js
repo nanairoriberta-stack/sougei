@@ -115,6 +115,22 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.click('[data-note-restore="blkNote1"]'); await P.pg.waitForTimeout(800);
     assert.ok(await P.pg.locator('[data-item-id="blkNote1"]').isVisible(), "表に戻す");
     console.log("コマだけ消す: 表から消えて特記事項に残る → 表に戻す"); }
+  // Excel出力のあとにカレンダーが変わったら、送迎表の画面にお知らせ（ほかの日も）。その日を開くと上に帯
+  { const d3 = "2026-11-03", s0 = api(t, "kv.get", ["sheet:" + date]).data.value;
+    api(t, "kv.merge", [{ key: "sheet:" + d3, base: null, baseKnown: false, mine: { ...s0, calApplied: {}, exportedAt: "2026-11-02T06:00:00.000Z", exportSnap: {} } }]);
+    api(t, "cal.apply", [{ kind: "upsert", opId: "op_expui001", id: "ev_expui001", baseRev: null, ev: { title: "白戸 休み", date: d3, endDate: d3, allDay: true, start: "", end: "", label: "leave", place: "", memo: "", members: [], sg: { type: "staff_off", staff: ["白戸"] } } }]);
+    await P.pg.reload(); await P.pg.waitForTimeout(5000);
+    const pop = await P.pg.locator("[data-exp-popup]").innerText();
+    assert.ok(pop.includes("11月3日(火)のカレンダーに変更があります") && pop.includes("白戸 休み（追加）"), pop);
+    await P.pg.locator("[data-exp-popup]").screenshot({ path: "g_exp_popup.png" });
+    await P.pg.click('[data-exp-open="2026-11-03"]'); await P.pg.waitForTimeout(1500);
+    assert.ok((await P.pg.locator("[data-exp-banner]").innerText()).includes("白戸 休み（追加）"), "その日の上に帯");
+    assert.strictEqual(await P.pg.locator("[data-exp-popup]").count(), 0, "開いている日のお知らせは帯だけ");
+    await P.pg.locator("[data-exp-banner]").screenshot({ path: "g_exp_banner.png" });
+    await P.pg.click("[data-datepop]"); await P.pg.click('[data-day="2026-11-02"]'); await P.pg.waitForTimeout(1500);
+    assert.ok(await P.pg.locator("[data-exp-popup]").isVisible(), "ほかの日を見ているとお知らせ");
+    await P.pg.click("[data-exp-close]"); await P.pg.waitForTimeout(300); assert.strictEqual(await P.pg.locator("[data-exp-popup]").count(), 0, "閉じる");
+    console.log("Excel出力後の変更:", pop.replace(/\n/g, " ")); }
   // りんく・ぷれいす版：担当を「生活介護へ依頼」にした便 → 生活介護（11/1からは新体制版）の保留欄に【りんく依頼】。担当・車が決まるとりんく側の便に出る
   { const v3m = api(t, "kv.get", ["v3:master"]).data.value, kid = v3m.users[0];
     api(t, "kv.merge", [{ key: "v3:sheet:" + date, base: null, baseKnown: false, mine: { runs: [{ id: "rqUI", kind: "meet", time: "15:00", staffId: "__req__", vehicleId: "", userIds: [kid.id], staffRiderIds: [], note: "" }], blocks: [] } }]);

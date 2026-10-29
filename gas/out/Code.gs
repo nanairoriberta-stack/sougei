@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.29k',
+  VERSION: '2026.10.29l',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -202,6 +202,7 @@ var HANDLERS = {
   'kv.merge': function (me, a) { return kvMerge_(me, a[0]); },
   'kv.cas': function (me, a) { return kvCas_(me, a[0]); },
   'sync.poll': function (me, a) { return poll_(a[0] || {}); },
+  'sg.exportAlerts': function (me, a) { return exportAlerts_(String((a[0] || {}).ns || '')); },
   'docs.query': function (me, a) { return docsQuery_(a[0] || {}); },
   'docs.get': function (me, a) { return docGetPublic_(String(a[0])); },
   'cal.apply': function (me, a) { return calApply_(me, a[0]); },
@@ -336,6 +337,23 @@ function calSearch_(q) {
   hits.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.start || '').localeCompare(String(b.start || '')); });
   return { items: hits.slice(0, 300), more: hits.length > 300 };
 }
+/* Excel出力のあとにカレンダーの変更があった日（昨日以降）。送迎表の画面がときどき聞いて、お知らせを出す */
+function exportAlerts_(ns) {
+  if (['', 'v2:', 'v3:'].indexOf(ns) < 0) return [];
+  var sh = sheet_(APP.SH.docs), n = sh.getLastRow(); if (n < 2) return [];
+  var heads = sh.getRange(2, 1, n - 1, 4).getValues(), y = new Date(today_() + 'T00:00:00'); y.setDate(y.getDate() - 1);
+  var from = Utilities.formatDate(y, 'Asia/Tokyo', 'yyyy-MM-dd'), idx = null, out = [];
+  heads.forEach(function (h) {
+    var meta; try { meta = h[3] ? JSON.parse(h[3]) : {}; } catch (e) { return; }
+    if (!meta.expChg || !meta.k || meta.k !== ns + 'sheet:' + meta.date || meta.date < from) return;
+    idx = idx || docIndex_();
+    var d = docGet_(String(h[0]), idx); if (!d || !d.value || !d.value.v) return;
+    var ch = SGCal.exportChanges(d.value.v); if (!ch.length) return;
+    out.push({ date: meta.date, exportedAt: d.value.v.exportedAt, changes: ch.slice(0, 20) });
+  });
+  out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  return out.slice(0, 31);
+}
 function namesList_() {
   var c = CacheService.getScriptCache(), hit = c.get('names3');
   if (hit) return JSON.parse(hit);
@@ -423,6 +441,10 @@ function docGetRaw_(path, hit) {
 }
 function docSet_(path, value, rev, meta, idx) {
   idx = idx || docIndex_();
+  // 送迎表の1日分：Excel出力のあとにカレンダーの変更があれば、その数を目印に残す（sg.exportAlerts が一覧だけで探せるように）
+  if (value && typeof value.k === 'string' && /(^|:)sheet:\d{4}-\d{2}-\d{2}$/.test(value.k) && value.v && value.v.exportedAt) {
+    try { meta = Object.assign({}, meta || {}, { expChg: SGCal.exportChanges(value.v).length, date: value.k.slice(-10) }); } catch (e) {}
+  }
   var sh = sheet_(APP.SH.docs);
   var str = JSON.stringify(value);
   var chunks = [];

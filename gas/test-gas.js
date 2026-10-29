@@ -512,6 +512,29 @@ async function bootstrap() {
     return `「余村」で${r1.length}件（10月〜12月、職員休みの対象も）・削除した予定は出ない`;
   });
 
+  await test("Excel出力のあとにカレンダーが変わった日を知らせる（sg.exportAlerts）", async () => {
+    const { admin } = await bootstrap();
+    const kv = admin.kv(), get = async (k) => (await admin.call("kv.get", k)).value, date = "2026-11-25";
+    const E = engFor("v1"), m = await get("master"), p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);
+    kv.put("sheet:" + date, Object.assign(E.emptySheet(), { runs: p.runs, blocks: p.blocks })); await settleKV([admin]);
+    await admin.call("cal.apply", { kind: "upsert", opId: "op_exp00001", id: "ev_exp00001", baseRev: null, ev: evOff(date, "日野") });
+    // Excelを出力した（そのときのカレンダーの反映を残す）
+    const C = require("../calsync.js");
+    await kv.update("sheet:" + date, (v) => ({ ...v, exportedAt: "2026-11-24T06:00:00.000Z", exportSnap: C.exportSnapOf(v) })); await settleKV([admin]);
+    assert.deepStrictEqual(await admin.call("sg.exportAlerts", { ns: "" }), [], "出力した直後は何もない");
+    // そのあとカレンダーに休みが入る・前の休みが消える
+    await admin.call("cal.apply", { kind: "upsert", opId: "op_exp00002", id: "ev_exp00002", baseRev: null, ev: evOff(date, "八壁", "am") });
+    await admin.call("cal.apply", { kind: "delete", opId: "op_exp00003", id: "ev_exp00001", date, baseRev: 1 });
+    const al = await admin.call("sg.exportAlerts", { ns: "" });
+    assert.strictEqual(al.length, 1); assert.strictEqual(al[0].date, date);
+    assert.deepStrictEqual(al[0].changes.map((c) => c.title + "（" + c.what + "）").sort(), ["八壁 AM休（追加）", "日野 休み（取り消し）"].sort());
+    assert.deepStrictEqual(await admin.call("sg.exportAlerts", { ns: "v2:" }), [], "ほかの版には出ない");
+    // もう一度出力すると消える
+    await kv.update("sheet:" + date, (v) => ({ ...v, exportedAt: "2026-11-24T07:00:00.000Z", exportSnap: C.exportSnapOf(v) })); await settleKV([admin]);
+    assert.deepStrictEqual(await admin.call("sg.exportAlerts", { ns: "" }), []);
+    return `出力のあと「${al[0].changes.map((c) => c.title + "（" + c.what + "）").join("・")}」→ もう一度出力で消える`;
+  });
+
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
     const { g, admin } = await bootstrap();
     const date = "2026-11-25"; const E = engFor("v1"); const m = await admin.kv().get("master"); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);

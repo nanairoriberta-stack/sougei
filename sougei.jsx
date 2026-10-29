@@ -8963,6 +8963,19 @@ function EditionSwitcher() {
 
 function AppInner() {
   const [tab, setTab] = useState("sheet");
+  // Excel出力のあとにカレンダーの変更があった日（サーバーの sg.exportAlerts を30秒ごとに聞く）。閉じたお知らせは同じ内容なら出さない
+  const [expAlerts, setExpAlerts] = useState([]);
+  const expDismissKey = "sg:expDismiss:" + EDITION;
+  const expSig = (a) => a.date + "|" + a.exportedAt + "|" + a.changes.map((c) => c.id + c.what).join(",");
+  const [expDismissed, setExpDismissed] = useState(() => { try { return JSON.parse(localStorage.getItem(expDismissKey) || "{}"); } catch (e) { return {}; } });
+  useEffect(() => {
+    const H = typeof window !== "undefined" && window.SGHost; if (!H || !H.call) return;
+    let alive = true;
+    const ask = async () => { try { const r = await H.call("sg.exportAlerts", { ns: EDITION === "v1" ? "" : EDITION + ":" }); if (alive && Array.isArray(r)) setExpAlerts(r); } catch (e) {} };
+    ask(); const t = setInterval(ask, 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  const dismissExp = (list) => setExpDismissed((cur) => { const n = { ...cur }; list.forEach((a) => { n[a.date] = expSig(a); }); try { localStorage.setItem(expDismissKey, JSON.stringify(n)); } catch (e) {} return n; });
   const [master, setMaster] = useState(null);
   const [saveState, setSaveState] = useState("idle");
 
@@ -9768,6 +9781,12 @@ function AppInner() {
     }
   };
 
+  // Excelを出力したことと、そのときに反映していたカレンダーの予定を、その日の送迎表に残す（あとで変わったらお知らせ）
+  const markExported = () => {
+    const C = typeof window !== "undefined" && window.SGCal;
+    updateSheet((prev) => (prev ? { ...prev, exportedAt: new Date().toISOString(), exportSnap: C && C.exportSnapOf ? C.exportSnapOf(prev) : {} } : prev));
+    setExpAlerts((cur) => cur.filter((a) => a.date !== date));
+  };
   const handleExport = async () => {
     if (!sheet || !sheetMaster) return;
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
@@ -9924,7 +9943,7 @@ function AppInner() {
 
     if (!groups.length) {
       notify("✓ チェックOK(エラーなし)。Excelを出力します");
-      exportExcel(sheetMaster, sheetData, date);
+      exportExcel(sheetMaster, sheetData, date); markExported();
       return;
     }
     setModal({ type: "exportCheck", groups, idx: 0 });
@@ -10004,7 +10023,7 @@ function AppInner() {
     if (!sheet) return;
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
-    exportExcel(sheetMaster, sheetData, date);
+    exportExcel(sheetMaster, sheetData, date); markExported();
   };
 
   const countStaffItems = (staffId) =>
@@ -10128,6 +10147,19 @@ function AppInner() {
           <div className="flex items-start gap-3">
             {/* 左:送迎表本体 */}
             <div className="flex-1 min-w-0">
+            {(() => {   // いま開いている日：Excel出力のあとにカレンダーの変更があれば帯で知らせる（もう一度出力すると消える）
+              const C = typeof window !== "undefined" && window.SGCal;
+              const ch = !isPattern && sheet && C && C.exportChanges ? C.exportChanges(sheet) : [];
+              if (!ch.length) return null;
+              const at = new Date(sheet.exportedAt);
+              return (
+                <div className="mb-2 rounded-lg border-2 border-rose-400 bg-rose-50 px-3 py-2 text-sm text-rose-800" data-exp-banner>
+                  <b>⚠ Excel出力（{at.getMonth() + 1}/{at.getDate()} {at.getHours()}:{String(at.getMinutes()).padStart(2, "0")}）のあとに、この日のカレンダーが変わりました。</b>
+                  <span className="ml-1">{ch.map((c) => `${c.title || "予定"}（${c.what}）`).join("・")}</span>
+                  <span className="ml-1">→ 確かめて、もう一度Excelを出力してください。</span>
+                </div>
+              );
+            })()}
             {/* 操作バー(1行) */}
             <div className="flex items-center gap-1.5 mb-3 flex-wrap">
               <button className={`${btnSec} px-2`} onClick={() => setDate(todayStr())} title="今日に移動">今日</button>
@@ -10745,6 +10777,28 @@ function AppInner() {
         ※ このアプリのデータは、このアプリを開く全員に共有されます。Excel出力は通常のExcelファイル(.xlsx)で保存されます。 <b>アプリ版: v{SEED_VERSION}</b>(この番号が古い場合は最新のファイルでアプリを開き直してください)
       </div>
 
+      {/* ---------- Excel出力のあとのカレンダーの変更（ほかの日も）：右上にお知らせ ---------- */}
+      {(() => {
+        const list = expAlerts.filter((a) => expDismissed[a.date] !== expSig(a) && !(a.date === date && tab === "sheet" && !isPattern));
+        if (!list.length) return null;
+        const md = (d) => { const x = new Date(d + "T00:00:00"); return `${x.getMonth() + 1}月${x.getDate()}日(${DAYS[x.getDay()]})`; };
+        return (
+          <div className="fixed right-3 top-20 z-50 w-80 max-w-[calc(100vw-24px)] rounded-xl border-2 border-rose-400 bg-white shadow-xl p-3 text-sm" role="alert" data-exp-popup>
+            <div className="font-bold text-rose-700 mb-1">⚠ Excel出力のあとにカレンダーの変更があります</div>
+            {list.map((a) => (
+              <div key={a.date} className="border-t border-stone-200 pt-1.5 mt-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <b>{md(a.date)}のカレンダーに変更があります</b>
+                  <button className="text-xs px-2 py-0.5 rounded bg-rose-600 text-white hover:bg-rose-700 shrink-0" data-exp-open={a.date}
+                    onClick={() => { setTab("sheet"); setDate(a.date); }}>この日を開く</button>
+                </div>
+                <div className="text-xs text-stone-600 mt-0.5">{a.changes.map((c) => `${c.title || "予定"}（${c.what}）`).join("・")}</div>
+              </div>
+            ))}
+            <div className="flex justify-end mt-2"><button className="text-xs px-2 py-1 rounded border border-stone-300 hover:bg-stone-50" data-exp-close onClick={() => dismissExp(list)}>閉じる</button></div>
+          </div>
+        );
+      })()}
       {/* ---------- モーダル ---------- */}
       {modal && modal.type === "item" && curData && (
         <ItemModal
