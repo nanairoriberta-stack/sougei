@@ -245,7 +245,34 @@ const SEED_RULES = {
 const EMPTY_RULES = { ngPairs: [], fixedRun: [], fixedVeh: [], fixedBlock: [], requiredHelp: [], helpTwo: [], maleOnly: [], userVeh: [], helpBase: [], otherRules: [], aiNotes: [] };
 const seedRules = () => JSON.parse(JSON.stringify(EDITION === "v3" ? EMPTY_RULES : SEED_RULES));
 // master.rules を安全に取り出す(未設定の項目は空配列)
-const rulesOf = (master) => ({ ...EMPTY_RULES, ...((master && master.rules) || {}) });
+const rulesOf = (master) => {
+  const r = { ...EMPTY_RULES, ...((master && master.rules) || {}) };
+  return { ...r, helpBase: canonHelpBase(r.helpBase) };
+};
+// ---------- ヘルプ名の統合 ----------
+// 「井上入浴」「黒田入浴(ヘルプ)」は、同じ時刻の「井上ヘルプ」「黒田ヘルプ」と同じもの(2026-10-29 依頼者)。
+// 保存されている名前は変えず、表示・判定・Excel出力・ヘルプ表でこの名前にそろえる(画面で開いて保存し直すとこの名前で残る)
+const HELP_LABEL_MERGE = /^(井上|黒田)入浴(ヘルプ)?$/;
+const canonHelpLabel = (label) => { const t = String(label || "").trim(); const m = HELP_LABEL_MERGE.exec(t); return m ? m[1] + "ヘルプ" : label; };
+const canonHelpBlocks = (blocks) => (blocks || []).map((b) => (b && b.kind === "help" && HELP_LABEL_MERGE.test(String(b.label || "").trim()) ? { ...b, label: canonHelpLabel(b.label) } : b));
+// ヘルプ表の行(helpBase)も同じ名前にそろえ、同じ名前・同じ時刻の行は1つにまとめる(曜日ごとの担当は「・」でつなぐ)
+const canonHelpBase = (list) => {
+  if (!(list || []).some((r) => r && HELP_LABEL_MERGE.test(String(r.label || "").trim()))) return list;
+  const out = [];
+  (list || []).forEach((r) => {
+    if (!r) return;
+    const label = canonHelpLabel(r.label);
+    const same = out.find((x) => x.label === label && String(x.time || "").trim() === String(r.time || "").trim());
+    if (!same) { out.push({ ...r, label }); return; }
+    const byDay = { ...(same.byDay || {}) };
+    Object.entries(r.byDay || {}).forEach(([d, v]) => {
+      const names = [...String(byDay[d] || "").split("・"), ...String(v || "").split("・")].map((x) => x.trim()).filter(Boolean);
+      byDay[d] = [...new Set(names)].join("・");
+    });
+    Object.assign(same, { ...r, ...same, label, byDay });
+  });
+  return out;
+};
 // ---------- 日付で切り替わるルール ----------
 // master.rulesUntil = [{ until: "YYYY-MM-DD", rules }](古い順)。その日までの送迎表は rules、最後の区切りの翌日からは master.rules(いまのルール)
 // 例: 10/11からルールが変わる → [{ until: "2026-10-10", rules: 前のルール }]。10/10までの送迎表は前のルールのまま
@@ -1096,7 +1123,7 @@ function collectHelpRows(master, patterns) {
 // 基本担当を引く(ラベル+時刻で一致。無ければ同じラベルが1件だけならそれを使う)
 function helpBaseFor(rules, label, time) {
   const list = (rules.helpBase || []).filter((r) => r && r.label);
-  const lb = String(label || "").trim(), tm = String(time || "").trim();
+  const lb = String(canonHelpLabel(label) || "").trim(), tm = String(time || "").trim();
   const exact = list.find((r) => r.label === lb && String(r.time || "").trim() === tm);
   if (exact) return exact;
   const byLabel = list.filter((r) => r.label === lb);
@@ -3211,6 +3238,7 @@ function parseMasterWorkbook(XLSX, wb, master0) {
 
 // opts.wb を渡すとそのワークブックにシートを足す。opts.hideHelpVeh=true でヘルプの車名を出さない
 function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
+  if (sheet) sheet = { ...sheet, blocks: canonHelpBlocks(sheet.blocks) };   // 井上入浴→井上ヘルプ など
   const hideHelpVeh = !!opts.hideHelpVeh;
   const wd = weekdayOf(date);
   const deptIndex = (id) => master.departments.findIndex((d) => d.id === id);
@@ -4008,7 +4036,7 @@ const NAME_SEP_RE = /^(\s|[・･、,，()（）［］\[\]「」:：/／\-－~�
 // 予定の時刻+名前を「通常」判定用のキーに(時刻は分に直して比べる)
 function extraKeyOf(label, time) {
   const t = toMin(time);
-  return `${String(label || "").trim()}@${t == null ? String(time || "").trim() : t}`;
+  return `${String(canonHelpLabel(label) || "").trim()}@${t == null ? String(time || "").trim() : t}`;
 }
 // 予定名がその利用者の名前で始まり、うしろが区切られているか(最長一致の人がその利用者であること)
 function labelStartsWithUser(master, label, u) {
@@ -8371,7 +8399,9 @@ function UserTab({ master, update }) {
 /* ============================================================
    ヘルプ表タブ(週間パターンのヘルプと連動)
    ============================================================ */
-function HelpBoardTab({ master, update, patterns, loading, onDeletePattern, onAddPattern }) {
+function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePattern, onAddPattern }) {
+  // 井上入浴→井上ヘルプ など、同じヘルプは同じ名前で並べる
+  const patterns = useMemo(() => Object.fromEntries(Object.entries(patterns0 || {}).map(([k, p]) => [k, p ? { ...p, blocks: canonHelpBlocks(p.blocks) } : p])), [patterns0]);
   const rules = rulesOf(master);
   const rows = collectHelpRows(master, patterns || {});
   const WDS = [1, 2, 3, 4, 5, 6, 0];
@@ -9220,7 +9250,7 @@ function AppInner() {
     updateSheet((prev) => ({
       ...(prev || emptySheet()),
       runs: remapRetired(master, date, (p.runs || []).map((r) => ({ ...r, id: r.id ? `${r.id}@${date}` : uid() }))),
-      blocks: remapRetired(master, date, (p.blocks || []).map((b) => ({ ...b, id: b.id ? `${b.id}@${date}` : uid() }))),
+      blocks: remapRetired(master, date, canonHelpBlocks(p.blocks || []).map((b) => ({ ...b, id: b.id ? `${b.id}@${date}` : uid() }))),
       training: p.training || (prev && prev.training) || "",
       // パターンが特記情報(Excel取り込み由来)を持っていれば一緒に反映(無い場合は現状維持)
       noRide: { ...noRideDefaults(master, weekdayOf(date)), ...((prev && prev.noRide) || {}), ...(p.noRide || {}) },
@@ -9416,8 +9446,8 @@ function AppInner() {
       // 退職者(日付基準)の担当分は保留列に表示(パターン編集時はそのまま)
       ...(!isPattern && master ? {
         runs: remapRetired(master, date, curData.runs || []),
-        blocks: remapRetired(master, date, curData.blocks || []),
-      } : {}),
+        blocks: canonHelpBlocks(remapRetired(master, date, curData.blocks || [])),
+      } : { blocks: canonHelpBlocks(curData.blocks || []) }),
       // 基本の送迎なし(馬場・猪原・野津周の月木・石田の木など)を常に合成(シート/取り込みの設定が優先)
       noRide: { ...noRideDefaults(master, curWd), ...(curData.noRide || {}) },
     } : null),
@@ -9641,7 +9671,7 @@ function AppInner() {
       const p = next[wd];
       if (!p) continue;
       const before = (p.blocks || []).length;
-      const blocks = (p.blocks || []).filter((b) => !(b.kind === "help" && String(b.label || "").trim() === lb && String(b.time || "").trim() === tm));
+      const blocks = (p.blocks || []).filter((b) => !(b.kind === "help" && String(canonHelpLabel(b.label) || "").trim() === String(canonHelpLabel(lb) || "").trim() && String(b.time || "").trim() === tm));
       if (blocks.length === before) continue;
       removed += before - blocks.length;
       const np = { ...p, blocks };
@@ -9719,7 +9749,7 @@ function AppInner() {
 
   const handleExport = async () => {
     if (!sheet || !sheetMaster) return;
-    const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet,
+    const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
     const wd = weekdayOf(date);
     // 保留件数(担当未定+担当者が表にいない予定)を出力時と同じ基準で数える
@@ -9951,7 +9981,7 @@ function AppInner() {
   // 段階チェックを通過(または承知)した後の実出力
   const doExportNow = () => {
     if (!sheet) return;
-    const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet,
+    const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
     exportExcel(sheetMaster, sheetData, date);
   };
@@ -11628,7 +11658,7 @@ function aiApplyPure(sheetMaster, prev, changes, idMap, logInfo) {
 }
 // 出力前チェックの結果(groups)を返す。Excel出力の前に出るチェックと同じ内容
 function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
-    const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet,
+    const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
     const wd = weekdayOf(date);
     // 保留件数(担当未定+担当者が表にいない予定)を出力時と同じ基準で数える
