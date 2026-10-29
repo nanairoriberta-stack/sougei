@@ -237,3 +237,36 @@ console.log('monitor OK');
  assert.strictEqual(T.normEvent({date:D,title:'x',label:'extra'},'abcdef14',0).label,'extra');
 }
 console.log('extra OK');
+// ===== 日付で切り替わるルール：10/11から変える → 10/10までの送迎表は前のルール =====
+{
+ const R=x=>JSON.stringify(x);
+ const at=(mm,d)=>E.applyDayDept(mm,E.weekdayOf(d),null,null,null,d).rules;
+ const base=JSON.parse(JSON.stringify(m)); base.rules=Object.assign({},base.rules||{}); delete base.rulesUntil;
+ const old=R((base.rules.ngPairs)||[]), ng1=[{a:'森',b:'中村'}], ng0=JSON.parse(old);
+ const chg=(mm,key,val,from)=>E.scheduleRules(mm,Object.assign({},mm,{rules:Object.assign({},mm.rules,{[key]:val})}),from);
+ let a=chg(base,'ngPairs',ng1,'2026-10-11');
+ assert.strictEqual(R(at(a,'2026-10-10').ngPairs||[]),old,'10/10は前のルール');
+ assert.strictEqual(R(at(a,'2026-10-11').ngPairs),R(ng1),'10/11から新しいルール');
+ assert.strictEqual(R(E.applyDayDept(a,1,null,null).rules.ngPairs),R(ng1),'日付なし（週間パターン）は新しいルール');
+ assert.deepStrictEqual(a.rulesUntil.map(v=>v.until),['2026-10-10']);
+ // 日付なしの変更はすべての日に
+ const ht=[{staff:'八壁',time:'9:00'}]; let b=chg(a,'helpTwo',ht,'');
+ assert.strictEqual(R(at(b,'2026-10-01').helpTwo),R(ht)); assert.strictEqual(R(at(b,'2026-10-20').helpTwo),R(ht));
+ assert.strictEqual(R(at(b,'2026-10-10').ngPairs||[]),old,'前の区切りはそのまま');
+ // もっと前の日（10/5から）の変更：10/4までは元、10/5〜は変わる。10/11からの分も変わる
+ const uv=[{user:'森',veh:'ドラ'}]; let c=chg(b,'userVeh',uv,'2026-10-05');
+ assert.notStrictEqual(R(at(c,'2026-10-04').userVeh),R(uv)); assert.strictEqual(R(at(c,'2026-10-05').userVeh),R(uv));
+ assert.strictEqual(R(at(c,'2026-10-10').userVeh),R(uv)); assert.strictEqual(R(at(c,'2026-10-12').userVeh),R(uv));
+ assert.strictEqual(R(at(c,'2026-10-10').ngPairs||[]),old); assert.deepStrictEqual(c.rulesUntil.map(v=>v.until),['2026-10-04','2026-10-10']);
+ // 後の日（10/20から）の変更：10/11〜10/19は変わらない
+ const fb=[{staff:'日野',time:'13:00',label:'会議',days:[1]}]; let d=chg(c,'fixedBlock',fb,'2026-10-20');
+ assert.notStrictEqual(R(at(d,'2026-10-19').fixedBlock),R(fb)); assert.strictEqual(R(at(d,'2026-10-20').fixedBlock),R(fb));
+ assert.strictEqual(R(at(d,'2026-10-19').ngPairs),R(ng1));
+ // 10/11からの変更を元に戻す → 要らなくなった区切りは消える
+ let e=chg(d,'ngPairs',ng0,'2026-10-11');
+ assert.ok(!e.rulesUntil.some(v=>v.until==='2026-10-10'),'同じ中身の区切りは消える');
+ assert.strictEqual(R(at(e,'2026-10-10').ngPairs||[]),old); assert.strictEqual(R(at(e,'2026-10-15').ngPairs||[]),old);
+ // 区切りのないマスタは今までどおり（rulesUntil を作らない）
+ assert.ok(!('rulesUntil' in chg(base,'helpTwo',ht,'')),'日付なしの変更で区切りは作らない');
+ console.log('rules by date OK', e.rulesUntil.map(v=>v.until).join(','));
+}

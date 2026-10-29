@@ -102,6 +102,8 @@ if (require.main === module) (async () => {
   console.log("4. 読む道具");
   const rules = text(await c.callTool({ name: "get_rules", arguments: { edition: "v1" } }));
   ok(rules.includes("送迎のルール") && rules.includes("masterChanges"), "ルール全文と書き方 (" + rules.length + "字)");
+  const rulesD = text(await c.callTool({ name: "get_rules", arguments: { edition: "v1", date } }));
+  ok(rulesD.includes(date + "に効くルール") && rulesD.includes("masterChanges"), "日付を渡すとその日に効くルール");
   const day = text(await c.callTool({ name: "get_day", arguments: { edition: "v1", date } }));
   const runs = section(day, "# 便(idはこの状態でだけ有効)");
   ok(Array.isArray(runs) && runs.length > 30, "その日の便 " + runs.length + "件とチェック結果");

@@ -79,6 +79,11 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - 通常の迎え・送りの便に訓練の人を乗せる指定（`trainUserIds`/`trainBothIds`/`trainDropIds`/`trainEndIds`）は「訓練の人を乗せるとき（開く）」の中にたたむ
 - 以前の「🏁 この訓練送りで送迎終了にする」ボタン（noRide に「訓練送りで終了」を入れる別のやり方）は廃止。入っている noRide はそのまま効く
 
+## ルールを日付で切り替える（2026-10-29）
+- `master.rulesUntil=[{until:"YYYY-MM-DD", rules}]`（古い順）：その日までの送迎表はその rules、最後の区切りの翌日からは `master.rules`（いちばん新しいルール）。`rulesAtDate`
+- その日のルールは `applyDayDept(…, dateStr)` で入る（送迎表の日の画面 `sheetMaster`・チェック・Claudeの `get_day`）。週間パターン（日付なし）は新しいルール。`get_rules` は `date` を渡すとその日の分
+- ルールの画面・ヘルプ表の上の「このあとのルール変更を使い始める日」（`RuleFromBar`）。日付を入れて変えると `scheduleRules` が前日までの分を残す。空欄はすべての日（前の区切りにも同じ変更）。中身が同じになった区切りは消える。「区切りを消す」ボタンあり
+
 ## データの置き方（スプレッドシート）
 - `_docs`（隠し）：1行1文書。A=パス、B=版(rev)、C=日時、D=meta(JSON)、E=分割数、F〜=JSON本体（45000字ごと、各セル頭に `J`）
   - 送迎表：`kv/<encKey(キー)>`。キーは `master`（利用者・職員・車両・部署・ルール）/ `sheet:YYYY-MM-DD` / `pattern:0〜6`（週間パターン）。版の頭 `v2:`/`v3:`

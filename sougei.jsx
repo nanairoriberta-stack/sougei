@@ -137,12 +137,12 @@ const todayStr = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 // 日付ボタンのカレンダー。ブラウザ標準の日付選びは出る位置がずれる（Googleの画面の中では特に）ので、ボタンのすぐ下に自前で出す
-function DatePop({ date, setDate }) {
+function DatePop({ date, setDate, empty }) {
   const [open, setOpen] = useState(false);
-  const [ym, setYm] = useState(() => date.slice(0, 7));
-  useEffect(() => { if (open) setYm(date.slice(0, 7)); }, [open, date]);
+  const [ym, setYm] = useState(() => (date || todayStr()).slice(0, 7));
+  useEffect(() => { if (open) setYm((date || todayStr()).slice(0, 7)); }, [open, date]);
   useEffect(() => { if (!open) return; const k = (e) => { if (e.key === "Escape") setOpen(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [open]);
-  const d = new Date(date + "T00:00:00");
+  const d = new Date((date || todayStr()) + "T00:00:00");
   const [y, m] = ym.split("-").map(Number);
   const first = new Date(y, m - 1, 1).getDay(), days = new Date(y, m, 0).getDate();
   const ds = (n) => `${y}-${String(m).padStart(2, "0")}-${String(n).padStart(2, "0")}`;
@@ -152,7 +152,7 @@ function DatePop({ date, setDate }) {
   return (
     <span className="relative inline-flex">
       <button type="button" data-datepop className="inline-flex items-center border border-stone-300 rounded-md px-3 py-1.5 text-sm font-bold text-stone-700 bg-white cursor-pointer hover:bg-stone-50" title="クリックで日付を選択" onClick={() => setOpen((o) => !o)}>
-        {`${d.getMonth() + 1}/${d.getDate()}(${DAYS[d.getDay()]})`}
+        {date || !empty ? `${d.getMonth() + 1}/${d.getDate()}(${DAYS[d.getDay()]})` : empty}
         <span className="ml-1.5 text-stone-400 font-normal">📅</span>
       </button>
       {open && (<>
@@ -246,6 +246,35 @@ const EMPTY_RULES = { ngPairs: [], fixedRun: [], fixedVeh: [], fixedBlock: [], r
 const seedRules = () => JSON.parse(JSON.stringify(EDITION === "v3" ? EMPTY_RULES : SEED_RULES));
 // master.rules を安全に取り出す(未設定の項目は空配列)
 const rulesOf = (master) => ({ ...EMPTY_RULES, ...((master && master.rules) || {}) });
+// ---------- 日付で切り替わるルール ----------
+// master.rulesUntil = [{ until: "YYYY-MM-DD", rules }](古い順)。その日までの送迎表は rules、最後の区切りの翌日からは master.rules(いまのルール)
+// 例: 10/11からルールが変わる → [{ until: "2026-10-10", rules: 前のルール }]。10/10までの送迎表は前のルールのまま
+const rulesAtDate = (master, dateStr) => {
+  if (dateStr) for (const v of (master && master.rulesUntil) || []) if (v && String(dateStr) <= v.until) return v.rules || {};
+  return (master && master.rules) || {};
+};
+const dayBeforeStr = (ds) => { const [y, m, d] = String(ds).split("-").map(Number); const t = new Date(y, m - 1, d - 1); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
+// ルールの変更(oldM → newM)を「from の日から」効くように並べ直す。from が空ならすべての日(前の区切りの分にも同じ変更を入れる)
+function scheduleRules(oldM, newM, from) {
+  if (!oldM || !newM) return newM;
+  const oldR = rulesOf(oldM), newR = rulesOf(newM);
+  const keys = [...new Set([...Object.keys(oldR), ...Object.keys(newR)])].filter((k) => JSON.stringify(oldR[k]) !== JSON.stringify(newR[k]));
+  let list = (oldM.rulesUntil || []).filter((v) => v && v.until).map((v) => ({ ...v })).sort((a, b) => (a.until < b.until ? -1 : 1));
+  if (!keys.length) return newM;
+  const patch = (r) => { const o = { ...EMPTY_RULES, ...(r || {}) }; keys.forEach((k) => { o[k] = newR[k]; }); return o; };
+  if (from) {
+    const pd = dayBeforeStr(from);
+    const i = list.findIndex((v) => v.until >= pd);
+    if (i < 0) list.push({ until: pd, rules: oldR });                       // いまのルールを前日までの分として残す
+    else if (list[i].until > pd) list.splice(i, 0, { until: pd, rules: list[i].rules });
+    list = list.map((v) => (v.until >= from ? { ...v, rules: patch(v.rules) } : v));
+  } else list = list.map((v) => ({ ...v, rules: patch(v.rules) }));
+  // 次の区切り(いまのルール)と中身が同じ区切りは要らない
+  const same = (a, b) => JSON.stringify(rulesOf({ rules: a })) === JSON.stringify(rulesOf({ rules: b }));
+  const out = list.filter((v, j) => !same(v.rules, j + 1 < list.length ? list[j + 1].rules : newR));
+  if (!out.length && !(oldM.rulesUntil || []).length) return { ...newM, rules: newR };
+  return { ...newM, rules: newR, rulesUntil: out };
+}
 // ルールの対象時間かどうか(time=その時刻だけ / from=この時刻以降だけ)
 const ruleTimeHit = (row, t) => {
   if (row.time) return t != null && t === toMin(row.time);
@@ -1033,6 +1062,7 @@ function mergeSeedMaster(oldMaster, seed) {
     seedVersion: seed.seedVersion,
     // ルールは画面で編集するものなので、すでにあればそのまま残す
     rules: oldMaster.rules || seed.rules,
+    ...(oldMaster.rulesUntil ? { rulesUntil: oldMaster.rulesUntil } : {}),   // 日付で切り替わるルールも残す
     _deleted: { staff: [...delStaff], vehicles: [...delVeh], users: [...delUser] },
   };
 }
@@ -1168,7 +1198,9 @@ function applyDayDept(master, wd, staffOv, userDept, userExtra, dateStr) {
     if (ux[u.id] && wd != null && !((u.days || []).includes(wd))) nu = { ...nu, days: [...(u.days || []), wd], extraUseDay: true };
     return nu;
   });
-  return { ...master, staff, users };
+  // その日の送迎表に効くルール(日付で切り替わるルールがあれば、その日の分)
+  const rules = dateStr && (master.rulesUntil || []).length ? { rules: rulesAtDate(master, dateStr) } : {};
+  return { ...master, ...rules, staff, users };
 }
 
 // ---------- 車両の解決(公用車 or 職員の自車) ----------
@@ -8645,6 +8677,38 @@ function RuleRows({ title, note, rows, cols, onChange, onAdd, blank }) {
   );
 }
 
+// ルールの変更を「何日から」効かせるか。日付を入れると、その前の日までの送迎表は前のルールのまま
+const mdStr = (ds) => { const [, m, d] = String(ds).split("-").map(Number); return `${m}/${d}`; };
+function RuleFromBar({ master, from, setFrom, rawUpdate }) {
+  const list = (master.rulesUntil || []).filter((v) => v && v.until);
+  return (
+    <div className="mb-3 p-2 rounded-lg border border-amber-300 bg-amber-50" data-rulefrom>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-bold text-stone-700">このあとのルール変更を使い始める日</span>
+        <DatePop date={from} setDate={setFrom} empty="日付を選ぶ（空欄＝すべての日）" />
+        {from && <button type="button" className="text-xs px-2 py-1 rounded border border-stone-300 bg-white hover:bg-stone-50" onClick={() => setFrom("")}>日付の指定をやめる</button>}
+      </div>
+      <div className="text-xs text-stone-600 mt-1">
+        {from
+          ? <>これから行う変更は <b>{mdStr(from)}からの送迎表</b> にだけ効きます。<b>{mdStr(dayBeforeStr(from))}までの送迎表</b> は、これまでのルールのままです。</>
+          : "日付を入れないと、変更はすべての日の送迎表に効きます（これまでどおり）。ルールが変わる日が決まっているときは、先に日付を入れてから変更してください。"}
+      </div>
+      {list.length > 0 && (
+        <div className="text-xs text-stone-700 mt-1.5 border-t border-amber-200 pt-1.5">
+          <div className="font-bold">日付で切り替わるルール（下に出ているのは、いちばん新しいルールです）</div>
+          {list.map((v, i) => (
+            <div key={v.until} className="flex items-center gap-2 mt-0.5" data-rulecut={v.until}>
+              <span>{i === 0 ? "" : mdStr(list[i - 1].until) + "の翌日"}〜{mdStr(v.until)}：その時のルール</span>
+              <button type="button" className="text-[11px] px-1.5 py-0.5 rounded border border-stone-300 bg-white hover:bg-rose-50"
+                onClick={async () => { if (await ask(`${mdStr(v.until)}までの区切りを消しますか?\n消すと、その日までの送迎表にも新しいほうのルールが効きます。`)) rawUpdate((m) => ({ ...m, rulesUntil: (m.rulesUntil || []).filter((x) => x.until !== v.until) })); }}>区切りを消す</button>
+            </div>
+          ))}
+          <div className="mt-0.5">{mdStr(list[list.length - 1].until)}の翌日から：いま下に出ているルール</div>
+        </div>
+      )}
+    </div>
+  );
+}
 function RulesTab({ master, update }) {
   const r = rulesOf(master);
   const setKey = (key, rows) => update((m) => ({ ...m, rules: { ...rulesOf(m), [key]: rows } }));
@@ -8970,6 +9034,9 @@ function AppInner() {
       scheduleSave("master", next);
       return next;
     });
+  // ルールの変更：「使い始める日」が入っていれば、その前の日までの送迎表は前のルールのまま(scheduleRules)
+  const [ruleFrom, setRuleFrom] = useState("");
+  const updateRules = (fn) => updateMaster((m) => scheduleRules(m, fn(m), ruleFrom));
 
   useEffect(() => {
     if (!master) return;
@@ -10598,8 +10665,9 @@ function AppInner() {
         {tab === "staff" && <StaffTab master={master} update={updateMaster} />}
         {tab === "vehicles" && <VehicleTab master={master} update={updateMaster} />}
         {tab === "users" && <UserTab master={master} update={updateMaster} />}
-        {tab === "helpboard" && <HelpBoardTab master={master} update={updateMaster} patterns={allPatterns || {}} loading={!allPatterns} onDeletePattern={deleteHelpFromPatterns} onAddPattern={addHelpToPatterns} />}
-        {tab === "rules" && <RulesTab master={master} update={updateMaster} />}
+        {(tab === "helpboard" || tab === "rules") && <RuleFromBar master={master} from={ruleFrom} setFrom={setRuleFrom} rawUpdate={updateMaster} />}
+        {tab === "helpboard" && <HelpBoardTab master={master} update={updateRules} patterns={allPatterns || {}} loading={!allPatterns} onDeletePattern={deleteHelpFromPatterns} onAddPattern={addHelpToPatterns} />}
+        {tab === "rules" && <RulesTab master={master} update={updateRules} />}
         {tab === "depts" && <DeptTab master={master} update={updateMaster} onReseed={async () => {
           if (!(await ask("Excelから抽出した初期マスタ(職員38・利用者40・車両13)を読み込みます。\n現在の職員・利用者・車両・部署は置き換わります。よろしいですか?"))) return;
           const fresh = seedMaster();

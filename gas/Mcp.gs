@@ -90,7 +90,7 @@ var MCP_INSTRUCTIONS = [
 var EDITION_PROP = { type: 'string', enum: ['v1', 'v2', 'v3'], description: 'v1=現体制版 v2=新体制版(11/1〜) v3=りんく・ぷれいす版。省略時は日付から自動(11/1以降はv2)' };
 var CHANGE_ITEM = { type: 'object', description: '便・ヘルプの変更。{"op":"update","id":"r1","staff":"職員名","veh":"車名","time":"8:30","users":["利用者名"],"dest":"部署名","dur":60} / {"op":"add","kind":"迎|送|他|ヘルプ","time":"15:30","staff":"職員名","veh":"車名(ヘルプは自車も可)","users":["利用者名"],"label":"ヘルプ名"} / {"op":"delete","id":"r2"}' };
 var MCP_TOOLS = [
-  { name: 'get_rules', title: '送迎のルールを読む', description: '送迎表を組むときのルール(固定担当・男性職員・定員・時刻厳守など)の全文。会話の最初に1回読む', inputSchema: { type: 'object', properties: { edition: EDITION_PROP } }, annotations: { readOnlyHint: true } },
+  { name: 'get_rules', title: '送迎のルールを読む', description: '送迎表を組むときのルール(固定担当・男性職員・定員・時刻厳守など)の全文。会話の最初に1回読む。日付でルールが切り替わることがあるので、組む日の date を渡す', inputSchema: { type: 'object', properties: { edition: EDITION_PROP, date: { type: 'string', description: '組む日(YYYY-MM-DD)。その日に効くルールを返す。省略するといちばん新しいルール' } } }, annotations: { readOnlyHint: true } },
   { name: 'get_day', title: 'その日の送迎表を読む', description: 'その日の職員・利用者・車両・便・ヘルプ・未割当・保留と、Excel出力前と同じチェックの結果。proposal_id を付けるとその案を当てたあとの状態', inputSchema: { type: 'object', properties: { date: { type: 'string', description: 'YYYY-MM-DD' }, edition: EDITION_PROP, proposal_id: { type: 'string' } }, required: ['date'] }, annotations: { readOnlyHint: true } },
   { name: 'get_master', title: '利用者・職員・車両・部署・ルール設定を読む', description: '利用者の利用曜日・曜日ごとの利用先・時刻、職員の勤務・固定休、車両、部署、ルールタブ・ヘルプ表の設定', inputSchema: { type: 'object', properties: { edition: EDITION_PROP, proposal_id: { type: 'string' } } }, annotations: { readOnlyHint: true } },
   { name: 'get_week_pattern', title: '週間パターンを読む', description: 'ある曜日の週間パターンの便・ヘルプ(id付き)', inputSchema: { type: 'object', properties: { weekday: { type: 'integer', minimum: 0, maximum: 6, description: '0日〜6土' }, edition: EDITION_PROP, proposal_id: { type: 'string' } }, required: ['weekday'] }, annotations: { readOnlyHint: true } },
@@ -140,8 +140,9 @@ function stateFor_(args, needDays) {
 
 var MCP_IMPL = {
   get_rules: function (me, a) {
-    var b = loadBase_(edOf_(a), null, []);
-    return '# 送迎のルール(' + APP.EDITION_LABEL[b.ed] + ')\n' + SGEngine.aiRulesText(b.master) + '\n\n# propose の書き方(dayChanges・masterChanges・ruleChanges)\n' + MCP_FORMAT;
+    var b = loadBase_(edOf_(a), null, []), date = a.date ? chkDate_(a.date) : '';
+    var m = date ? Object.assign({}, b.master, { rules: SGEngine.rulesAtDate(b.master, date) }) : b.master;
+    return '# 送迎のルール(' + APP.EDITION_LABEL[b.ed] + (date ? '・' + date + 'に効くルール' : '') + ')\n' + SGEngine.aiRulesText(m) + '\n\n# propose の書き方(dayChanges・masterChanges・ruleChanges)\n' + MCP_FORMAT;
   },
   get_day: function (me, a) {
     var date = chkDate_(a.date || (a.proposal_id ? propGet_(a.proposal_id).date : ''));

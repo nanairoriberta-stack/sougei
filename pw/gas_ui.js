@@ -85,6 +85,16 @@ const D = path.join(__dirname, "../gas/out");
     await edit(async () => { await P.pg.locator(`[data-same="${un}"]`).uncheck(); await kindSel().selectOption("send"); });   // 元に戻す
     const s2 = api(t, "kv.get", ["sheet:" + date]).data.value.runs.find((r) => r.id === r0.id); assert.ok(!s2.mode && !s2.trainBothIds, "元に戻る");
     console.log("訓練送り:", un, "チェックなし→送り漏れ / 通常の送りと同じ→出ない"); }
+  // ルール：「使い始める日」を選ぶと、その前の日までは前のルールのままと出る
+  { await P.pg.click('button:text-is("ルール")'); await P.pg.waitForTimeout(400);
+    assert.ok(await P.pg.locator("[data-rulefrom]").isVisible(), "ルールの画面に「使い始める日」");
+    await P.pg.click("[data-rulefrom] [data-datepop]"); const day = await P.pg.locator("[data-rulefrom] [data-day]").nth(14).getAttribute("data-day");
+    await P.pg.click(`[data-rulefrom] [data-day="${day}"]`); await P.pg.waitForTimeout(200);
+    const txt = await P.pg.locator("[data-rulefrom]").innerText(); const [, mm, dd] = day.split("-").map(Number);
+    assert.ok(txt.includes(`${mm}/${dd}からの送迎表`) && txt.includes(`${mm}/${dd - 1}までの送迎表`), txt);
+    await P.pg.locator("[data-rulefrom]").screenshot({ path: "g_rulefrom.png" });
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(400);
+    console.log("ルールの使い始める日:", txt.split("\n")[1]); }
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   assert.strictEqual(await P.pg.getByRole("button", { name: /AI調整|AIと相談/ }).count(), 0, "料金がかかるAIのボタンは、キーが無ければ出ない");
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);
