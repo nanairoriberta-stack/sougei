@@ -103,6 +103,15 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.locator("[data-rulefrom]").screenshot({ path: "g_rulefrom.png" });
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(400);
     console.log("ルールの使い始める日:", txt.split("\n")[1]); }
+  { // 職員・車両・利用者のタブは基本の部署の順（職員はパートが各部署の下）
+    for (const tb of ["職員", "車両", "利用者"]) { await P.pg.click(`button:text-is("${tb}")`); await P.pg.waitForTimeout(400); }
+    await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(300); await P.pg.screenshot({ path: "g_staff_tab.png" });
+    const rowsDept = await P.pg.$$eval("[data-dept-row]", (rs) => rs.map((r) => ({ d: r.dataset.deptRow, bg: r.style.background, bt: r.style.borderTop })));
+    assert.ok(rowsDept.every((r) => r.bg), "部署ごとに背景の色");
+    const changes = rowsDept.filter((r, i) => i > 0 && rowsDept[i - 1].d !== r.d); assert.ok(changes.length >= 2 && changes.every((r) => r.bt.includes("3px")), "部署が変わる行に区切り線");
+    assert.strictEqual(new Set(rowsDept.map((r) => r.d)).size, changes.length + 1, "同じ部署はまとまっている");
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(400);
+    assert.deepStrictEqual(real(P.errs), [], "タブを開いても画面エラーなし"); }
   // その他予定「コマだけ消す」：表からは消えて、特記事項には残る。下の一覧から表に戻せる
   { assert.ok(await P.pg.locator('[data-item-id="blkNote1"]').isVisible(), "はじめは表にコマ");
     await P.pg.click('[data-item-id="blkNote1"]'); await P.pg.waitForTimeout(300);
@@ -147,6 +156,14 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.screenshot({ path: "g_calside.png" });
     await P.pg.click("[data-calside-close]"); await P.pg.waitForTimeout(300); assert.strictEqual(await P.pg.locator("[data-calside]").count(), 0, "閉じる");
     console.log("右のカレンダー:", src); }
+  { // パソコンのカレンダー：マスの日付の右を押すと、その日の予定を追加
+    const C2 = await open("calendar.html", { width: 1280, height: 900 }, boot, "calendar_pc.html");
+    await C2.pg.waitForTimeout(500); await C2.pg.fill("#sghNo", "000"); await C2.pg.fill("#sghPin", "5829"); await C2.pg.click("#sghGo"); await C2.pg.waitForTimeout(2500);
+    await C2.pg.hover('.cell[data-day="2026-11-12"]'); await C2.pg.waitForTimeout(200);
+    await C2.pg.locator('.cell[data-day="2026-11-12"] .cell-head').screenshot({ path: "g_cell_add.png" });
+    await C2.pg.click('[data-add-cell="2026-11-12"]'); await C2.pg.waitForTimeout(400);
+    assert.ok(await C2.pg.locator("#evForm").isVisible(), "日付の右で予定を追加"); assert.strictEqual(await C2.pg.inputValue("#f-date"), "2026-11-12");
+    assert.deepStrictEqual(real(C2.errs), []); await C2.pg.context().close(); console.log("パソコンのカレンダー: 日付の右で追加"); }
   // りんく・ぷれいす版：担当を「生活介護へ依頼」にした便 → 生活介護（11/1からは新体制版）の保留欄に【りんく依頼】。担当・車が決まるとりんく側の便に出る
   { const v3m = api(t, "kv.get", ["v3:master"]).data.value, kid = v3m.users[0];
     api(t, "kv.merge", [{ key: "v3:sheet:" + date, base: null, baseKnown: false, mine: { runs: [{ id: "rqUI", kind: "meet", time: "15:00", staffId: "__req__", vehicleId: "", userIds: [kid.id], staffRiderIds: [], note: "" }], blocks: [] } }]);

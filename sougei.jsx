@@ -7973,6 +7973,24 @@ function FilterBar({ master, q, setQ, dept, setDept, placeholder }) {
   );
 }
 
+// 職員・車両・利用者の一覧は基本の部署の順（嫁島・津田・川津・あいのて・リベ）。同じ部署の中は今までの並び。保存されている並びは変えない(表示だけ)
+const DEPT_ORDER_NAMES = ["嫁島", "津田", "川津", "あいのて", "リベ"];
+function deptRankOf(master, deptId) {
+  const ds = master.departments || [], d = ds.find((x) => x.id === deptId);
+  if (!d) return 999;
+  const i = DEPT_ORDER_NAMES.findIndex((n) => String(d.name || "").startsWith(n));
+  return i >= 0 ? i : 10 + ds.indexOf(d);
+}
+// 職員はパートを各部署の下にまとめる(sub: 同じ部署の中で先に来る順。小さいほど上)
+const byBaseDept = (master, list, sub) => list.map((x, i) => [x, i]).sort((a, b) => deptRankOf(master, a[0].deptId) - deptRankOf(master, b[0].deptId) || (sub ? sub(a[0]) - sub(b[0]) : 0) || a[1] - b[1]).map((p) => p[0]);
+const partLast = (s) => (s && s.emp === "パート" ? 1 : 0);
+// 部署ごとに行の背景を少し変え、部署が変わる行の上に太い線（区切りが分かるように）
+const deptRowStyle = (master, list, i) => {
+  const x = list[i], di = (master.departments || []).findIndex((d) => d.id === x.deptId);
+  const st = di < 0 ? {} : { background: DEPT_COLORS[di % DEPT_COLORS.length].hex + "99" };
+  if (i > 0 && list[i - 1].deptId !== x.deptId) st.borderTop = "3px solid #a8a29e";
+  return st;
+};
 function StaffTab({ master, update }) {
   const [q, setQ] = useState("");
   const [dept, setDept] = useState("all");
@@ -8014,7 +8032,7 @@ function StaffTab({ master, update }) {
       staff: [...m.staff, { id: uid(), name: "", deptId: m.departments[0].id, position: "", emp: "常勤", start: "8:30", end: "17:30", canDrive: true, memo: "" }],
       _deleted: m._deleted,
     }));
-  const list = master.staff.filter((s) => (dept === "all" || s.deptId === dept) && (!q || s.name.includes(q)));
+  const list = byBaseDept(master, master.staff.filter((s) => (dept === "all" || s.deptId === dept) && (!q || s.name.includes(q))), partLast);
   const canReorder = dept === "all" && !q; // 全件表示のときだけ並べ替え可
   return (
     <div className="bg-white border border-stone-300 rounded-lg p-3 overflow-x-auto">
@@ -8030,7 +8048,7 @@ function StaffTab({ master, update }) {
         </thead>
         <tbody>
           {list.map((s, ri) => (
-            <tr key={s.id}
+            <tr key={s.id} style={deptRowStyle(master, list, ri)} data-dept-row={s.deptId}
               onDragOver={canReorder ? (e) => { e.preventDefault(); if (overId !== s.id) setOverId(s.id); } : undefined}
               onDrop={canReorder ? () => onDropRow(s.id) : undefined}
               className={`border-t border-stone-100 ${ri % 2 ? "bg-stone-100" : "bg-white"} hover:bg-amber-100 ${overId === s.id && dragId ? "outline outline-2 outline-sky-400" : ""}`}>
@@ -8152,8 +8170,8 @@ function VehicleTab({ master, update }) {
           </tr>
         </thead>
         <tbody>
-          {master.vehicles.map((v) => (
-            <tr key={v.id}
+          {byBaseDept(master, master.vehicles).map((v, vi, vl) => (
+            <tr key={v.id} style={deptRowStyle(master, vl, vi)}
               onDragOver={(e) => { e.preventDefault(); if (overId !== v.id) setOverId(v.id); }}
               onDrop={() => onDropRow(v.id)}
               className={`border-t border-stone-100 ${overId === v.id && dragId ? "outline outline-2 outline-sky-400" : ""}`}>
@@ -8256,7 +8274,7 @@ function UserTab({ master, update }) {
       ...m,
       users: [...m.users, { id: uid(), name: "", deptId: m.departments[0].id, meetTime: "", sendTime: "", wheelchair: false, hasHelp: true, helpNote: "", days: [] }],
     }));
-  const list = master.users.filter((u) => (dept === "all" || u.deptId === dept) && (!q || u.name.includes(q)));
+  const list = byBaseDept(master, master.users.filter((u) => (dept === "all" || u.deptId === dept) && (!q || u.name.includes(q))));
   const canReorder = dept === "all" && !q;
   const exportXlsx = async () => {
     try {
@@ -8299,7 +8317,7 @@ function UserTab({ master, update }) {
         <tbody>
           {list.map((u, ri) => (
             <React.Fragment key={u.id}>
-            <tr
+            <tr style={deptRowStyle(master, list, ri)}
               onDragOver={canReorder ? (e) => { e.preventDefault(); if (overId !== u.id) setOverId(u.id); } : undefined}
               onDrop={canReorder ? () => onDropRow(u.id) : undefined}
               className={`border-t border-stone-100 ${overId === u.id && dragId ? "outline outline-2 outline-sky-400" : ""}`}>

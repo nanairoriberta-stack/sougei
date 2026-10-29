@@ -46,3 +46,19 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  assert.ok(!JSON.stringify(chk).includes('入浴'),'チェックの文に「井上入浴」「黒田入浴」が出ない');
  console.log('help merge OK');
 }
+// ===== 職員・車両・利用者の一覧は基本の部署の順（嫁島・津田・川津・あいのて・リベ）。同じ部署の中は今までの並び（2026-10-29） =====
+{
+ const assert=require('assert'); const E3=require('./eng.cjs');
+ const m=E3.mergeSeedMaster(null,E3.seedMaster()); const dn=(id)=>(m.departments.find(d=>d.id===id)||{}).name||'';
+ const rank=(n)=>["嫁島","津田","川津","あいのて","リベ"].findIndex(x=>n.startsWith(x));
+ for(const key of ['users','staff','vehicles']){
+  const shuffled=[...m[key]].reverse(); const out=E3.byBaseDept(m,shuffled);
+  const rs=out.map(x=>rank(dn(x.deptId))); assert.deepStrictEqual(rs,[...rs].sort((a,b)=>a-b),key+' 部署の順');
+  const firstDept=out.filter(x=>x.deptId===out[0].deptId).map(x=>x.id); assert.deepStrictEqual(firstDept,shuffled.filter(x=>x.deptId===out[0].deptId).map(x=>x.id),key+' 部署の中は元の並び');
+ }
+ // 職員はパートを各部署の下に
+ const st=E3.byBaseDept(m,[...m.staff].reverse(),E3.partLast);
+ for(const d of m.departments){const xs=st.filter(x=>x.deptId===d.id).map(x=>x.emp==="パート"?1:0);assert.deepStrictEqual(xs,[...xs].sort((a,b)=>a-b),d.name+' パートは下');}
+ assert.ok(m.staff.some(x=>x.emp==="パート"),'見本にパートがいる');
+ console.log('dept order OK');
+}
