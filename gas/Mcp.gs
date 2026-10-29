@@ -275,7 +275,7 @@ function propApply_(me, id) {
       var stamp = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'M/d HH:mm');
       v.aiLog = (v.aiLog ? v.aiLog + '\n' : '') + '◆' + stamp + ' Claudeの案「' + pr.title + '」を反映(' + me.name + ')';
       v = reconcileSheetValue_(key, v, idx);
-      docSet_(sp, { k: key, v: v, by: me.no }, (sc ? sc.rev : 0) + 1, { k: key }, idx); done.push(pr.date + 'の送迎表');
+      docSet_(sp, { k: key, v: v, by: me.no }, (sc ? sc.rev : 0) + 1, { k: key }, idx); linkAfterSave_(key, v, idx); done.push(pr.date + 'の送迎表');
     }
     Object.keys(pr.draft.patterns || {}).forEach(function (d) {
       if (SGKV.eq(pr.base.patterns[d], pr.draft.patterns[d])) return;

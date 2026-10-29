@@ -251,6 +251,57 @@ function summary0(master, sheet, events, date) {
       s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) : s.type === "user_time" || s.type === "user_extra" ? [s.type === "user_extra" ? "今日だけ利用" : "", s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
 }
 
-const API = { reconcile, specsFor, summary, TYPE_LABEL, appTime };
+/* ===== りんく・ぷれいす版（放課後デイ）→ 生活介護への送迎の依頼 =====
+   りんく・ぷれいす版で担当を「生活介護へ依頼」(REQ_ID) にした迎え・送りの便を、その日の生活介護の送迎表の保留欄に
+   【りんく依頼】として出す（ID lk_<便のID>、kind:"help"）。担当・車は生活介護が決め、それをりんく側に返す（linkStatus）。
+   時刻・名前・行き先の変更は付いていく。取り消されたら、まだ保留ならそのまま消し、担当が決まっていれば【取消】と付けて残す（担当者が消す） */
+const REQ_ID = "__req__";
+function linkReqs(sheet, master) {
+  const un = (id) => (((master && master.users) || []).find((u) => u.id === id) || {}).name || "";
+  return ((sheet && sheet.runs) || []).filter((r) => r && r.staffId === REQ_ID && (r.kind === "meet" || r.kind === "send")).map((r) => ({
+    id: r.id, kind: r.kind, time: r.time || "", names: (r.userIds || []).map(un).filter(Boolean),
+    place: Object.values(r.places || {}).filter(Boolean).join("・"), note: String(r.note || "").trim(), durMin: r.durMin }));
+}
+const linkLabel = (q) => `【りんく依頼】${q.names.join("・") || "（名前なし）"} ${q.kind === "meet" ? "迎え" : "送り"}`;
+function linkApply(sheet, reqs) {
+  if (!sheet) return sheet;
+  let next = null;
+  const work = () => (next || (next = clone(sheet)));
+  const cur = () => next || sheet;
+  const want = new Set(reqs.map((q) => "lk_" + q.id));
+  for (const q of reqs) {
+    const id = "lk_" + q.id, label = linkLabel(q), note = [q.place, q.note].filter(Boolean).join("・");
+    const b = (cur().blocks || []).find((x) => x && x.id === id);
+    if (!b) {                                                   // 新しい依頼（パターン読込などで消えた分もここで戻る）
+      const n = work(); n.blocks = (n.blocks || []).concat([Object.assign({ id, kind: "help", time: q.time, staffId: HOLD_ID, label, vehicleId: "", userIds: [], linkReq: q.id },
+        note ? { note } : {}, q.durMin ? { durMin: q.durMin } : {})]);
+      continue;
+    }
+    if (b.label !== label || b.time !== q.time || (b.note || "") !== note || b.linkCancelled || b.linkReq !== q.id) {
+      const n = work(), x = n.blocks.find((y) => y && y.id === id);
+      x.label = label; x.time = q.time; x.linkReq = q.id; delete x.linkCancelled;
+      if (note) x.note = note; else delete x.note;
+    }
+  }
+  for (const b of (cur().blocks || []).slice()) {
+    if (!b || !String(b.id || "").startsWith("lk_") || want.has(b.id)) continue;
+    if (b.staffId === HOLD_ID) { const n = work(); n.blocks = n.blocks.filter((x) => !(x && x.id === b.id)); }
+    else if (!b.linkCancelled) { const n = work(), x = n.blocks.find((y) => y && y.id === b.id); x.linkCancelled = true; if (!String(x.label || "").startsWith("【取消】")) x.label = "【取消】" + x.label; }
+  }
+  return next || sheet;
+}
+/* 生活介護の送迎表で決まった担当・車（りんく側の便ID → {staff, veh}）。担当が決まっていなければ staff は空 */
+function linkStatus(sheet, master) {
+  const out = {};
+  for (const b of (sheet && sheet.blocks) || []) {
+    if (!b || !b.linkReq || b.linkCancelled) continue;
+    const st = ((master && master.staff) || []).find((s) => s.id === b.staffId);
+    const vid = String(b.vehicleId || ""), veh = ((master && master.vehicles) || []).find((v) => v.id === vid);
+    out[b.linkReq] = { staff: st ? st.name : "", veh: veh ? veh.name : vid.startsWith("own:") ? "自車" : "" };
+  }
+  return out;
+}
+
+const API = { reconcile, specsFor, summary, TYPE_LABEL, appTime, REQ_ID, linkReqs, linkApply, linkStatus };
 if (typeof module !== "undefined" && module.exports) module.exports = API; else G.SGCal = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);

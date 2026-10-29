@@ -450,6 +450,47 @@ async function bootstrap() {
     return "日付以外の値は捨てる";
   });
 
+  await test("りんく・ぷれいす版 → 生活介護への送迎の依頼（担当・車が返る・時刻が付いていく・取り消し）", async () => {
+    const { g, admin } = await bootstrap();
+    const kv = admin.kv(), get = async (k) => (await admin.call("kv.get", k)).value, date = "2026-11-25";
+    await kv.update("v3:master", (m) => ({ ...m, users: [...(m.users || []), { id: "k1", name: "星野こども", days: [3], deptId: ((m.departments || [])[0] || {}).id }] }));
+    const E2 = engFor("v2"), m2 = await get("v2:master"), p = E2.resolveSeedPattern(m2, E2.SEED_PATTERNS.wed);
+    kv.put("v2:sheet:" + date, Object.assign(E2.emptySheet(), { runs: p.runs, blocks: p.blocks })); await settleKV([admin]);
+    const req = (id, time) => ({ id, kind: "meet", time, staffId: "__req__", vehicleId: "", userIds: ["k1"], places: { k1: "○○小学校" }, note: "", staffRiderIds: [] });
+    kv.put("v3:sheet:" + date, Object.assign(E2.emptySheet(), { runs: [req("rq1", "15:00")] })); await settleKV([admin]);
+    let s2 = await get("v2:sheet:" + date), lk = s2.blocks.find((b) => b.id === "lk_rq1");
+    assert.ok(lk && lk.staffId === "__hold__" && lk.kind === "help" && lk.label === "【りんく依頼】星野こども 迎え" && lk.note === "○○小学校" && lk.time === "15:00", JSON.stringify(lk));
+    assert.deepStrictEqual((await get("v3:sheet:" + date)).reqStatus, { rq1: { staff: "", veh: "" } }, "りんく側：担当を決めているところ");
+    // 生活介護で担当・車を決める → りんく側に出る
+    const st = m2.staff.find((x) => x.canDrive !== false) || m2.staff[0], veh = m2.vehicles[0];
+    await kv.update("v2:sheet:" + date, (v) => ({ ...v, blocks: v.blocks.map((b) => (b.id === "lk_rq1" ? { ...b, staffId: st.id, vehicleId: veh.id } : b)) })); await settleKV([admin]);
+    assert.deepStrictEqual((await get("v3:sheet:" + date)).reqStatus.rq1, { staff: st.name, veh: veh.name }, "生活介護の担当・車がりんく側に");
+    // りんく側で時刻を変える → 付いていく（担当はそのまま）
+    await kv.update("v3:sheet:" + date, (v) => ({ ...v, runs: v.runs.map((r) => ({ ...r, time: "15:30" })) })); await settleKV([admin]);
+    lk = (await get("v2:sheet:" + date)).blocks.find((b) => b.id === "lk_rq1"); assert.ok(lk.time === "15:30" && lk.staffId === st.id, "時刻が付いていく");
+    // 担当が決まったあとに取り消す → 【取消】を付けて残す（生活介護の担当者が消す）
+    await kv.update("v3:sheet:" + date, (v) => ({ ...v, runs: [] })); await settleKV([admin]);
+    lk = (await get("v2:sheet:" + date)).blocks.find((b) => b.id === "lk_rq1"); assert.ok(lk && lk.linkCancelled && lk.label.startsWith("【取消】"), JSON.stringify(lk));
+    // まだ保留の依頼を取り消す → 消える
+    await kv.update("v3:sheet:" + date, (v) => ({ ...v, runs: [req("rq2", "16:00")] })); await settleKV([admin]);
+    assert.ok((await get("v2:sheet:" + date)).blocks.some((b) => b.id === "lk_rq2"));
+    await kv.update("v3:sheet:" + date, (v) => ({ ...v, runs: [] })); await settleKV([admin]);
+    assert.ok(!(await get("v2:sheet:" + date)).blocks.some((b) => b.id === "lk_rq2"), "保留のままなら消える");
+    // 生活介護のその日の表がまだ無い → りんく側は「表ができたら入る」。表ができたら入る
+    const d2 = "2026-11-26";
+    kv.put("v3:sheet:" + d2, Object.assign(E2.emptySheet(), { runs: [req("rq3", "14:00")] })); await settleKV([admin]);
+    assert.deepStrictEqual((await get("v3:sheet:" + d2)).reqStatus, { rq3: { pending: true } });
+    kv.put("v2:sheet:" + d2, E2.emptySheet()); await settleKV([admin]);
+    assert.ok((await get("v2:sheet:" + d2)).blocks.some((b) => b.id === "lk_rq3"), "表ができたら入る");
+    assert.deepStrictEqual((await get("v3:sheet:" + d2)).reqStatus, { rq3: { staff: "", veh: "" } });
+    // 10/31までは現体制版へ
+    kv.put("v1:sheet:2026-10-28".replace("v1:", ""), E2.emptySheet()); kv.put("v3:sheet:2026-10-28", Object.assign(E2.emptySheet(), { runs: [req("rq4", "15:00")] })); await settleKV([admin]);
+    assert.ok((await get("sheet:2026-10-28")).blocks.some((b) => b.id === "lk_rq4"), "10/31までは現体制版");
+    const logs = g.sheets.get("変更履歴").data.map((r) => r.join(" "));
+    assert.ok(logs.some((x) => x.includes("りんく・ぷれいす版からの送迎の依頼を反映")) && logs.some((x) => x.includes("生活介護で決まった担当・車を反映")), "変更履歴に残る");
+    return `依頼→保留欄に【りんく依頼】→ 担当「${st.name}・${veh.name}」がりんく側に → 時刻変更・取り消し（【取消】）・表がまだ無い日も`;
+  });
+
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
     const { g, admin } = await bootstrap();
     const date = "2026-11-25"; const E = engFor("v1"); const m = await admin.kv().get("master"); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);

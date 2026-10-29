@@ -281,3 +281,9 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
 .ds-body b{font-size:16px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ds-body small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .daysheet .empty{padding:20px 16px 28px;text-align:center}
+/* 日の一覧が開いている間は裏の画面を動かさない。つまみ・日付は下へ引ける */
+html.dayopen,html.dayopen body{overflow:hidden;overscroll-behavior:none}
+.day-ov{overscroll-behavior:contain;touch-action:none}
+.ds-list{overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}
+.ds-grip{width:48px;height:5px;margin:10px auto 2px;position:relative}
+.ds-grip::after{content:"";position:absolute;inset:-12px -40px}

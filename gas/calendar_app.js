@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.29e";
+const APP_VERSION="2026.10.29f";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -124,7 +124,8 @@ function dsRow(e){
   return`<li><button class="ds-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${bizTag(e)}${esc(e.title)}</b><small>${sub}</small></span></button></li>`;
 }
 function renderDay(vis){
-  const root=$("dayRoot");if(!S.dayOpen){if(root.innerHTML)root.innerHTML="";return}
+  const root=$("dayRoot");document.documentElement.classList.toggle("dayopen",!!S.dayOpen);   // 開いている間は裏の月の画面を動かさない
+  if(!S.dayOpen){if(root.innerHTML)root.innerHTML="";return}
   const d=parse(S.sel),evs=on(vis,S.sel),hol=HOL[S.sel],can=db&&S.canWrite&&core;
   const keep=root.querySelector(".ds-list")?.scrollTop||0;
   root.innerHTML=`<div class="overlay day-ov" id="dayOv"><div class="sheet daysheet" role="dialog" aria-modal="true" aria-label="${d.getMonth()+1}月${d.getDate()}日の予定"><div class="ds-grip"></div>
@@ -134,6 +135,23 @@ function renderDay(vis){
   </div></div>`;
   const l=root.querySelector(".ds-list");if(l)l.scrollTop=keep;
 }
+/* 日の一覧：上の部分（つまみ・日付）を下へ引くと閉じて月の画面に戻る。一覧がいちばん上のときは一覧を引いても閉じる。
+   一覧の外をなぞっても裏の月の画面は動かない */
+let dsDrag=null;
+document.addEventListener("touchstart",e=>{const ov=e.target.closest&&e.target.closest("#dayOv");if(!ov){dsDrag=null;return}
+  const head=e.target.closest(".ds-grip,.ds-head"),list=e.target.closest(".ds-list");
+  dsDrag=(head&&!e.target.closest("button"))||(list&&list.scrollTop<=0)?{y:e.touches[0].clientY,t:Date.now(),dy:0,sheet:ov.querySelector(".daysheet"),fromList:!head}:null},{passive:true});
+document.addEventListener("touchmove",e=>{const ov=e.target.closest&&e.target.closest("#dayOv");if(!ov)return;
+  if(dsDrag){const dy=e.touches[0].clientY-dsDrag.y;
+    if(dsDrag.fromList&&dy<0&&!dsDrag.dy){dsDrag=null;return}            // 一覧を上へ送るのはふつうのスクロール
+    if(dsDrag){dsDrag.dy=Math.max(0,dy);if(dsDrag.sheet){dsDrag.sheet.style.transition="none";dsDrag.sheet.style.transform=`translateY(${dsDrag.dy}px)`}e.preventDefault();return}}
+  const list=e.target.closest(".ds-list");if(!list||list.scrollHeight<=list.clientHeight+1)e.preventDefault();
+},{passive:false});
+document.addEventListener("touchend",()=>{if(!dsDrag)return;const d=dsDrag;dsDrag=null;const sh=d.sheet;if(!sh)return;
+  sh.style.transition="transform .2s ease-out";
+  if(d.dy>90||(d.dy>30&&Date.now()-d.t<250)){sh.style.transform="translateY(100%)";setTimeout(()=>{S.dayOpen=false;render()},180)}
+  else sh.style.transform="";
+});
 function renderList(vis,ps){
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
   for(let i=0;i<42;i++){const d=addDays(start,i);if(d.getMonth()!==tm)continue;const k=ymd(d),evs=on(vis,k);if(!evs.length)continue;

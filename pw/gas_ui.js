@@ -18,15 +18,16 @@ const D = path.join(__dirname, "../gas/out");
   const yo = rows().find((r) => r[1] === "余村慎");
   const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js" };
   const b = await chromium.launch();
-  async function open(file, vp, boot) {
+  async function open(file, vp, boot, outName) {
     const ctx = await b.newContext({ viewport: vp, colorScheme: "light" }); const pg = await ctx.newPage();
     const errs = []; pg.on("pageerror", (e) => errs.push(String(e))); pg.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errs.push(m.text().slice(0, 200)); });
     await pg.exposeFunction("__gasApi", (tk, m, a) => api(tk, m, a));
     await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { setTimeout(() => window.__gasApi(tk, m, a).then((r) => s && s(r), (e) => f && f(e)), 30); } }; })() } }; });
     await pg.route("https://**/*", async (r) => { const u = r.request().url(); for (const k in LOC) if (u.endsWith(k)) return r.fulfill({ path: LOC[k], contentType: "application/javascript" }); return r.abort(); });
     const html = fs.readFileSync(path.join(D, file), "utf8").replace("/*__BOOT__*/", boot);
-    fs.writeFileSync(path.join(__dirname, "g_" + file), html);
-    await pg.goto("file://" + path.join(__dirname, "g_" + file)); return { pg, errs };
+    const out = "g_" + (outName || file);   // 同じ画面を別の版で開くときは別の名前（開き直したときに混ざらない）
+    fs.writeFileSync(path.join(__dirname, out), html);
+    await pg.goto("file://" + path.join(__dirname, out)); return { pg, errs };
   }
   // スマホ：余村慎がログインして AM休 を押す
   const boot = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${date}";`;
@@ -96,6 +97,20 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.locator("[data-rulefrom]").screenshot({ path: "g_rulefrom.png" });
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(400);
     console.log("ルールの使い始める日:", txt.split("\n")[1]); }
+  // りんく・ぷれいす版：担当を「生活介護へ依頼」にした便 → 生活介護（11/1からは新体制版）の保留欄に【りんく依頼】。担当・車が決まるとりんく側の便に出る
+  { const v3m = api(t, "kv.get", ["v3:master"]).data.value, kid = v3m.users[0];
+    api(t, "kv.merge", [{ key: "v3:sheet:" + date, base: null, baseKnown: false, mine: { runs: [{ id: "rqUI", kind: "meet", time: "15:00", staffId: "__req__", vehicleId: "", userIds: [kid.id], staffRiderIds: [], note: "" }], blocks: [] } }]);
+    const lk = api(t, "kv.get", ["v2:sheet:" + date]).data.value.blocks.find((b) => b.id === "lk_rqUI"); assert.ok(lk && lk.staffId === "__hold__", "生活介護の保留欄に");
+    const m1 = api(t, "kv.get", ["v2:master"]).data.value, st = m1.staff.find((x) => x.name === "八壁"), veh = m1.vehicles[0];
+    api(t, "kv.merge", [{ key: "v2:sheet:" + date, base: null, baseKnown: false, mine: { ...api(t, "kv.get", ["v2:sheet:" + date]).data.value, blocks: api(t, "kv.get", ["v2:sheet:" + date]).data.value.blocks.map((b) => (b.id === "lk_rqUI" ? { ...b, staffId: st.id, vehicleId: veh.id } : b)) } }]);
+    const Q = await open("sougei.html", { width: 1400, height: 900 }, boot.replace('__SG_EDITION="v1"', '__SG_EDITION="v3"'), "sougei_v3.html");
+    await Q.pg.waitForTimeout(500); await Q.pg.fill("#sghNo", "000"); await Q.pg.fill("#sghPin", "5829"); await Q.pg.click("#sghGo"); await Q.pg.waitForTimeout(5000);
+    const stTxt = await Q.pg.locator('[data-reqst="rqUI"]').innerText(); assert.ok(stTxt.includes(`生活介護：八壁・${veh.name}で対応`), stTxt);
+    await Q.pg.locator('[data-item-id="rqUI"]').screenshot({ path: "g_req_chip.png" });
+    await Q.pg.click('[data-item-id="rqUI"]'); await Q.pg.waitForTimeout(400);
+    assert.ok((await Q.pg.locator("[data-reqnote]").innerText()).includes("八壁"), "編集画面にも出る");
+    await Q.pg.locator(".fixed [data-reqnote]").screenshot({ path: "g_req_note.png" }).catch(() => {});
+    console.log("りんく依頼:", stTxt, "/ 画面エラー:", real(Q.errs)); assert.deepStrictEqual(real(Q.errs), []); await Q.pg.context().close(); }
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   assert.strictEqual(await P.pg.getByRole("button", { name: /AI調整|AIと相談/ }).count(), 0, "料金がかかるAIのボタンは、キーが無ければ出ない");
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);
@@ -194,6 +209,23 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.click(".daysheet .ds-row >> nth=0"); await A.pg.waitForTimeout(300); assert.ok(await A.pg.locator("#evForm").isVisible(), "一覧の予定を押すと開く");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200); await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300);
     assert.strictEqual(await A.pg.locator(".daysheet").count(), 0, "×で閉じる");
+    // 上の部分を下へ引くと閉じる。少しだけなら元に戻る。なぞっても裏の月の画面は動かない
+    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300);
+    assert.ok(await A.pg.evaluate(() => document.documentElement.classList.contains("dayopen")), "開いている間は裏を止める");
+    const cdp = await A.pg.context().newCDPSession(A.pg); await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+    const swipe = async (sel, dys, hold) => { const g = await A.pg.locator(sel).boundingBox(); const x = g.x + g.width / 2, y = g.y + Math.min(g.height / 2, 20);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+      for (const dy of dys) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y + dy }] });
+      if (hold) await A.pg.waitForTimeout(hold);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); await A.pg.waitForTimeout(500); };
+    const sy0 = await A.pg.evaluate(() => scrollY);
+    await swipe(".ds-head h2", [-40, -120, -240]);
+    assert.strictEqual(await A.pg.evaluate(() => scrollY), sy0, "上になぞっても裏の画面は動かない");
+    await swipe(".ds-head h2", [20, 40], 400); assert.strictEqual(await A.pg.locator(".daysheet").count(), 1, "少しだけ引いたら戻る");
+    await swipe(".ds-grip", [40, 100, 180, 260]);
+    assert.strictEqual(await A.pg.locator(".daysheet").count(), 0, "下へ引くと閉じる");
+    assert.ok(!(await A.pg.evaluate(() => document.documentElement.classList.contains("dayopen"))));
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false }); await cdp.detach();
     console.log("スマホの日の一覧:", rows.length, "件 / バー:", chipTxt); }
   { // 事業のタブ：全体／生活介護／放課後デイ。これまでの予定は生活介護
     assert.deepStrictEqual(await A.pg.$$eval("#bizTabs [data-biz]", (b) => b.map((x) => x.textContent)), ["全体", "生活介護", "放課後デイ"]);

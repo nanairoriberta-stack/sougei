@@ -16,6 +16,10 @@ const SLOT = 30;
 const GRID_START = 6 * 60;
 const GRID_END = 22 * 60;
 const HOLD_ID = "__hold__";
+// りんく・ぷれいす版で「生活介護へ依頼」にした便の担当(生活介護の送迎表の保留欄に【りんく依頼】として出る。calsync.js の REQ_ID と同じ)
+const REQ_ID = "__req__";
+// 依頼した便の、生活介護での対応のようす(sheet.reqStatus はサーバーが書く)
+const reqStatusText = (st) => !st ? "生活介護へ依頼" : st.pending ? "生活介護へ依頼(生活介護のこの日の表ができたら入ります)" : st.staff ? `生活介護：${st.staff}${st.veh ? "・" + st.veh : ""}で対応` : "生活介護へ依頼(担当を決めているところ)";
 // 料金がかかるAI（API版の 🤖 AI調整・💬 AIと相談）は、Googleのスクリプトのプロパティにキーを入れたときだけボタンを出す（依頼者は使わない判断）。
 // 月額プランのClaudeから届く「🤖 Claudeの案」はこれとは別で、いつも出る
 const aiApiOn = () => !!(typeof window !== "undefined" && window.SGHost && window.SGHost.me && window.SGHost.me.aiApi);
@@ -2080,7 +2084,7 @@ function runWarnings(run, master, data, wd) {
       const wu = (run.userIds || []).map((id) => master.users.find((x) => x.id === id)).find(Boolean);
       if (wu && belongDeptOf(master, stf, wd) !== wu.deptId) w.push(`徒歩送迎は${(master.departments.find((d) => d.id === wu.deptId) || {}).name || "同じ部署"}の職員が担当してください(他部署の職員は直帰できません)`);
     }
-  } else {
+  } else if (run.staffId !== REQ_ID) {
     w.push("担当未定(保留)");
   }
   if (veh && !veh.ownerOnly) {
@@ -4368,7 +4372,8 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
   // 車両を選べる種別(送迎系 + ヘルプ)。自車以外は常に車両欄を出し、徒歩もこの欄で選ぶ
   const canPickVehicle = (isRun && !isOwn) || isHelp;
   const known = new Set(master.staff.map((s) => s.id));
-  const effStaffId = staffId && !known.has(staffId) && staffId !== HOLD_ID ? HOLD_ID : staffId;
+  const effStaffId = staffId && !known.has(staffId) && staffId !== HOLD_ID && staffId !== REQ_ID ? HOLD_ID : staffId;
+  const canReq = EDITION === "v3" && (baseKind === "meet" || baseKind === "send");
   const stf = master.staff.find((s) => s.id === effStaffId);
   const veh = resolveVehicle(master, vehicleId);
   const wcCount = userIds.map((id) => master.users.find((u) => u.id === id)).filter((u) => u && u.wheelchair).length;
@@ -4436,6 +4441,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
           <select className={inputCls} value={effStaffId} onChange={(e) => setStaffId(e.target.value)}>
             <option value="">選択してください</option>
             <option value={HOLD_ID}>★ 保留(担当未定)</option>
+            {(canReq || effStaffId === REQ_ID) && <option value={REQ_ID}>🤝 生活介護へ依頼(担当・車は生活介護で決める)</option>}
             {master.departments.map((d) => (
               <optgroup key={d.id} label={d.name}>
                 {master.staff.filter((s) => s.deptId === d.id && !(s.helpOnly && isRun && !isOwn && (mode || "") !== "move")).map((s) => (
@@ -4448,6 +4454,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
               </optgroup>
             ))}
           </select>
+          {effStaffId === REQ_ID && <div className="text-[11px] text-amber-800 mt-1" data-reqnote>生活介護の送迎表の保留欄に【りんく依頼】として出ます。担当と車は生活介護で決め、決まるとここと表に出ます。いまの状態：{reqStatusText((data.reqStatus || {})[initial.id])}</div>}
         </Field>
         {isOwn ? (
           <Field label="">
@@ -6470,6 +6477,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                 {item.time}
                 {warns.length > 0 && <span className="text-rose-600">⚠</span>}
               </span>
+              {item.staffId === REQ_ID && <span className={`block truncate rounded px-0.5 ${(((data.reqStatus || {})[item.id]) || {}).staff ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`} data-reqst={item.id}>🤝{reqStatusText((data.reqStatus || {})[item.id])}</span>}
               <span className="block truncate">{item.kind === "own_move" ? "自家用車で移動" : item.mode === "walk" ? "徒歩" : item.mode === "train" ? (veh ? "訓練 " + veh.name : "訓練先") : item.mode === "move" ? (veh ? "移動 " + veh.name : "部署間移動") : veh ? veh.name : "車未定"}</span>
             </div>
             {riders.length > 0 && (
@@ -9758,7 +9766,7 @@ function AppInner() {
     const working = new Set(
       sheetMaster.staff.filter((s) => !(s.offDays || []).includes(wd) || !!(ovv[s.id] || {}).workToday).map((s) => s.id)
     );
-    const isHold = (sid) => sid === HOLD_ID || !known.has(sid) || !working.has(sid);
+    const isHold = (sid) => sid !== REQ_ID && (sid === HOLD_ID || !known.has(sid) || !working.has(sid));
     const holdCount =
       sheetData.runs.filter((r) => isHold(r.staffId)).length + sheetData.blocks.filter((b) => isHold(b.staffId)).length;
     // 送迎漏れ(利用予定日なのに迎え・送りが未入力)
@@ -11668,7 +11676,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
     const working = new Set(
       sheetMaster.staff.filter((s) => !(s.offDays || []).includes(wd) || !!(ovv[s.id] || {}).workToday).map((s) => s.id)
     );
-    const isHold = (sid) => sid === HOLD_ID || !known.has(sid) || !working.has(sid);
+    const isHold = (sid) => sid !== REQ_ID && (sid === HOLD_ID || !known.has(sid) || !working.has(sid));
     const holdCount =
       sheetData.runs.filter((r) => isHold(r.staffId)).length + sheetData.blocks.filter((b) => isHold(b.staffId)).length;
     // 送迎漏れ(利用予定日なのに迎え・送りが未入力)

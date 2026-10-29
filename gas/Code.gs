@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.29e',
+  VERSION: '2026.10.29f',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -494,6 +494,7 @@ function kvMerge_(me, a) {
     if (!SGKV.eq(merged, cur) || (a.replace && !curDoc)) {
       rev = rev + 1;
       docSet_(path, { k: key, v: merged, by: me.no }, rev, { k: key }, idx);
+      linkAfterSave_(key, merged, idx);
       log_(me, '送迎表', kvLabel_(key), diffSummary_(cur, merged) + (conflicts.length ? '（同じ箇所の同時変更 ' + conflicts.length + 'か所：この変更を優先）' : ''));
       if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names3'); } catch (e) {} }
     }
@@ -509,7 +510,7 @@ function kvImportMany_(me, items) {
       var key = String(it.key), path = kvPath_(key), cur = docGet_(path, idx);
       var v = reconcileSheetValue_(key, it.value, idx);
       if (cur && SGKV.eq(cur.value.v, v)) return;
-      docSet_(path, { k: key, v: v, by: me.no }, (cur ? cur.rev : 0) + 1, { k: key }, idx); n++;
+      docSet_(path, { k: key, v: v, by: me.no }, (cur ? cur.rev : 0) + 1, { k: key }, idx); n++; linkAfterSave_(key, v, idx);
     });
     log_(me, '送迎表', 'バックアップから復元', n + '件');
     syncStaffIds_(); try { CacheService.getScriptCache().remove('names3'); } catch (e) {}
@@ -526,6 +527,7 @@ function kvCas_(me, a) {
     if (rev !== Number(a.rev)) return { conflict: true, rev: rev, value: curDoc ? curDoc.value.v : null };
     a.value = reconcileSheetValue_(key, a.value, idx);
     docSet_(path, { k: key, v: a.value, by: me.no }, rev + 1, { k: key }, idx);
+    linkAfterSave_(key, a.value, idx);
     log_(me, '送迎表', kvLabel_(key), '初期データの取り込み');
     if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names3'); } catch (e) {} }
     return { conflict: false, rev: rev + 1, value: a.value };
@@ -632,9 +634,40 @@ function reconcileSheetValue_(key, value, idx) {
   var m = /^(v\d:)?sheet:(\d{4}-\d{2}-\d{2})$/.exec(key);
   if (!m || !value || typeof value !== 'object') return value;
   var md = docGet_(kvPath_((m[1] || '') + 'master'), idx);
-  if (!md || !md.value.v) return value;
-  var events = TCCore.mergeDays(docsQuery_({ col: 'days', from: m[2], to: m[2] }));
-  return SGCal.reconcile(md.value.v, value, Object.keys(events).map(function (k) { return events[k]; }), m[2]);
+  if (md && md.value.v) {
+    var events = TCCore.mergeDays(docsQuery_({ col: 'days', from: m[2], to: m[2] }));
+    value = SGCal.reconcile(md.value.v, value, Object.keys(events).map(function (k) { return events[k]; }), m[2]);
+  }
+  return linkSheetValue_(m[1] || '', m[2], value, idx);
+}
+/* ===== りんく・ぷれいす版 → 生活介護 の送迎の依頼（calsync.js の linkReqs / linkApply / linkStatus） =====
+   依頼先はその日の生活介護の版（11/1から新体制版、それより前は現体制版） */
+function linkTargetNs_(date) { return String(date) >= '2026-11-01' ? 'v2:' : ''; }
+function linkSheetValue_(ns, date, value, idx) {
+  var tns = linkTargetNs_(date);
+  if (ns === 'v3:') {                                   // りんく側：生活介護で決まった担当・車を写す
+    var v3m = docGet_(kvPath_('v3:master'), idx), reqs = SGCal.linkReqs(value, v3m ? v3m.value.v : null);
+    var td = docGet_(kvPath_(tns + 'sheet:' + date), idx), tm = docGet_(kvPath_(tns + 'master'), idx);
+    var st = td && tm ? SGCal.linkStatus(td.value.v, tm.value.v) : null, out = {};
+    reqs.forEach(function (q) { out[q.id] = st ? (st[q.id] || { staff: '', veh: '' }) : { pending: true }; });
+    if (!SGKV.eq(out, value.reqStatus || {})) { value = JSON.parse(JSON.stringify(value)); if (reqs.length) value.reqStatus = out; else delete value.reqStatus; }
+    return value;
+  }
+  if (ns !== tns) return value;
+  var v3s = docGet_(kvPath_('v3:sheet:' + date), idx), v3m2 = v3s ? docGet_(kvPath_('v3:master'), idx) : null;
+  return SGCal.linkApply(value, v3s ? SGCal.linkReqs(v3s.value.v, v3m2 ? v3m2.value.v : null) : []);
+}
+/* 保存のあと、相手の版の送迎表にも伝える（ロックの中で呼ぶ）。相手の送迎表がまだ無い日は、作られたときに入る */
+function linkAfterSave_(key, value, idx) {
+  var m = /^(v\d:)?sheet:(\d{4}-\d{2}-\d{2})$/.exec(key); if (!m) return;
+  var ns = m[1] || '', date = m[2], tns = linkTargetNs_(date);
+  var other = ns === 'v3:' ? tns + 'sheet:' + date : ns === tns ? 'v3:sheet:' + date : null; if (!other) return;
+  var od = docGet_(kvPath_(other), idx); if (!od) return;
+  var next = reconcileSheetValue_(other, od.value.v, idx);
+  if (!SGKV.eq(next, od.value.v)) {
+    docSet_(kvPath_(other), { k: other, v: next, by: 'link' }, od.rev + 1, { k: other }, idx);
+    log_({ no: 'link', name: '自動' }, '送迎表', kvLabel_(other), ns === 'v3:' ? 'りんく・ぷれいす版からの送迎の依頼を反映' : '生活介護で決まった担当・車を反映');
+  }
 }
 /* 予定の前後の日付について、既にある送迎表へ反映（取り消しも）する */
 function reconcileDates_(op, rawsBefore, idx) {
