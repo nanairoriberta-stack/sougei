@@ -2392,6 +2392,7 @@ function buildExcelHtml(master, sheet, date) {
   };
   sheet.runs.forEach((r) => putIt(r.staffId, r.time, itemText(r, true)));
   sheet.blocks.filter((b) => !b.noteOnly).forEach((b) => putIt(b.staffId, b.time, itemText(b, false)));
+  master.staff.forEach((s) => { const sl = earlyLeaveSlot(s, (sheet.staffOv || {})[s.id], sheet.blocks); if (sl != null) putIt(s.id, toStr(sl), "退勤"); });
 
   const usedSlots = [];
   for (let m = GRID_START; m < GRID_END; m += SLOT) {
@@ -3241,6 +3242,19 @@ function parseMasterWorkbook(XLSX, wb, master0) {
 }
 
 // opts.wb を渡すとそのワークブックにシートを足す。opts.hideHelpVeh=true でヘルプの車名を出さない
+// PM休・早退など、その日の退勤がいつもより早い職員の「退勤」のコマ（勤務の最後の30分の枠）。もう「退勤」の予定があれば出さない(2026-10-30 依頼者)
+function earlyLeaveSlot(s, ov, blocks) {
+  const en = toMin(ov && ov.end), base = toMin(s && s.end);
+  if (!s || en == null || base == null || en >= base || (ov && ov.off)) return null;
+  if ((blocks || []).some((b) => b && b.staffId === s.id && !b.noteOnly && /退勤/.test(String(b.label || "")))) return null;
+  return Math.floor((en - 1) / SLOT) * SLOT;
+}
+// AM休・PM休・遅刻・早退などで勤務時間を変えた職員の、勤務時間の外のコマ（休みと同じ灰色にする）
+function outOfShiftSlot(s, ov, m) {
+  if (!s || !ov || !(ov.start || ov.end)) return false;
+  const st = toMin(ov.start || s.start), en = toMin(ov.end || s.end);
+  return st != null && en != null && (m + SLOT <= st || m >= en);
+}
 function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   if (sheet) sheet = { ...sheet, blocks: canonHelpBlocks(sheet.blocks) };   // 井上入浴→井上ヘルプ など
   const hideHelpVeh = !!opts.hideHelpVeh;
@@ -3399,6 +3413,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     put(rid, r.time, `${st2 ? st2.name : ""}便に同乗`, (RANK[r.kind] != null ? RANK[r.kind] : 1) + 0.05, r.ord != null ? r.ord + 0.05 : null, ownCarRankOf(r));
   }));
   sheet.blocks.filter((b) => !b.noteOnly).forEach((b) => put(b.staffId, b.time, itemText(b, false), b.kind === "help" ? RANK.help : RANK.block, b.ord, ownCarRankOf(b)));
+  cols.forEach((s) => { const sl = earlyLeaveSlot(s, (sheet.staffOv || {})[s.id], sheet.blocks); if (sl != null) put(s.id, toStr(sl), "退勤", RANK.block + 0.9, 9999); });   // PM休・早退の「退勤」
   // 予定がある時間の範囲を求め、その範囲を30分刻みで全て行にする(8:00と8:30は別の行)
   const HOUR = 60;
   let minT = null, maxT = null;
@@ -3595,7 +3610,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       if (prevM != null && spill[`${s.id}:${prevM}`]) return; // 上のセルの縦マージ範囲なので触らない
       const items = (cellMapH[`${s.id}:${m}`] || []).slice().sort((a, b) => ((a.oc != null ? a.oc : 1) - (b.oc != null ? b.oc : 1)) || ((a.o != null ? a.o : 999) - (b.o != null ? b.o : 999)) || (a.k - b.k));
       if (spill[`${s.id}:${m}`]) { try { ws.mergeCells(r, 2 + i2, r + 1, 2 + i2); } catch (e) {} }
-      setCell(r, 2 + i2, items.map((x) => x.t).join("\n"), { fill: isOff(s) ? "FFF5F5F4" : undefined, sideOnly: true, size: 12 });
+      setCell(r, 2 + i2, items.map((x) => x.t).join("\n"), { fill: isOff(s) || outOfShiftSlot(s, (sheet.staffOv || {})[s.id], m) ? "FFF5F5F4" : undefined, sideOnly: true, size: 12 });
     });
     if (hasHold) {
       if (!(prevM != null && spill[`${HOLD_ID}:${prevM}`])) {
@@ -6715,6 +6730,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                     onDragLeave={() => { if (overKey === cKey) setOverKey(null); }}
                     onDrop={cellDrop(s.id, m)}
                     className={`border border-stone-200 align-top p-0.5 ${emptyCell} ${offGrid ? "bg-stone-100/80" : "bg-white"} group ${overKey === cKey ? "outline outline-2 outline-sky-500 bg-sky-50" : ""}`}>
+                    {m === earlyLeaveSlot(s, ov, data.blocks) && <div className="text-[10px] font-bold text-stone-600 bg-stone-200 rounded px-1 mb-0.5" data-leave={s.id}>退勤 {ov.end}</div>}
                     {renderItems(items, s.id, m)}
                     <button className="w-full text-stone-300 text-xs opacity-0 group-hover:opacity-100 hover:text-sky-600 leading-none" onClick={() => onCell(s.id, toStr(m))}>+</button>
                   </td>

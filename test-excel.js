@@ -28,6 +28,21 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.ok(E.buildExcelHtml(m, sheet, date).includes(ver), ".xls の見出しにも");
   // ファイル名に使う文字（Windowsで使えない文字が入らない）
   assert.ok(!/[\\/:*?"<>|]/.test(ver), "ファイル名に使える");
+  { // PM休（12:30まで）の職員：12:00のコマに「退勤」、12:30からは灰色。AM休（13:30から）の職員：13:00までは灰色
+    const st1 = m.staff.find((x) => x.name === "八壁"), st2 = m.staff.find((x) => x.name === "日野");
+    const dm = E.applyDayDept(m, 1, null, null, null, date);
+    const sh2 = Object.assign({}, sheet, { staffOv: { [st1.id]: { end: "12:30" }, [st2.id]: { start: "13:30" } } });
+    const wb2 = E.buildWorkbook(ExcelJS, dm, sh2, date); const b2 = new ExcelJS.Workbook(); await b2.xlsx.load(await wb2.xlsx.writeBuffer());
+    const ws = b2.getWorksheet("送迎表"); let col1 = 0, col2 = 0, row12 = 0, row1230 = 0, row13 = 0;
+    ws.eachRow((row, rn) => row.eachCell((c, cn) => { const v = String(c.value || ""); if (v === st1.name) col1 = cn; if (v === st2.name) col2 = cn; if (cn === 1 && v === "12:00") row12 = rn; if (cn === 1 && v === "13:00") row13 = rn; }));
+    row1230 = row12 + 1;
+    assert.ok(col1 && col2 && row12 && row13, "表の位置");
+    assert.ok(String(ws.getRow(row12).getCell(col1).value || "").includes("退勤"), "PM休：12:00に退勤");
+    const fillOf = (r, c) => ((ws.getRow(r).getCell(c).fill || {}).fgColor || {}).argb;
+    assert.strictEqual(fillOf(row1230, col1), "FFF5F5F4", "PM休：12:30からは灰色"); assert.notStrictEqual(fillOf(row12, col1), "FFF5F5F4");
+    assert.strictEqual(fillOf(row13, col2), "FFF5F5F4", "AM休：13:00は灰色"); assert.notStrictEqual(fillOf(row13 + 1, col2), "FFF5F5F4", "AM休：13:30から白");
+    console.log("PM休・AM休のExcel OK");
+  }
   console.log("excel OK");
 })().catch((e) => { console.error(e); process.exit(1); });
 // ===== 井上入浴・黒田入浴は同じ時刻の井上ヘルプ・黒田ヘルプにそろえる（2026-10-29） =====
@@ -61,4 +76,17 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  for(const d of m.departments){const xs=st.filter(x=>x.deptId===d.id).map(x=>x.emp==="パート"?1:0);assert.deepStrictEqual(xs,[...xs].sort((a,b)=>a-b),d.name+' パートは下');}
  assert.ok(m.staff.some(x=>x.emp==="パート"),'見本にパートがいる');
  console.log('dept order OK');
+}
+// ===== PM休・早退：勤務の最後のコマに「退勤」、勤務時間の外は灰色（AM休も）（2026-10-30） =====
+{
+ const assert=require('assert'); const E4=require('./eng.cjs');
+ const s={id:'x',start:'8:30',end:'17:30'};
+ assert.strictEqual(E4.earlyLeaveSlot(s,{end:'12:30'},[]),12*60,'PM休(12:30まで)は12:00のコマに退勤');
+ assert.strictEqual(E4.earlyLeaveSlot(s,{end:'17:30'},[]),null,'いつもどおりなら出さない');
+ assert.strictEqual(E4.earlyLeaveSlot(s,{end:'12:30'},[{staffId:'x',label:'退勤',time:'12:00'}]),null,'もう退勤の予定があれば出さない');
+ assert.strictEqual(E4.earlyLeaveSlot(s,{start:'13:30'},[]),null,'AM休は退勤を出さない');
+ assert.ok(E4.outOfShiftSlot(s,{end:'12:30'},12*60+30)&&!E4.outOfShiftSlot(s,{end:'12:30'},12*60),'PM休の後は灰色');
+ assert.ok(E4.outOfShiftSlot(s,{start:'13:30'},13*60)&&!E4.outOfShiftSlot(s,{start:'13:30'},13*60+30),'AM休の前は灰色');
+ assert.ok(!E4.outOfShiftSlot(s,{},7*60),'時間を変えていない人は今までどおり');
+ console.log('leave slot OK');
 }

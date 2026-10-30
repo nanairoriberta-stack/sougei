@@ -64,9 +64,13 @@ const D = path.join(__dirname, "../gas/out");
   const real = (a) => a.filter((x) => !/Failed to load resource/.test(x));   // 外部への通信はテストでは止めている（フォント・画像）
   assert.deepStrictEqual(real(errs), []);
   // 事務所PC：管理者が送迎表（現体制版）を開く
+  api(t, "cal.apply", [{ kind: "upsert", opId: "op_pmleave1", id: "ev_pmleave1", baseRev: null, ev: { title: "高井 PM休", date, endDate: date, allDay: true, start: "", end: "", label: "leave", place: "", memo: "", members: [], sg: { type: "staff_off", staff: ["高井"], half: "pm" } } }]);   // PM休（退勤のコマ）
   const P = await open("sougei.html", { width: 1400, height: 900 }, boot);
   await P.pg.waitForTimeout(500); await P.pg.fill("#sghNo", "000"); await P.pg.fill("#sghPin", "5829"); await P.pg.click("#sghGo"); await P.pg.waitForTimeout(5000);
   await P.pg.screenshot({ path: "g_sougei.png" });
+  { const tk = api(t, "kv.get", ["master"]).data.value.staff.find((x) => x.name === "高井");   // PM休：勤務の最後のコマに「退勤」
+    const lv = P.pg.locator(`[data-leave="${tk.id}"]`); assert.strictEqual(await lv.count(), 1, "PM休の退勤のコマ"); assert.ok((await lv.innerText()).startsWith("退勤"));
+    console.log("PM休の退勤:", await lv.innerText()); }
   { const body0 = await P.pg.locator("#root").innerText();   // 見ていない箱（送迎の抜け・使える車）は出さない
     assert.ok(!body0.includes("送迎の抜けがあります") && !body0.includes("🚗 使える車") && !body0.includes("全員に迎え・送りが入っています"), "右の箱を出さない"); }
   // 日付ボタンの📅：カレンダーはボタンのすぐ下・左そろえに出る。日を押すとその日に
