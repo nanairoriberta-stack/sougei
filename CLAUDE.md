@@ -208,6 +208,9 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - 保存：`cal.apply` が書いた日の文書（`docs`）を返す → 画面はそれで表を直す（`__calPatch`・`PATCH`、2分）。以前は保存のたびに月を読み直してから「保存済み」だった。
   行き違いで古い読み込みが後から届いても、予定ごとに rev の大きい方が勝つ（`mergeDays`）ので戻らない。`docs` が無いときは今までどおり読み直す
 - GASの1回の往復（1〜3秒）は縮められない。保存は端末に先に入るので、画面にはすぐ出る
+- ログイン・毎回の操作を速く（2026-10-30）：`session_` はログインした人の情報（名前・権限）を CacheService に2分覚える（`m:<トークンのハッシュ>`。毎回「職員ID」「_auth」を読まない）。
+  権限の変更・利用停止は最長2分で効く。暗証番号の変更・ログアウト・`resetPins` ではすぐ消す。`login_` は失敗回数が0なら `_auth` に書かない。
+  Googleのフォント（Zen Kaku Gothic）は画面の表示を待たせないよう後から読む（`media="print" onload`）
 
 ## AI
 1. **🤖 AI調整・💬 AIと相談**（送迎表画面）：サーバー `ai.messages` が Anthropic API を呼ぶ（スクリプトプロパティ `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL` 既定 `claude-sonnet-5-5`）。

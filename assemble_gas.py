@@ -20,7 +20,7 @@ cal_html = f'''<!DOCTYPE html>
 <title>カレンダー</title>
 {GUARD}
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
 <style>[hidden]{{display:none!important}}body{{margin:0}}{rd('gas/calendar_css.txt')}</style>
 </head><body>
 {rd('gas/calendar_body.txt')}

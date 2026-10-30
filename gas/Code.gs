@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.30i',
+  VERSION: '2026.10.30j',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -163,7 +163,10 @@ function resetPins() {
       sh.getRange(i + 2, 6).setValue(safe_('再発行済み ' + today_()));
       setAuth_(no, { salt: '', hash: '', fails: 0, lockUntil: 0, changed: false });
       var ss = sheet_(APP.SH.sess), sr = rows_(APP.SH.sess);
-      for (var j = 0; j < sr.length; j++) if (normNo_(sr[j][1]) === no) ss.getRange(j + 2, 3).setValue(new Date(0));
+      for (var j = 0; j < sr.length; j++) if (normNo_(sr[j][1]) === no) {
+        ss.getRange(j + 2, 3).setValue(new Date(0));
+        try { CacheService.getScriptCache().removeAll(['s:' + sr[j][0], 'm:' + sr[j][0]]); } catch (e) {}   // 覚えているログインもすぐ消す
+      }
       done.push(no + ' ' + String(x[1]).trim());
     });
     if (done.length) log_({ no: '', name: '管理者（エディタ）' }, '暗証番号', '再発行', done.join('、'));
@@ -254,7 +257,7 @@ function login_(no, pin, device) {
       setAuth_(no, { fails: fails >= APP.PIN_FAIL_LIMIT ? 0 : fails, lockUntil: fails >= APP.PIN_FAIL_LIMIT ? now + APP.PIN_LOCK_MIN * 60000 : 0 });
       throw { code: 'login', message: '職員番号または暗証番号が違います' };
     }
-    setAuth_(no, { fails: 0, lockUntil: 0 });
+    if (auth && (auth.fails || auth.lockUntil)) setAuth_(no, { fails: 0, lockUntil: 0 });   // 書く必要があるときだけ（ログインを速く）
     var token = Utilities.getUuid() + Utilities.getUuid();
     sheet_(APP.SH.sess).appendRow([hash_(token), txt_(no), new Date(now + APP.SESSION_DAYS * 864e5), safe_(String(device || '').slice(0, 80))]);
     log_({ no: no, name: st.name }, 'ログイン', String(device || '').slice(0, 40), '');
@@ -284,6 +287,7 @@ function changePin_(me, oldPin, newPin) {
     if (!good) throw { code: 'login', message: '今の暗証番号が違います' };
     var salt = Utilities.getUuid();
     setAuth_(me.no, { salt: salt, hash: hash_(salt + newPin), changed: true, fails: 0, lockUntil: 0 });
+    if (me.tokenHash) try { CacheService.getScriptCache().remove('m:' + me.tokenHash); } catch (e) {}
     sheet_(APP.SH.ids).getRange(st.row, 4).setValue('（本人が変更済み）');
     log_(me, '暗証番号の変更', '', '');
     return true;
@@ -293,6 +297,10 @@ function session_(token) {
   if (!token) return null;
   var th = hash_(String(token));
   var cache = CacheService.getScriptCache();
+  // 毎回の操作で「職員ID」「_auth」のシートを読むと遅いので、ログインした人の情報は2分覚える。
+  // 権限の変更・利用停止は最長2分で効く（暗証番号の変更・ログアウトではすぐ消す）
+  var mk = cache.get('m:' + th);
+  if (mk) { try { var mm = JSON.parse(mk); mm.tokenHash = th; return mm; } catch (e) {} }
   var hit = cache.get('s:' + th);
   var no = null;
   if (hit) no = hit;
@@ -305,10 +313,13 @@ function session_(token) {
   var st = staffRow_(no);
   if (!st || st.stopped) return null;
   var auth = authRow_(no);
-  return { no: no, name: st.name, role: st.role, mustChange: !(auth && auth.changed), tokenHash: th };
+  var me = { no: no, name: st.name, role: st.role, mustChange: !(auth && auth.changed) };
+  try { cache.put('m:' + th, JSON.stringify(me), 120); } catch (e) {}
+  me.tokenHash = th;
+  return me;
 }
 function logout_(token) {
-  var th = hash_(String(token || '')); CacheService.getScriptCache().remove('s:' + th);
+  var th = hash_(String(token || '')); CacheService.getScriptCache().remove('s:' + th); CacheService.getScriptCache().remove('m:' + th);
   withLock_(function () { var r = rows_(APP.SH.sess), sh = sheet_(APP.SH.sess); for (var i = 0; i < r.length; i++) if (r[i][0] === th) sh.getRange(i + 2, 3).setValue(new Date(0)); });
 }
 function publicMe_(me) { return { no: me.no, name: me.name, role: me.role, mustChange: !!me.mustChange, canSougei: me.role === '管理者' || me.role === '送迎表', admin: me.role === '管理者', version: APP.VERSION, aiApi: aiEnabled_() }; }

@@ -51,7 +51,7 @@ function makeGas(files) {
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock() {}, releaseLock() {} }) },
     CacheService: { getScriptCache: () => ({
       get: (k) => (cache.has(k) ? cache.get(k) : null), put: (k, v) => { if (String(v).length > 100000) throw new Error("cache too big"); cache.set(k, String(v)); },
-      getAll: (ks) => Object.fromEntries(ks.filter((k) => cache.has(k)).map((k) => [k, cache.get(k)])), putAll: (o) => { for (const k in o) cache.set(k, String(o[k])); }, remove: (k) => cache.delete(k),
+      getAll: (ks) => Object.fromEntries(ks.filter((k) => cache.has(k)).map((k) => [k, cache.get(k)])), putAll: (o) => { for (const k in o) cache.set(k, String(o[k])); }, remove: (k) => cache.delete(k), removeAll: (ks) => { for (const k of ks) cache.delete(k); },
     }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => null, setProperty() {} }) },
     Utilities: {
