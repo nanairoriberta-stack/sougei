@@ -6,7 +6,7 @@ ESB=./node_modules/.bin/esbuild
 SHIM="--alias:react=./mcp/shims/react.js --alias:three=./mcp/shims/three.js"
 mkdir -p .gen
 # Node（テスト）とサーバー(GAS)から使う関数。sougei.jsx の中の関数名を変えたらここも直す
-EXP='seedMaster, earlyLeaveSlot, outOfShiftSlot, byBaseDept, partLast, REQ_ID, reqStatusText, canonHelpLabel, canonHelpBlocks, scheduleRules, rulesAtDate, mergeSeedMaster, resolveSeedPattern, SEED_PATTERNS, EDITION, emptySheet, applyDayDept, noRideDefaults, aiApplyPure, collectSheetChecks, aiContextOf, aiRulesText, agApplyRules, agApplyMaster, agMasterDiff, agentDiff, agApplyDay, agDayDiff, rulesOf, weekdayOf, DAYS, RULE_LISTS, ENTITY_FIELDS, resolveVehicle, HOLD_ID, buildWorkbook, buildExcelHtml, appVerLabel'
+EXP='seedMaster, offTimeBlockWarn, runWarnings, earlyLeaveSlot, outOfShiftSlot, byBaseDept, partLast, REQ_ID, reqStatusText, canonHelpLabel, canonHelpBlocks, scheduleRules, rulesAtDate, mergeSeedMaster, resolveSeedPattern, SEED_PATTERNS, EDITION, emptySheet, applyDayDept, noRideDefaults, aiApplyPure, collectSheetChecks, aiContextOf, aiRulesText, agApplyRules, agApplyMaster, agMasterDiff, agentDiff, agApplyDay, agDayDiff, rulesOf, weekdayOf, DAYS, RULE_LISTS, ENTITY_FIELDS, resolveVehicle, HOLD_ID, buildWorkbook, buildExcelHtml, appVerLabel'
 { cat sougei.jsx; printf '\nexport { %s };\n' "$EXP"; } > .gen/eng_src.jsx
 
 echo "0) 画面のプログラムの書き間違いがないか"

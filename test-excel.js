@@ -90,3 +90,26 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  assert.ok(!E4.outOfShiftSlot(s,{},7*60),'時間を変えていない人は今までどおり');
  console.log('leave slot OK');
 }
+// ===== 灰色の時間（休み・AM休・PM休）に入ったコマは、出力前の確認で「時間のエラー」（2026-10-30） =====
+{
+ const assert=require('assert'); const E5=require('./eng.cjs');
+ const m=E5.mergeSeedMaster(null,E5.seedMaster()); const date='2026-11-02', wd=1;
+ const S=(n)=>m.staff.find(x=>x.name===n); const dm=E5.applyDayDept(m,wd,null,null,null,date);
+ const a=S('八壁'), b=S('日野'), c=S('高井');
+ const sheet=Object.assign(E5.emptySheet(),{
+  staffOv:{[a.id]:{off:true},[b.id]:{start:'13:30'},[c.id]:{end:'12:30'}},
+  runs:[{id:'r1',kind:'meet',time:'9:00',staffId:b.id,vehicleId:'',userIds:[],staffRiderIds:[]},{id:'r2',kind:'send',time:'13:00',staffId:b.id,vehicleId:'',userIds:[],staffRiderIds:[]},{id:'r3',kind:'send',time:'12:30',staffId:c.id,vehicleId:'',userIds:[],staffRiderIds:[]},{id:'r4',kind:'meet',time:'12:00',staffId:c.id,vehicleId:'',userIds:[],staffRiderIds:[]}],
+  blocks:[{id:'b1',kind:'help',time:'10:00',staffId:a.id,label:'中村ヘルプ'},{id:'b2',kind:'block',time:'15:00',staffId:c.id,label:'会議'},{id:'b3',kind:'block',time:'14:00',staffId:b.id,label:'会議'}]});
+ const w=(id)=>E5.runWarnings(sheet.runs.find(r=>r.id===id),dm,sheet,wd).join(' ');
+ assert.ok(w('r1').includes('勤務時間外(この日は13:30から出勤)'),'AM休の9:00の便: '+w('r1'));
+ assert.ok(w('r2').includes('勤務時間外'),'AM休の13:00の便（13:30より前）: '+w('r2'));
+ assert.ok(w('r3').includes('勤務時間外(この日は12:30で退勤)'),'PM休の12:30の便: '+w('r3'));
+ assert.ok(!w('r4').includes('勤務時間外'),'PM休の12:00の便はよい: '+w('r4'));
+ const bw=E5.offTimeBlockWarn(dm,sheet,wd).join(' / ');
+ assert.ok(bw.includes('八壁 10:00【中村ヘルプ】: 休みの職員に入っています'),bw);
+ assert.ok(bw.includes('高井 15:00【会議】: 勤務時間外(この日は12:30で退勤)'),bw);
+ assert.ok(!bw.includes('日野 14:00'),'AM休の14:00の予定はよい');
+ const chk=JSON.stringify(E5.collectSheetChecks(dm,sheet,date,null));
+ assert.ok(chk.includes('休みの職員に入っています')&&chk.includes('勤務時間外(この日は12:30で退勤)'),'出力前の確認に出る');
+ console.log('off-time check OK');
+}

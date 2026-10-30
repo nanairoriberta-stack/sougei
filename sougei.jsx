@@ -2073,7 +2073,10 @@ function runWarnings(run, master, data, wd) {
       const aw0 = toMin(stf.awayFrom), aw1 = toMin(stf.awayTo);
       if (aw0 != null && aw1 != null && t != null && t >= aw0 && t < aw1) w.push("不在の時間帯(中抜け)");
     }
-    if (t != null && st != null && en != null && !stf.noTimeWarn) {
+    if (t != null && st != null && en != null && !stf.noTimeWarn && (ov.start || ov.end) && (Math.floor(t / SLOT) * SLOT + SLOT <= st || t >= en)) {
+      // AM休・PM休・遅刻・早退でその日の時間を変えた人の、灰色の時間（勤務の外）に入った便は残業扱いにせずエラー(2026-10-30 依頼者)
+      w.push(`勤務時間外(この日は${ov.start ? ov.start + "から出勤" : ""}${ov.start && ov.end ? "・" : ""}${ov.end ? ov.end + "で退勤" : ""})`);
+    } else if (t != null && st != null && en != null && !stf.noTimeWarn) {
       // 8時出勤は無く、始業前は早出残業の扱い。終業後は残業。大きく外れる場合のみ「勤務時間外」
       if (t < st) w.push(t >= st - 60 ? `早出残業(${toStr(t)}〜・始業${toStr(st)})` : "勤務時間外");
       else if (t + SLOT > en) w.push(t < en + 60 ? `残業(〜${toStr(t + SLOT)}・終業${toStr(en)})` : "勤務時間外");
@@ -3254,6 +3257,20 @@ function outOfShiftSlot(s, ov, m) {
   if (!s || !ov || !(ov.start || ov.end)) return false;
   const st = toMin(ov.start || s.start), en = toMin(ov.end || s.end);
   return st != null && en != null && (m + SLOT <= st || m >= en);
+}
+// 休み・固定休・AM休・PM休などで灰色の時間に入っているヘルプ・予定（出力前の確認で「時間のエラー」に出す。便は runWarnings が見る）
+function offTimeBlockWarn(master, sheetData, wd) {
+  const out = [], ovAll = sheetData.staffOv || {};
+  (sheetData.blocks || []).forEach((b) => {
+    if (!b || b.noteOnly || /^不在/.test(String(b.label || ""))) return;
+    const s = (master.staff || []).find((x) => x.id === b.staffId); if (!s) return;
+    const ov = ovAll[s.id] || {}, t = toMin(b.time); if (t == null) return;
+    const pre = `${s.name} ${b.time}【${b.label || (b.kind === "help" ? "ヘルプ" : "予定")}】: `;
+    if (ov.off) out.push(pre + "休みの職員に入っています");
+    else if (wd != null && (s.offDays || []).includes(wd) && !ov.workToday) out.push(pre + "固定休の職員に入っています");
+    else if (outOfShiftSlot(staffTimeOf(s, wd, {}), ov, Math.floor(t / SLOT) * SLOT)) out.push(pre + `勤務時間外(この日は${ov.start ? ov.start + "から出勤" : ""}${ov.start && ov.end ? "・" : ""}${ov.end ? ov.end + "で退勤" : ""})`);
+  });
+  return out;
 }
 function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   if (sheet) sheet = { ...sheet, blocks: canonHelpBlocks(sheet.blocks) };   // 井上入浴→井上ヘルプ など
@@ -9918,6 +9935,7 @@ function AppInner() {
         else otherErr.push(pre + w);
       });
     });
+    offTimeBlockWarn(sheetMaster, sheetData, wd).forEach((x) => timeErr.push(x));   // 灰色の時間のヘルプ・予定
     if (holdCount) critical.push(`保留(担当未定)の予定が ${holdCount} 件残っています`);
     [...requiredHelpWarn(sheetMaster, sheetData, wd), ...fixedBlockWarn(sheetMaster, sheetData, wd), ...blockOverlapWarn(sheetMaster, sheetData), ...helpTwoShortages(sheetMaster, sheetData, wd), ...kubotaPlacementWarn(sheetMaster, sheetData, wd), ...maleOnlyHelpWarn(sheetMaster, sheetData), ...pikaStaffWarn(sheetMaster, sheetData, wd)].forEach((w) => critical.push(w));
 
@@ -11895,6 +11913,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
         else otherErr.push(pre + w);
       });
     });
+    offTimeBlockWarn(sheetMaster, sheetData, wd).forEach((x) => timeErr.push(x));   // 灰色の時間のヘルプ・予定
     if (holdCount) critical.push(`保留(担当未定)の予定が ${holdCount} 件残っています`);
     [...requiredHelpWarn(sheetMaster, sheetData, wd), ...fixedBlockWarn(sheetMaster, sheetData, wd), ...blockOverlapWarn(sheetMaster, sheetData), ...helpTwoShortages(sheetMaster, sheetData, wd), ...kubotaPlacementWarn(sheetMaster, sheetData, wd), ...maleOnlyHelpWarn(sheetMaster, sheetData), ...pikaStaffWarn(sheetMaster, sheetData, wd)].forEach((w) => critical.push(w));
 
