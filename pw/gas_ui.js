@@ -223,7 +223,7 @@ const D = path.join(__dirname, "../gas/out");
   await A.pg.fill("#f-sgq-users", "ナカ"); await A.pg.waitForTimeout(150);
   assert.strictEqual(await A.pg.locator('#sghits-users [data-sgpick]').first().getAttribute("data-name"), "中村", "カタカナでも");
   await A.pg.click('[data-sgpick="users"][data-name="中村"]');
-  console.log("予測:「なか」→", firstHit); await A.pg.fill("#w-dest", "○○病院"); await A.pg.fill("#f-start", "14:00");
+  console.log("予測:「なか」→", firstHit); await A.pg.fill("#w-dest", "○○病院"); await A.pg.fill("#f-start", "14:00"); await A.pg.check('input[name="w-hdur"][value="30"]'); await A.pg.waitForTimeout(200);   // ヘルプの時間：30分
   assert.ok(await A.pg.locator("#w-end").isHidden(), "ヘルプは開始時刻だけ");
   await A.pg.locator(".sheet").screenshot({ path: "g_help.png" }); await save();
   // 利用者休み：欠席（理由つき）
@@ -249,6 +249,7 @@ const D = path.join(__dirname, "../gas/out");
   assert.strictEqual(s2.noRide[U("森")].meet, "受診後送り"); assert.strictEqual(s2.userTime[U("森")].send, "15:30");
   { const sr = s2.runs.find((r) => r.kind === "send" && r.userIds.includes(U("森"))); assert.ok(!sr || sr.places[U("森")] === "病院", "送り先（便に入っていれば）"); console.log("送り先:", sr ? sr.places[U("森")] : "（まだ便なし）"); }
   const hb = s2.blocks.find((x) => x.calId && x.kind === "help"); assert.ok(hb && hb.staffId === "__hold__" && hb.label === "中村" && hb.note === "○○病院" && hb.time === "14:00", JSON.stringify(hb));
+  assert.strictEqual(hb.durMin, 30, "ヘルプの時間（30分）が送迎表に");
   assert.strictEqual(s2.userAbsent[U(absent)], true, "欠席");
   assert.strictEqual(s2.userExtra[exU.id], true, "利用日外利用 → 今日だけ利用"); assert.strictEqual(s2.userTime[exU.id].send, "15:00");
   assert.strictEqual(s2.staffOv[S("八壁")].end, "19:00", "勤務時間変更");
@@ -384,6 +385,13 @@ const D = path.join(__dirname, "../gas/out");
   await P.pg.screenshot({ path: "g_sougei_after.png", fullPage: true });
   const body = await P.pg.locator("#root").innerText(); assert.ok(body.includes("受診後送り") && body.includes("中村"), "送迎表に受診後送り・ヘルプが出る");
   console.log("送迎表を開き直す → 森(受診後送り)・ヘルプ（中村）が表に出る / 画面エラー:", real(P.errs));
+  { const hb2 = api(t, "kv.get", ["sheet:" + date]).data.value.blocks.find((x) => x.calId && x.kind === "help");   // 送迎表でもヘルプの時間を選べる（カレンダーで選んだ30分が選ばれている）
+    await P.pg.click(`[data-item-id="${hb2.id}"]`); await P.pg.waitForTimeout(400);
+    assert.ok((await P.pg.locator("[data-help-dur] button.bg-sky-600").innerText()) === "30分", "送迎表のヘルプの時間");
+    await P.pg.locator("[data-help-dur]").screenshot({ path: "g_help_dur.png" });
+    await P.pg.click('[data-dur="60"]'); await P.pg.click('button:text-is("保存")'); await P.pg.waitForTimeout(1500);
+    let d2 = null; for (let i = 0; i < 20 && !(d2 && d2.durMin === 60); i++) { await P.pg.waitForTimeout(500); d2 = api(t, "kv.get", ["sheet:" + date]).data.value.blocks.find((x) => x.id === hb2.id); }
+    assert.strictEqual(d2.durMin, 60, "送迎表で1時間に変えられる"); console.log("ヘルプの時間: カレンダー30分 → 送迎表で1時間に"); }
   assert.deepStrictEqual(real(P.errs), []);
   // 開いたときに公開URLが届かなくても（実機で起きた）、ログイン後にサーバーへ聞いて、メニューのリンクは公開URLになる
   {

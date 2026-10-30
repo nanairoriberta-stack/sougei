@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.30b";
+const APP_VERSION="2026.10.30c";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -276,7 +276,8 @@ function workOf(d){
   return{staff:[...(sg.staff||d.tanto||[])],users:[...(sg.users||[])],reason:sg.reason||"",dest:sg.type==="help"&&sg.note!==(sg.users||[])[0]?sg.note||"":"",dept:sg.dept||"",
     leave:sg.half||(sg.type==="staff_off"&&!d.allDay?"time":"day"),
     meetM:sg.meet?"time":sg.noMeet?mOf(sg.noMeet):"same",sendM:sg.send?"time":sg.noSend?"fam":"same",meet:sg.meet||"",send:sg.send||"",mplace:sg.meetPlace||"",splace:sg.sendPlace||"",
-    plan:sg.type==="staff_plan",wsM:sg.wstart?"time":"same",weM:sg.wend?"time":"same",wstart:sg.wstart||"",wend:sg.wend||""};
+    plan:sg.type==="staff_plan",wsM:sg.wstart?"time":"same",weM:sg.wend?"time":"same",wstart:sg.wstart||"",wend:sg.wend||"",
+    hdur:String(sg.type==="help"&&d.start&&d.end?Math.max(30,minOf(d.end)-minOf(d.start))||60:60)};   // ヘルプの時間（分）
 }
 /* 入力欄の状態 → 送迎表に反映する内容 */
 function sgOf(label,w){
@@ -292,13 +293,14 @@ function sgOf(label,w){
   if(label==="other"&&w.plan)return Object.assign(base,{type:"staff_plan",users:[]});
   return null;
 }
+const minOf=t=>{const m=/^(\d{1,2}):(\d{2})$/.exec(t||"");return m?Number(m[1])*60+Number(m[2]):0};
 const addMin=(t,n)=>{const m=/^(\d{1,2}):(\d{2})$/.exec(t||"");if(!m)return"";const x=Math.min(23*60+59,Number(m[1])*60+Number(m[2])+n);return`${pad(Math.floor(x/60))}:${pad(x%60)}`};
 /* ラベルによって、終日かどうかは入力欄から決まる */
 function fixTimes(d){
   const w=d.w;
   if(d.label==="leave")d.allDay=w.leave!=="time";
   else if(d.label==="user"||d.label==="ride"||d.label==="extra"||d.label==="shift")d.allDay=true;
-  else if(d.label==="help"){d.allDay=false;d.endDate=d.date;if(d.start)d.end=addMin(d.start,60)}   // ヘルプは開始時刻だけ（長さは送迎表の決まり）
+  else if(d.label==="help"){d.allDay=false;d.endDate=d.date;if(d.start)d.end=addMin(d.start,Number(w.hdur)||60)}   // ヘルプは開始時刻と時間（30分・1時間など）
   else if(d.label==="hwork"||PLAN_LABELS.includes(d.label))d.allDay=false;
   if(d.label==="leave"&&w.leave!=="time"&&w.leave!=="day")d.endDate=d.date;
 }
@@ -322,7 +324,8 @@ function drawSg(){
   if(!canLabel(L)&&!ro)h=hint("このラベルは送迎表の担当者が入力します。");
   else if(L==="help")h=who("users","利用者","利用者の名前で検索")
     +`<div class="sgsub"><label class="lbl2" for="w-dest">行き先（家以外のときだけ）</label><input class="input" id="w-dest" maxlength="40" value="${esc(w.dest)}" placeholder="例：○○病院" autocomplete="off" ${ro?"readonly":""}></div>`
-    +hint("開始時刻に、送迎表の「保留」欄へ【ヘルプ】として入ります。担当する職員は送迎表で割り当ててください（終わりの時刻は送迎表の決まりどおり）。");
+    +`<div class="sgsub"><span class="lbl2">ヘルプの時間</span>${radios("w-hdur",String(w.hdur||60),[["30","30分"],["60","1時間"],["90","1時間半"],["120","2時間"]])}</div>`
+    +hint("開始時刻に、送迎表の「保留」欄へ【ヘルプ】として入ります（選んだ時間の長さ）。担当する職員は送迎表で割り当ててください。");
   else if(L==="ride"||L==="extra")h=who("users","利用者","利用者の名前で検索")
     +tm("w-meet",w.meetM,"w-meett",w.meet,"迎え",[["same",L==="extra"?"いつもの時刻":"いつもどおり"],["time","時間変更"],["fam","家族送り"],["clinic","受診後送り"]])
     +(NO_MEET[w.meetM]?"":place("w-mplace",w.mplace,"迎え先の変更（いつもと違うときだけ）","例：実家・ﾘﾍﾞ"))
@@ -371,7 +374,7 @@ function readSg(){
   if(!ed||!$("sgArea"))return;const w=ed.d.w;
   const rv=n=>{const x=document.querySelector(`input[name="${n}"]:checked`);return x?x.value:null};
   const iv=id=>{const x=$(id);return x?x.value.trim():null};
-  for(const[n,k]of[["w-leave","leave"],["w-meet","meetM"],["w-send","sendM"],["w-ws","wsM"],["w-we","weM"]]){const v=rv(n);if(v!=null)w[k]=v}
+  for(const[n,k]of[["w-leave","leave"],["w-meet","meetM"],["w-send","sendM"],["w-ws","wsM"],["w-we","weM"],["w-hdur","hdur"]]){const v=rv(n);if(v!=null)w[k]=v}
   for(const[id,k]of[["w-dest","dest"],["w-mplace","mplace"],["w-splace","splace"],["w-reason","reason"],["w-meett","meet"],["w-sendt","send"],["w-dept","dept"],["w-wst","wstart"],["w-wet","wend"]]){const v=iv(id);if(v!=null)w[k]=v}
   if($("w-plan"))w.plan=$("w-plan").checked;
   if($("f-place"))ed.d.place=$("f-place").value.trim();   // 場所が項目の中にあるラベル（モニタリング・支援会議）でも書きかけを残す
@@ -681,7 +684,7 @@ document.addEventListener("change",e=>{if(ed&&e.target.name==="f-biz"){ed.d.biz=
   if(e.target.id==="qKind"){S.qKind=e.target.value;return}
   if(!ed)return;
   // ラベル・休みの形などを変えたら、入力欄を作り直す（入力済みの値は残す）
-  if(e.target.name==="f-label"||e.target.id==="w-plan"||["w-leave","w-meet","w-send","w-ws","w-we"].includes(e.target.name)){
+  if(e.target.name==="f-label"||e.target.id==="w-plan"||["w-leave","w-meet","w-send","w-ws","w-we","w-hdur"].includes(e.target.name)){
     readForm();drawSheet();draftSave();return}
   if(e.target.id==="f-allday"){$("w-start").hidden=$("w-end").hidden=e.target.checked}
   if(e.target.id==="f-date"){const x=$("f-enddate");if(!x.value||x.value<e.target.value)x.value=e.target.value}

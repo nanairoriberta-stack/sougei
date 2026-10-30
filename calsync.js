@@ -57,8 +57,10 @@ function blocksOf(spec) {
     const who = spec.staff.length ? spec.staff.map((s) => s.id) : [HOLD_ID];
     const names = spec.users.map((u) => u.name).join("・");
     const note = names && spec.note && spec.note !== names ? spec.note : "";   // 家以外の行き先は（ ）書きで出る
+    // ヘルプの時間（カレンダーで30分・1時間などを選ぶ＝開始〜終了。2026-10-30〜）。選んでいない古い予定は送迎表の決まり（既定1時間）
+    const f0 = toMinX(spec.from), t0 = toMinX(spec.to), dur = f0 != null && t0 != null && t0 > f0 ? t0 - f0 : 0;
     return who.map((sid) => Object.assign({ id: `cal_${spec.id}_${sid}`, kind: "help", time: spec.from, staffId: sid,
-      label: names || spec.note, vehicleId: "", userIds: spec.users.map((u) => u.id), calId: spec.id }, note ? { note } : {}));
+      label: names || spec.note, vehicleId: "", userIds: spec.users.map((u) => u.id), calId: spec.id }, note ? { note } : {}, dur > 0 ? { durMin: dur } : {}));
   }
   if (spec.type !== "staff_off" && spec.type !== "staff_plan") return [];
   if (spec.type === "staff_off" && (spec.whole || spec.half)) return [];

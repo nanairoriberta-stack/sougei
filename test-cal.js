@@ -105,7 +105,9 @@ console.log('half OK');
  const x=C.reconcile(m,sheet,L,D);
  const hb=x.blocks.find(b=>b.id===`cal_hp1_${st('日野')}`);
  assert.ok(hb&&hb.kind==='help'&&hb.time==='10:00'&&hb.label==='森'&&hb.userIds[0]===us('森'),'ヘルプは担当職員の欄に（行き先＝利用者）');
- assert.strictEqual(hb.durMin,undefined,'長さは送迎表の決まり（開始時刻だけ入力）');
+ assert.strictEqual(hb.durMin,60,'ヘルプの時間（1時間）が送迎表の長さに（2026-10-30〜 30分・1時間などを選べる）');
+ { const h30=C.reconcile(m,sheet,[{id:'hq30',rev:1,date:D,endDate:D,allDay:false,start:'15:00',end:'15:30',title:'ヘルプ（森）',sg:{type:'help',staff:[],users:['森'],note:'森'}}],D).blocks.find(b=>b.id==='cal_hq30___hold__');
+   assert.ok(h30&&h30.durMin===30&&h30.time==='15:00','30分のヘルプ'); }
  assert.ok(x.blocks.some(b=>b.id==='cal_hp2___hold__'&&b.staffId==='__hold__'&&b.label==='中村'),'担当未定のヘルプは保留欄');
  const h3=x.blocks.find(b=>b.id===`cal_hp3_${st('白戸')}`); assert.ok(h3&&h3.label==='○○公民館'&&h3.userIds.length===0,'行き先が場所でも入る');
  assert.ok(!x.blocks.some(b=>String(b.id).startsWith('cal_hp4')),'この版の職員も利用者もいないヘルプは入れない');

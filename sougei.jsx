@@ -4701,16 +4701,33 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
         </details>
       )}
 
+      {isHelp && (
+        <div className="mt-2">
+          <Field label="ヘルプの時間">
+            <div className="flex flex-wrap gap-1" data-help-dur>
+              {[30, 60, 90, 120].map((mm) => {
+                const cur = Number(durMin) || (/伊達/.test(label || "") ? 30 : 60);
+                return (
+                  <button type="button" key={mm} data-dur={mm} onClick={() => setDurMin(String(mm))}
+                    className={`text-sm px-3 py-1 rounded border ${cur === mm ? "bg-sky-600 text-white border-sky-600" : "bg-white border-stone-300 hover:bg-stone-50"}`}>
+                    {mm === 30 ? "30分" : mm === 60 ? "1時間" : mm === 90 ? "1時間半" : "2時間"}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+        </div>
+      )}
       {!isOwn && vehicleId && vehicleId !== "__walk__" && !String(vehicleId).startsWith("own:") && (
         <div className="grid grid-cols-2 gap-3 mt-2">
-          <Field label="所要時間(車が戻るまで・アプリ内のみ)">
+          {!isHelp && <Field label="所要時間(車が戻るまで・アプリ内のみ)">
             <select className={inputCls} value={durMin} onChange={(e) => setDurMin(e.target.value)}>
               <option value="">30分(既定)</option>
               {[45, 60, 75, 90, 120, 150, 180, 240].map((m) => (
                 <option key={m} value={m}>{m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? m % 60 + "分" : ""}` : `${m}分`}</option>
               ))}
             </select>
-          </Field>
+          </Field>}
           <Field label="行先(終了後どの事業所に置くか)">
             <select className={inputCls} value={destDeptId} onChange={(e) => setDestDeptId(e.target.value)}>
               <option value="">既定(迎え後=所属 / 最終送り後=帰着地 / ヘルプ後=出発地)</option>
