@@ -6409,6 +6409,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
     e.preventDefault();
     setOverKey(null);
     if (!DRAG) return;
+    if (colId === REQ_ID && (DRAG.t === "block" || DRAG.t === "veh")) { notify("生活介護へ依頼できるのは迎え・送りの便だけです", "warn"); DRAG = null; return; }
     if (DRAG.t === "run" || DRAG.t === "block") onMoveItem(DRAG.t === "run" ? "runs" : "blocks", DRAG.id, colId, slotMin);
     else if (DRAG.t === "user") onDropUserOnCell(DRAG, colId, toStr(slotMin));
     else if (DRAG.t === "veh") onDropVehicleOnCell(DRAG.vehicleId, colId, toStr(slotMin));
@@ -6431,7 +6432,9 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
   const slots = [];
   for (let m = GRID_START; m < GRID_END; m += SLOT) slots.push(m);
 
-  const colKey = (sid) => (sid === HOLD_ID || !known.has(sid) || !workingSet.has(sid) ? HOLD_ID : sid);
+  // りんく・ぷれいす版は保留の右に「🤝 生活介護へ依頼」の枠（ここに置いた迎え・送りが生活介護の送迎表へ。2026-10-30）
+  const showReq = EDITION === "v3";
+  const colKey = (sid) => (showReq && sid === REQ_ID ? REQ_ID : sid === HOLD_ID || !known.has(sid) || !workingSet.has(sid) ? HOLD_ID : sid);
   const cellMap = {};
   const put = (staffId, time, obj) => {
     const t = toMin(time);
@@ -6745,6 +6748,15 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                 <div className="text-[9px] text-yellow-700/70 leading-tight">クリックで再割当</div>
               </div>
             </th>
+            {showReq && (
+              <th className="border border-stone-300 border-dashed p-0 min-w-24 w-24 align-top bg-amber-50" data-req-col>
+                <div className="bg-amber-500 h-1.5" />
+                <div className="px-1 py-0.5">
+                  <div className="text-[13px] font-bold text-amber-800">🤝 生活介護へ依頼</div>
+                  <div className="text-[9px] text-amber-700 leading-tight">迎え・送りをここに置くと生活介護の送迎表へ</div>
+                </div>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -6752,7 +6764,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
             // この時間帯(行)に予定があるか(全職員+保留)
             const rowHasItem =
               cols.some((s) => (cellMap[`${s.id}:${m}`] || []).length) ||
-              (cellMap[`${HOLD_ID}:${m}`] || []).length;
+              (cellMap[`${HOLD_ID}:${m}`] || []).length || (showReq && (cellMap[`${REQ_ID}:${m}`] || []).length);
             const emptyCell = rowHasItem ? "" : "h-5"; // 空行は細く、予定行は内容に応じて伸びる
             return (
             <tr key={m} onMouseEnter={onHoverTime ? () => onHoverTime(m) : undefined}>
@@ -6785,6 +6797,17 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                 {renderItems(cellMap[`${HOLD_ID}:${m}`] || [], HOLD_ID, m)}
                 <button className="w-full text-yellow-500/40 text-xs opacity-0 group-hover:opacity-100 hover:text-yellow-700 leading-none" onClick={() => onCell(HOLD_ID, toStr(m))}>+</button>
               </td>
+              {showReq && (
+                <td
+                  onDragOver={cellDragOver(`${REQ_ID}:${m}`)}
+                  onDragLeave={() => { if (overKey === `${REQ_ID}:${m}`) setOverKey(null); }}
+                  onDrop={cellDrop(REQ_ID, m)}
+                  data-req-cell={toStr(m)}
+                  className={`border border-stone-200 border-dashed align-top p-0.5 ${emptyCell} bg-amber-50/60 group ${overKey === `${REQ_ID}:${m}` ? "outline outline-2 outline-amber-500 bg-amber-100" : ""}`}>
+                  {renderItems(cellMap[`${REQ_ID}:${m}`] || [], REQ_ID, m)}
+                  <button className="w-full text-amber-500/50 text-xs opacity-0 group-hover:opacity-100 hover:text-amber-700 leading-none" onClick={() => onCell(REQ_ID, toStr(m))} title="この時刻の迎え・送りを生活介護へ依頼">+</button>
+                </td>
+              )}
             </tr>
             );
           })}
