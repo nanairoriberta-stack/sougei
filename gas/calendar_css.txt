@@ -368,3 +368,8 @@ html[data-biz] .biztabs button[aria-selected="true"]{color:var(--bz);box-shadow:
 /* 日の一覧（下から出る）も、タブの事業の色（全体＝薄い青・生活介護＝薄緑・放課後デイ＝薄ピンク）。上の端に事業の色の線（2026-10-30） */
 html[data-biz] .daysheet{background:var(--bg);box-shadow:inset 0 4px 0 var(--bz)}
 html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{background:color-mix(in srgb,var(--bz) 10%,transparent)}
+
+/* 左右になぞって月を変えたとき（2026-10-30） */
+@keyframes swl{from{transform:translateX(40px);opacity:.35}to{transform:none;opacity:1}}
+@keyframes swr{from{transform:translateX(-40px);opacity:.35}to{transform:none;opacity:1}}
+#app.sw-l{animation:swl .2s ease-out}#app.sw-r{animation:swr .2s ease-out}

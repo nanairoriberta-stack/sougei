@@ -108,9 +108,10 @@ async function bootstrap() {
     const d = device(g); const me = await d.login(noOf(g, "八壁"), pinOf(g, "八壁"));
     await d.call("cal.apply", { kind: "upsert", opId: "op_aaaaaaa1", id: "ev_aaaaaaa1", baseRev: null, ev: evOff("2026-11-03", "日野") }).then(() => assert.fail("他人の休み"), (e) => assert.strictEqual(e.code, "invalid_argument"));
     await d.call("kv.merge", { key: "master", base: null, mine: { staff: [] }, baseKnown: false }).then(() => assert.fail("送迎表の変更"), (e) => assert.strictEqual(e.code, "invalid_argument"));
-    await d.call("cal.apply", { kind: "upsert", opId: "op_aaaaaaa2", id: "ev_aaaaaaa2", baseRev: null, by: "999", ev: { title: "研修", date: "2026-11-03", endDate: "2026-11-03", allDay: true, label: "event" } });
+    const ar = await d.call("cal.apply", { kind: "upsert", opId: "op_aaaaaaa2", id: "ev_aaaaaaa2", baseRev: null, by: "999", ev: { title: "研修", date: "2026-11-03", endDate: "2026-11-03", allDay: true, label: "event" } });
     const day = Object.values(TC.mergeDays(await d.call("docs.query", { col: "days", from: "2026-11-03", to: "2026-11-03" })));
     assert.strictEqual(day[0].createdBy, me.no, "作成者はサーバーが決める");
+    assert.ok(ar.docs && ar.docs.some((x) => x.date === "2026-11-03" && x.events.ev_aaaaaaa2), "書いた日の文書が返る（画面はこれで表を直す）");
     return "他人の休み・送迎表の変更を拒否、作成者は本人の番号";
   });
 

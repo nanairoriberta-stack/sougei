@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.30h";
+const APP_VERSION="2026.10.30i";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -243,16 +243,52 @@ function renderTrash(){
 }
 
 /* ---------- 受信（読込）：読めなかったときは何も書かない ---------- */
+/* 早く出すために：
+   ・読んだ月はメモリに覚え（MC）、月を変えたらまずそれを出してから読み直す。前後の月も先に読んでおく
+   ・最後に見た月は端末にも覚え（tc:mc1）、開いた直後に出す（表示だけ。読み込みが終わるまで「読み込み中」）
+   ・保存したら、サーバーが返した「その日の文書」で表を直す（PATCH。月の読み直しを待たない）。
+     読み直しと行き違っても、予定ごとに新しい版（rev）が勝つので、古い表示に戻らない */
+const MC=new Map(),PATCH=new Map(),MCKEY="tc:mc1";let SNAP=[];
+const rangeOf=c=>{const s=addDays(c,-c.getDay());return{start:s,end:addDays(s,41)}};
+const keyOfRange=r=>ymd(r.start)+"|"+ymd(r.end);
+function setDocs(docs){SNAP=docs;const t=Date.now();for(const[k,v]of PATCH)if(t-v.at>120000)PATCH.delete(k);S.server=C.mergeDays(docs.concat([...PATCH.values()].map(v=>v.d)))}
+function mcPut(k,docs){MC.delete(k);MC.set(k,{docs,at:Date.now()});while(MC.size>8)MC.delete(MC.keys().next().value)}
+function bootCache(k){try{const v=JSON.parse(store.get(MCKEY)||"null");return v&&v.k===k&&Array.isArray(v.docs)?v.docs:null}catch{return null}}
+function bootSave(k,docs){try{const t=JSON.stringify({k,docs});if(t.length<1500000)store.set(MCKEY,t)}catch{}}
+window.__calPatch=docs=>{const at=Date.now();let n=0;
+  for(const d of docs){if(!d||!d.date)continue;const key=d.date+"_"+d.shard;PATCH.set(key,{d,at});n++;
+    for(const v of MC.values()){const i=v.docs.findIndex(x=>x&&x.date+"_"+x.shard===key);if(i>=0)v.docs[i]=d;else if(d.maxEnd>=v.docs.from&&d.date<=v.docs.to)v.docs.push(d)}}
+  if(!n)return false;setDocs(SNAP);render();return true};
+function prefetch(){
+  if(!db||document.visibilityState==="hidden")return;
+  for(const dl of[1,-1]){const r=rangeOf(new Date(S.cursor.getFullYear(),S.cursor.getMonth()+dl,1)),k=keyOfRange(r),c=MC.get(k);
+    if(c&&Date.now()-c.at<60000)continue;
+    try{db.collection("days").where("maxEnd",">=",ymd(r.start)).where("date","<=",ymd(r.end)).limit(1000).get().then(snap=>{const docs=snap.docs.map(d=>d.data());docs.from=ymd(r.start);docs.to=ymd(r.end);if(!MC.has(k)||MC.get(k).at<Date.now()-1000)mcPut(k,docs)}).catch(()=>{})}catch{}}
+}
+let pfT;
 function subscribe(){
   if(!db)return;unsub?.();S.loaded=false;
-  const{start,end}=gridRange();
+  const r=gridRange(),{start,end}=r,k=keyOfRange(r);
+  const c=MC.get(k),boot=c?null:bootCache(k);
+  if(c)setDocs(c.docs);else if(boot)setDocs(boot);   // 覚えていた分をすぐ出す（表示だけ）
   try{
     unsub=db.collection("days").where("maxEnd",">=",ymd(start)).where("date","<=",ymd(end)).limit(1000)
-      .onSnapshot(snap=>{const docs=snap.docs.map(d=>d.data());S.server=C.mergeDays(docs);S.loaded=true;if(S.dbState==="error")S.dbState="ok";render()},
+      .onSnapshot(snap=>{const docs=snap.docs.map(d=>d.data());docs.from=ymd(start);docs.to=ymd(end);mcPut(k,docs);setDocs(docs);S.loaded=true;if(S.dbState==="error")S.dbState="ok";render();
+          bootSave(k,docs);clearTimeout(pfT);pfT=setTimeout(prefetch,800)},
         ()=>{S.dbState="error";render()});
   }catch{S.dbState="error";render()}
 }
 function go(delta){S.cursor=new Date(S.cursor.getFullYear(),S.cursor.getMonth()+delta,1);subscribe();render()}
+/* 月の画面・リストを左右になぞると月が変わる（左へ＝次の月、右へ＝前の月） */
+let sw=null;
+document.addEventListener("touchstart",e=>{sw=null;
+  if(e.touches.length!==1||S.dayOpen||ed||SR.open||$("ov")||!(e.target.closest&&e.target.closest("#app")))return;
+  if(e.target.closest("input,select,textarea,.panel"))return;
+  sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()}},{passive:true});
+document.addEventListener("touchend",e=>{if(!sw)return;const s=sw;sw=null;const p=e.changedTouches&&e.changedTouches[0];if(!p)return;
+  const dx=p.clientX-s.x,dy=p.clientY-s.y;
+  if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5||Date.now()-s.t>800)return;
+  go(dx<0?1:-1);const a=$("app");if(a){a.classList.remove("sw-l","sw-r");void a.offsetWidth;a.classList.add(dx<0?"sw-l":"sw-r")}},{passive:true});
 
 /* ---------- 書きかけ（端末に自動保存） ---------- */
 const DKEY="tc:draft";

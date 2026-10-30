@@ -24,7 +24,7 @@ const D = path.join(__dirname, "../gas/out");
     const ctx = await b.newContext({ viewport: vp, colorScheme: "light" }); const pg = await ctx.newPage();
     const errs = []; pg.on("pageerror", (e) => errs.push(String(e))); pg.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errs.push(m.text().slice(0, 200)); });
     await pg.exposeFunction("__gasApi", (tk, m, a) => api(tk, m, a));
-    await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { setTimeout(() => window.__gasApi(tk, m, a).then((r) => s && s(r), (e) => f && f(e)), 30); } }; })() } }; });
+    await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { const h = m === "docs.query" && window.__HOLDQ; if (h) window.__QN = (window.__QN || 0) + 1; setTimeout(() => window.__gasApi(tk, m, a).then((r) => setTimeout(() => s && s(r), h || 0), (e) => f && f(e)), 30); } }; })() } }; });
     await pg.route("https://**/*", async (r) => { const u = r.request().url(); for (const k in LOC) if (u.endsWith(k)) return r.fulfill({ path: LOC[k], contentType: "application/javascript" }); return r.abort(); });
     const html = fs.readFileSync(path.join(D, file), "utf8").replace("/*__BOOT__*/", boot);
     const out = "g_" + (outName || file);   // 同じ画面を別の版で開くときは別の名前（開き直したときに混ざらない）
@@ -333,6 +333,36 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(!(await A.pg.evaluate(() => document.documentElement.classList.contains("dayopen"))));
     await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false }); await cdp.detach();
     console.log("スマホの日の一覧:", rows.length, "件 / バー:", chipTxt); }
+  { // 左右になぞると月が変わる。保存は月の読み直しを待たずに出る（遅れて届いた古い読み込みでも消えない）
+    const cdp = await A.pg.context().newCDPSession(A.pg); await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+    const swipeX = async (dx, dy) => { const g = await A.pg.locator("#grid").boundingBox(); const x = g.x + g.width / 2, y = g.y + g.height / 2;
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+      for (const f of [0.3, 0.6, 1]) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + dx * f, y: y + (dy || 0) * f }] });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); await A.pg.waitForTimeout(400); };
+    const lab = () => A.pg.locator("#monthLabel").innerText(), m0 = await lab();
+    await swipeX(-160); const m1 = await lab(); assert.notStrictEqual(m1, m0, "左へなぞると次の月");
+    await swipeX(160); assert.strictEqual(await lab(), m0, "右へなぞると前の月");
+    await swipeX(40, 200); assert.strictEqual(await lab(), m0, "縦になぞっても月は変わらない");
+    await swipeX(-160); assert.strictEqual(await lab(), m1);
+    const day = await A.pg.locator("#grid .cell[data-day]:not(.out)").nth(14).getAttribute("data-day");
+    await A.pg.evaluate(() => { window.__HOLDQ = 4000; window.__QN = 0; });
+    A.pg.evaluate(() => window.SGHost.refreshCalendar());   // 保存の前に読み始めた分が、保存のあとに届く
+    await A.pg.waitForTimeout(200);
+    await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-other"); await A.pg.waitForTimeout(300);
+    await A.pg.fill("#f-title", "速い保存の試し"); await A.pg.fill("#f-date", day); await A.pg.fill("#f-start", "10:00"); await A.pg.fill("#f-end", "11:00");
+    const t0 = Date.now(); await A.pg.click("[data-hsave]");
+    await A.pg.waitForFunction(() => document.getElementById("evForm") == null && !/送信中|未送信/.test(document.getElementById("syncText").textContent) && JSON.stringify(Object.keys(localStorage)).indexOf("tc:op:") < 0, null, { timeout: 3000 });
+    const ms = Date.now() - t0;
+    assert.ok(JSON.stringify(api(t, "docs.query", [{ col: "days", from: day, to: day }]).data).includes("速い保存の試し"), "サーバーに保存されている");
+    assert.ok((await A.pg.locator("#grid").innerText()).includes("速い保存") || (await A.pg.locator(`#grid .cell[data-day="${day}"]`).textContent()).includes("速い保存"), "保存した予定が出ている");
+    await A.pg.waitForTimeout(4500);
+    assert.ok(await A.pg.evaluate(() => window.__QN) >= 1, "遅い読み込みが本当に届いた");
+    assert.ok((await A.pg.locator(`#grid .cell[data-day="${day}"]`).textContent()).includes("速い保存"), "古い読み込みが後から届いても消えない");
+    await A.pg.evaluate(() => { window.__HOLDQ = 0; });
+    await swipeX(160); assert.strictEqual(await lab(), m0);
+    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300);   // 選んでいる日を元に戻す
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false }); await cdp.detach();
+    console.log("左右になぞって月:", m0, "→", m1, "/ 保存済みまで", ms, "ms（月の読み直しは4秒かかる設定）"); }
   { // 事業のタブ：全体／生活介護／放課後デイ。これまでの予定は生活介護
     assert.deepStrictEqual(await A.pg.$$eval("#bizTabs [data-biz]", (b) => b.map((x) => x.textContent)), ["全体", "生活介護", "放課後デイ"]);
     const before = await A.pg.locator("#panel .ev-row").count();

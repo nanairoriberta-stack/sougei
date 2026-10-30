@@ -221,7 +221,7 @@ const sampleShim = Object.assign(async (input, opts) => {
 }, { limits: async () => ({ images: false }) });
 G.claude = { use: async (n) => { await ready; return { db: dbShim, user: userShim, downloads: downloadsShim, sample: sampleShim }[n] || null; } };
 
-G.SGHost = { ready, call, store, get me() { return me; }, edition: ED, get base() { return BASE; }, url, onLogin: (f) => listeners.add(f), startPolling, pollOnce, refreshCalendar: () => Promise.all([...calSubs].map((f) => f())), runOp: async (op) => { const r = await call("cal.apply", op); if (r && r.status === "ok") { try { await Promise.all([...calSubs].map((f) => f())); } catch (e) {} } return r; }, toast: toastHost, directory: () => directory, loadDirectory };
+G.SGHost = { ready, call, store, get me() { return me; }, edition: ED, get base() { return BASE; }, url, onLogin: (f) => listeners.add(f), startPolling, pollOnce, refreshCalendar: () => Promise.all([...calSubs].map((f) => f())), runOp: async (op) => { const r = await call("cal.apply", op); if (r && r.status === "ok") { let done = false; try { done = !!(r.docs && r.docs.length && G.__calPatch && G.__calPatch(r.docs)); } catch (e) {} if (!done) { try { await Promise.all([...calSubs].map((f) => f())); } catch (e) {} } } return r; }, toast: toastHost, directory: () => directory, loadDirectory };
 
 /* ---------- 起動：保存済みのログインがあれば、通信できなくてもそのまま使える（未送信は端末に保存） ---------- */
 function boot() {

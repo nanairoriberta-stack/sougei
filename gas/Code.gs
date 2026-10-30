@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.30h',
+  VERSION: '2026.10.30i',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -644,7 +644,9 @@ function calApply_(me, op) {
     var title = op.kind === 'comment' ? '' : (op.ev && op.ev.title) || (raws[0] && raws[0].events && raws[0].events[op.id] && raws[0].events[op.id].title) || '';
     log_(me, 'カレンダー', { upsert: op.baseRev == null && !op.baseOp ? '予定の作成' : '予定の変更', delete: '予定の削除', restore: '予定の復元', comment: 'コメント' }[op.kind], title + (sg ? '（送迎表：' + sgText_(sg) + '）' : ''));
     if (op.kind !== 'comment') reconcileDates_(op, raws, idx);
-    return { status: 'ok' };
+    // 書いた日の文書を返す：画面はこれで表を直し、月の読み直しを待たずに「保存済み」にできる
+    var docs = res.writes.filter(function (w) { return w.path.indexOf('days/') === 0; }).map(function (w) { return w.data; });
+    return { status: 'ok', docs: docs };
   });
 }
 function sgText_(sg) {
