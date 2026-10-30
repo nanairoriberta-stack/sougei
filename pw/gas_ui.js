@@ -187,6 +187,25 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await Q.pg.locator("[data-reqnote]").innerText()).includes("八壁"), "編集画面にも出る");
     await Q.pg.locator(".fixed [data-reqnote]").screenshot({ path: "g_req_note.png" }).catch(() => {});
     console.log("りんく依頼:", stTxt, "/ 画面エラー:", real(Q.errs)); assert.deepStrictEqual(real(Q.errs), []); await Q.pg.context().close(); }
+  { // 生活介護の版（11/1からは新体制版）の表に「🤝 りんくからの依頼」の枠。担当が決まっていない依頼はここに出て、職員の欄へ動かすと担当が決まる
+    const v3s = api(t, "kv.get", ["v3:sheet:" + date]).data.value, kid = api(t, "kv.get", ["v3:master"]).data.value.users[0];
+    api(t, "kv.merge", [{ key: "v3:sheet:" + date, base: v3s, baseKnown: true, mine: { ...v3s, runs: [...v3s.runs, { id: "rqLK", kind: "send", time: "16:00", staffId: "__req__", vehicleId: "", userIds: [kid.id], staffRiderIds: [], note: "" }] } }]);
+    const V = await open("sougei.html", { width: 1400, height: 900 }, boot.replace('__SG_EDITION="v1"', '__SG_EDITION="v2"'), "sougei_v2.html");
+    await V.pg.waitForTimeout(500); await V.pg.fill("#sghNo", "000"); await V.pg.fill("#sghPin", "5829"); await V.pg.click("#sghGo"); await V.pg.waitForTimeout(5000);
+    assert.ok(await V.pg.locator("[data-link-col]").isVisible(), "生活介護の表に「りんくからの依頼」の枠");
+    assert.strictEqual(await V.pg.locator('[data-link-cell] [data-item-id="lk_rqLK"]').count(), 1, "担当未定の依頼は枠に出る");
+    assert.strictEqual(await V.pg.locator('[data-link-cell] [data-item-id="lk_rqUI"]').count(), 0, "担当が決まった依頼は職員の欄");
+    await V.pg.screenshot({ path: "g_link_col.png" });
+    const m2 = api(t, "kv.get", ["v2:master"]).data.value, hino = m2.staff.find((x) => x.name === "日野");
+    const heads = await V.pg.$$eval("thead th", (ths) => ths.map((x) => x.innerText.split("\n")[0].trim())); const ci = heads.indexOf("日野"); assert.ok(ci > 0, heads.join(","));
+    await V.pg.click('[data-link-cell] [data-item-id="lk_rqLK"]'); await V.pg.waitForTimeout(400);   // 開いて担当に日野を選ぶ
+    await V.pg.selectOption('select:has(option[value="__hold__"])', hino.id); await V.pg.click('button:text-is("保存")'); await V.pg.waitForTimeout(800);
+    let lk = null; for (let i = 0; i < 20; i++) { await V.pg.waitForTimeout(400); lk = api(t, "kv.get", ["v2:sheet:" + date]).data.value.blocks.find((b) => b.id === "lk_rqLK"); if (lk && lk.staffId === hino.id) break; }
+    assert.ok(lk && lk.staffId === hino.id, "担当を決めると職員の欄へ " + JSON.stringify(lk));
+    assert.strictEqual(await V.pg.locator('[data-link-cell] [data-item-id="lk_rqLK"]').count(), 0, "枠から消える");
+    let st3 = null; for (let i = 0; i < 20; i++) { await V.pg.waitForTimeout(300); st3 = (api(t, "kv.get", ["v3:sheet:" + date]).data.value.reqStatus || {}).rqLK; if (st3 && st3.staff) break; }
+    assert.strictEqual(st3.staff, "日野", "りんく側にも担当が出る");
+    assert.deepStrictEqual(real(V.errs), []); await V.pg.context().close(); console.log("りんくからの依頼の枠: OK"); }
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   assert.strictEqual(await P.pg.getByRole("button", { name: /AI調整|AIと相談/ }).count(), 0, "料金がかかるAIのボタンは、キーが無ければ出ない");
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);

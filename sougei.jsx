@@ -6410,6 +6410,11 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
     setOverKey(null);
     if (!DRAG) return;
     if (colId === REQ_ID && (DRAG.t === "block" || DRAG.t === "veh")) { notify("生活介護へ依頼できるのは迎え・送りの便だけです", "warn"); DRAG = null; return; }
+    if (colId === LINK_COL) {   // りんくからの依頼の枠：依頼のコマを戻すことだけできる（担当を外す）
+      if (DRAG.t === "block" && String(DRAG.id || "").startsWith("lk_")) onMoveItem("blocks", DRAG.id, HOLD_ID, slotMin);
+      else notify("この枠には、りんく・ぷれいす版からの依頼だけが入ります", "warn");
+      DRAG = null; return;
+    }
     if (DRAG.t === "run" || DRAG.t === "block") onMoveItem(DRAG.t === "run" ? "runs" : "blocks", DRAG.id, colId, slotMin);
     else if (DRAG.t === "user") onDropUserOnCell(DRAG, colId, toStr(slotMin));
     else if (DRAG.t === "veh") onDropVehicleOnCell(DRAG.vehicleId, colId, toStr(slotMin));
@@ -6434,7 +6439,9 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
 
   // りんく・ぷれいす版は保留の右に「🤝 生活介護へ依頼」の枠（ここに置いた迎え・送りが生活介護の送迎表へ。2026-10-30）
   const showReq = EDITION === "v3";
-  const colKey = (sid) => (showReq && sid === REQ_ID ? REQ_ID : sid === HOLD_ID || !known.has(sid) || !workingSet.has(sid) ? HOLD_ID : sid);
+  // 生活介護の版は保留の右に「🤝 りんくからの依頼」の枠（担当がまだ決まっていない【りんく依頼】はここに出る。職員の欄へ動かすと担当が決まる）
+  const LINK_COL = "__linkcol__", showLink = EDITION !== "v3" && sheetMode;
+  const colKey = (sid) => (sid === LINK_COL ? LINK_COL : showReq && sid === REQ_ID ? REQ_ID : sid === HOLD_ID || !known.has(sid) || !workingSet.has(sid) ? HOLD_ID : sid);
   const cellMap = {};
   const put = (staffId, time, obj) => {
     const t = toMin(time);
@@ -6446,7 +6453,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
   data.runs.forEach((r) => put(r.staffId, r.time, { type: "run", item: r }));
   // 同乗職員の列にも表示(クリックで元の便を編集)
   data.runs.forEach((r) => (r.staffRiderIds || []).forEach((rid) => put(rid, r.time, { type: "rider", item: r, riderId: rid })));
-  data.blocks.filter((b) => !b.noteOnly).forEach((b) => put(b.staffId, b.time, { type: "block", item: b }));   // 「コマだけ消す」にしたものは表に出さない
+  data.blocks.filter((b) => !b.noteOnly).forEach((b) => put(showLink && b.linkReq && b.staffId === HOLD_ID ? LINK_COL : b.staffId, b.time, { type: "block", item: b }));   // 「コマだけ消す」にしたものは表に出さない
 
   const holdCount = Object.keys(cellMap).filter((k) => k.startsWith(HOLD_ID)).reduce((a, k) => a + cellMap[k].length, 0);
 
@@ -6483,7 +6490,9 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
     if (at < 0) at = ids.length; else if (!before) at += 1;
     ids.splice(at, 0, DRAG.id);
     // 別のマスから落とした場合は、まずこのマスへ移動してから並び順を確定
-    if (!sorted.some((x) => x.item.id === DRAG.id)) onMoveItem(DRAG.t === "run" ? "runs" : "blocks", DRAG.id, colId, slotMin);
+    if (colId === LINK_COL && !(DRAG.t === "block" && String(DRAG.id || "").startsWith("lk_"))) { notify("この枠には、りんく・ぷれいす版からの依頼だけが入ります", "warn"); DRAG = null; return; }
+    if (colId === REQ_ID && DRAG.t !== "run") { notify("生活介護へ依頼できるのは迎え・送りの便だけです", "warn"); DRAG = null; return; }
+    if (!sorted.some((x) => x.item.id === DRAG.id)) onMoveItem(DRAG.t === "run" ? "runs" : "blocks", DRAG.id, colId === LINK_COL ? HOLD_ID : colId, slotMin);
     onSetOrder && onSetOrder(ids.map((id2, i3) => ({ id: id2, ord: i3 })));
     DRAG = null;
   };
@@ -6700,6 +6709,15 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
         <thead className="sticky top-0 z-20">
           <tr>
             <th className="sticky left-0 z-30 bg-stone-100 border border-stone-300 text-[10px] text-stone-500 px-0.5 w-11 min-w-11">時間</th>
+            {showLink && (
+              <th className="border border-stone-300 border-dashed p-0 min-w-24 w-24 align-top bg-pink-50" data-link-col>
+                <div className="bg-pink-400 h-1.5" />
+                <div className="px-1 py-0.5">
+                  <div className="text-[13px] font-bold text-pink-800">🤝 りんくからの依頼</div>
+                  <div className="text-[9px] text-pink-700 leading-tight">未定{Object.keys(cellMap).filter((k) => k.startsWith(LINK_COL)).reduce((a, k) => a + cellMap[k].length, 0)}件・職員の欄へ動かして担当を決める</div>
+                </div>
+              </th>
+            )}
             {cols.map((s) => {
               const di = deptIndex(s.deptId) % DEPT_COLORS.length;
               const c = DEPT_COLORS[di] || DEPT_COLORS[0];
@@ -6764,13 +6782,23 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
             // この時間帯(行)に予定があるか(全職員+保留)
             const rowHasItem =
               cols.some((s) => (cellMap[`${s.id}:${m}`] || []).length) ||
-              (cellMap[`${HOLD_ID}:${m}`] || []).length || (showReq && (cellMap[`${REQ_ID}:${m}`] || []).length);
+              (cellMap[`${HOLD_ID}:${m}`] || []).length || (showReq && (cellMap[`${REQ_ID}:${m}`] || []).length) || (showLink && (cellMap[`${LINK_COL}:${m}`] || []).length);
             const emptyCell = rowHasItem ? "" : "h-5"; // 空行は細く、予定行は内容に応じて伸びる
             return (
             <tr key={m} onMouseEnter={onHoverTime ? () => onHoverTime(m) : undefined}>
               <td className={`sticky left-0 z-10 bg-stone-50 border border-stone-200 text-[11px] text-right pr-1 align-top leading-none py-0.5 ${m % 60 === 0 ? "font-bold text-stone-600" : "text-stone-400"}`}>
                 {toStr(m)}
               </td>
+              {showLink && (
+                <td
+                  onDragOver={cellDragOver(`${LINK_COL}:${m}`)}
+                  onDragLeave={() => { if (overKey === `${LINK_COL}:${m}`) setOverKey(null); }}
+                  onDrop={cellDrop(LINK_COL, m)}
+                  data-link-cell={toStr(m)}
+                  className={`border border-stone-200 border-dashed align-top p-0.5 ${emptyCell} bg-pink-50/60 ${overKey === `${LINK_COL}:${m}` ? "outline outline-2 outline-pink-500 bg-pink-100" : ""}`}>
+                  {renderItems(cellMap[`${LINK_COL}:${m}`] || [], LINK_COL, m)}
+                </td>
+              )}
               {cols.map((s) => {
                 const items = cellMap[`${s.id}:${m}`] || [];
                 const ov = ovMap[s.id] || {};
