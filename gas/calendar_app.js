@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.30d";
+const APP_VERSION="2026.10.30e";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -28,7 +28,26 @@ const S={cursor:new Date(new Date().getFullYear(),new Date().getMonth(),1),sel:T
 const BIZ=[{k:"all",n:"全体"},{k:"seikatsu",n:"生活介護"},{k:"houkago",n:"放課後デイ"}],BIZN={seikatsu:"生活介護",houkago:"放課後デイ"};
 const bizOf=e=>e&&e.biz==="houkago"?"houkago":"seikatsu";
 try{const b=ls&&ls.getItem("sg:biz");if(BIZ.some(x=>x.k===b))S.biz=b}catch{}
-const newBiz=()=>S.biz==="houkago"?"houkago":"seikatsu";
+// 新しい予定の事業：開いているタブ。全体のタブなら、入れる人（ログインした職員）の事業
+const newBiz=()=>S.biz==="houkago"?"houkago":S.biz==="seikatsu"?"seikatsu":(homeBiz()||"seikatsu");
+/* 人ごとの事業（2026-10-30 依頼者）：職員は送迎表のどの版にいるか（names.list の staffBiz）、
+   利用者は生活介護（現体制版・新体制版）か放課後デイ（りんく・ぷれいす版）か。分からない人は null */
+function bizOfPerson(name,kind){
+  if(kind==="staff")return (SGN.staffBiz||{})[name]||null;
+  const inU=(SGN.users||[]).some(x=>x.name===name),inK=(SGN.kids||[]).some(x=>x.name===name);
+  return inU||inK?[...(inU?["seikatsu"]:[]),...(inK?["houkago"]:[])]:null;
+}
+// 予定の事業と違う事業の人（例：放課後デイの職員の休みが生活介護の予定になっている）
+function bizMismatch(e){
+  if(!SGN.loaded||!e)return[];const b=bizOf(e),sg=e.sg||{},out=[];
+  for(const n of sg.staff||[]){const a=bizOfPerson(n,"staff");if(a&&!a.includes(b))out.push(n)}
+  for(const n of sg.users||[]){const a=bizOfPerson(n,"users");if(a&&!a.includes(b))out.push(n)}
+  return out;
+}
+const otherBiz=b=>b==="houkago"?"seikatsu":"houkago";
+const misTag=e=>{const m=bizMismatch(e);return m.length?`<span class="tag-mis" title="${esc(m.join("・"))}は${BIZN[otherBiz(bizOf(e))]}の人です">⚠別の事業</span>`:""};
+// ログインした職員の事業（どちらか一方だけのとき）。最初に開くタブにする
+function homeBiz(){const nm=(window.SGHost&&window.SGHost.me||{}).name;const a=nm&&(SGN.staffBiz||{})[nm];return a&&a.length===1?a[0]:null}
 const bizTag=e=>S.biz==="all"&&bizOf(e)==="houkago"?`<span class="tag-biz">放デイ</span>`:"";
 function renderBiz(){document.documentElement.dataset.biz=S.biz;   // タブごとに背景の色を少し変える（全体＝薄い青・生活介護＝薄緑・放課後デイ＝薄ピンク）
   $("bizTabs").innerHTML=BIZ.map(b=>`<button role="tab" data-biz="${b.k}" aria-selected="${S.biz===b.k}">${b.n}</button>`).join("")}
@@ -99,7 +118,7 @@ function renderNotices(){
   $("notices").innerHTML=n.map(([c,t,a])=>`<div class="note ${c}"><p>${t}</p>${a}</div>`).join("");
 }
 function chip(e){const span=e.date!==e.endDate;
-  return`<button class="ev-chip${span?" span":""}${e.pending?" pend":""}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})" aria-label="${esc(e.title)}">${bizTag(e)}${!span&&!e.allDay?`<b>${esc(e.start)}</b>`:""}<span>${esc(e.title)}</span></button>`}
+  return`<button class="ev-chip${span?" span":""}${e.pending?" pend":""}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})" aria-label="${esc(e.title)}">${bizMismatch(e).length?`<i class="mis-dot" title="別の事業の人が入っています">⚠</i>`:""}${bizTag(e)}${!span&&!e.allDay?`<b>${esc(e.start)}</b>`:""}<span>${esc(e.title)}</span></button>`}
 function renderGrid(vis){
   fitGrid();
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
@@ -110,7 +129,7 @@ function renderGrid(vis){
 }
 function evRow(e,ps){
   const av=e.members.slice(0,6).map(id=>ps[id]?`<img src="${esc(ps[id].avatarUrl)}" alt="${esc(ps[id].name||"メンバー")}" title="${esc(ps[id].name||"メンバー")}">`:"").join("");
-  return`<li><button class="ev-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${bizTag(e)}${esc(e.title)}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
+  return`<li><button class="ev-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(e.title)}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
 function renderPanel(vis,ps){
   const d=parse(S.sel),evs=on(vis,S.sel),hol=HOL[S.sel],can=db&&S.canWrite&&core;
   let body;
@@ -136,7 +155,7 @@ function fitGrid(){
 function dsRow(e){
   const tm=e.allDay||e.date!==e.endDate&&!(e.date===S.sel&&e.start)?`<span class="ds-time">終日</span>`:`<span class="ds-time">${esc(e.start)}<small>${esc(e.end)}</small></span>`;
   const sub=[LMAP[e.label]?.n||"その他",e.place,(e.tanto||[]).length?"担当："+e.tanto.join("・"):""].filter(Boolean).map(esc).join(" ・ ");
-  return`<li><button class="ds-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${bizTag(e)}${esc(e.title)}</b><small>${sub}</small></span></button></li>`;
+  return`<li><button class="ds-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${misTag(e)}${bizTag(e)}${esc(e.title)}</b><small>${sub}</small></span></button></li>`;
 }
 function renderDay(vis){
   const root=$("dayRoot");document.documentElement.classList.toggle("dayopen",!!S.dayOpen);   // 開いている間は裏の月の画面を動かさない
@@ -263,7 +282,7 @@ async function loadNames(){
   const H=window.SGHost;if(!H)return;
   let r=null;try{r=await H.call("names.list")}catch{}
   if(!H.directory().length)await H.loadDirectory();
-  SGN={staff:H.directory().filter(d=>d.no!=="000").map(d=>({name:d.name,dept:d.no})),users:r?r.users||[]:SGN.users,kids:r?r.kids||[]:(SGN.kids||[]),depts:r?r.depts||[]:SGN.depts,places:r?r.places||[]:SGN.places,yomi:r?r.yomi||{}:SGN.yomi,loaded:true};
+  SGN={staff:H.directory().filter(d=>d.no!=="000").map(d=>({name:d.name,dept:d.no})),users:r?r.users||[]:SGN.users,kids:r?r.kids||[]:(SGN.kids||[]),staffBiz:r?r.staffBiz||{}:(SGN.staffBiz||{}),depts:r?r.depts||[]:SGN.depts,places:r?r.places||[]:SGN.places,yomi:r?r.yomi||{}:SGN.yomi,loaded:true};
 }
 const meInfo=()=>window.SGHost&&window.SGHost.me||{};
 const canLabel=k=>{const me=meInfo();return!USER_LABELS.includes(k)||!!(me.canSougei||me.admin)};
@@ -424,14 +443,26 @@ function quickHtml(){
   if(!isStaff&&!me.admin)return"";
   if(SGN.loaded&&!SGN.staff.length)return`<div class="quick"><b>休みを入れる</b><span class="by">送迎表のデータ（職員）を入れると、ここで職員を選んで休みを入れられます。</span></div>`;
   const opts=me.admin?`<select class="input" id="qStaff">${(isStaff?[{name:me.name}]:[]).concat(SGN.staff.filter(s=>s.name!==me.name)).map(s=>`<option ${s.name===S.qStaff?"selected":""}>${esc(s.name)}</option>`).join("")}</select>`:"";
-  return`<div class="quick"><b>${me.admin?"休みを入れる":"自分の休みを入れる"}（この日）</b>${opts}<div class="qrow"><select class="input" id="qKind" aria-label="休みの種類">${[["","休み（1日）"],["am","AM休"],["pm","PM休"]].map(([k,l])=>`<option value="${k}" ${String(S.qKind||"")===k?"selected":""}>${l}</option>`).join("")}</select><button class="primary" data-quick>入れる</button></div><span class="by">送迎表にも自動で反映されます。</span></div>`;
+  // 休み（1日・AM・PM）はすぐ入る。ほかのラベルは入力画面が開く（2026-10-30 依頼者）
+  const more=[["leavetime","職員休み（時間で）"],...LABELS.filter(l=>l.k!=="leave"&&canLabel(l.k)).map(l=>[l.k,l.n])];
+  const sel=k=>String(S.qKind||"")===k?"selected":"";
+  return`<div class="quick"><b>${me.admin?"予定を入れる":"自分の予定を入れる"}（この日）</b>${opts}<div class="qrow"><select class="input" id="qKind" aria-label="入れる予定の種類"><optgroup label="休み（すぐ入ります）">${[["","休み（1日）"],["am","AM休"],["pm","PM休"]].map(([k,l])=>`<option value="${k}" ${sel(k)}>${l}</option>`).join("")}</optgroup><optgroup label="ほかのラベル（入力画面が開きます）">${more.map(([k,l])=>`<option value="L:${k}" ${sel("L:"+k)}>${esc(l)}</option>`).join("")}</optgroup></select><button class="primary" data-quick>${String(S.qKind||"").startsWith("L:")?"開く":"入れる"}</button></div><span class="by">送迎表にも自動で反映されます。</span></div>`;
+}
+/* 「予定を入れる」でほかのラベルを選んだとき：その日のそのラベルの入力画面を開く（職員を選ぶラベルは選んだ職員を入れておく） */
+function quickOpen(k){
+  const me=window.SGHost.me;const name=me.admin&&$("qStaff")?$("qStaff").value:me.name;S.qStaff=name;
+  openEditor(null,S.sel);if(!ed)return;
+  const L=k==="leavetime"?"leave":k;ed.d.label=L;ed.d.w=workOf(ed.d);
+  if(k==="leavetime")ed.d.w.leave="time";
+  if(["leave","hwork","shift"].includes(L)&&name){ed.d.w.staff=[name];const a=bizOfPerson(name,"staff");if(a&&a.length===1)ed.d.biz=a[0]}
+  fixTimes(ed.d);drawSheet();
 }
 function quickOff(half){
   const me=window.SGHost.me;const name=me.admin&&$("qStaff")?$("qStaff").value:me.name;S.qStaff=name;
   const exist=allEvents().find(e=>!e.deleted&&e.sg&&e.sg.type==="staff_off"&&e.sg.staff.includes(name)&&e.date<=S.sel&&e.endDate>=S.sel);
   if(exist){toast("この日はすでに「"+exist.title+"」が入っています。変更はその予定を開いてください");openEditor(exist);return}
   const label=half?HALF[half]:"休み";
-  core.save({title:`${name} ${label}`,date:S.sel,endDate:S.sel,allDay:true,start:"",end:"",label:"leave",biz:newBiz(),place:"",memo:"",members:[],sg:{type:"staff_off",staff:[name],users:[],meet:"",send:"",noMeet:"",noSend:"",half:half||""}},null);
+  core.save({title:`${name} ${label}`,date:S.sel,endDate:S.sel,allDay:true,start:"",end:"",label:"leave",biz:((a)=>a&&a.length===1?a[0]:newBiz())(bizOfPerson(name,"staff")),place:"",memo:"",members:[],sg:{type:"staff_off",staff:[name],users:[],meet:"",send:"",noMeet:"",noSend:"",half:half||""}},null);
   toast(`${name}さんの${label}を入れました（送迎表に反映されます）`);render();
 }
 
@@ -471,7 +502,7 @@ function drawSheet(){
   <div class="sheet-head"><h2 id="sh-t">${ed.id?"予定の詳細":"新しい予定"}</h2><button class="icon-btn" data-close aria-label="閉じる">×</button>${ro||ed.confirmDel?"":`<button type="button" class="primary head-save" data-hsave>保存</button>`}</div>
   <form class="sheet-body" id="evForm" novalidate>
     <div class="note warn" id="liveNote" ${ed.changed?"":"hidden"}><p>この予定は、開いている間に他の人が変更または削除しました。このまま保存すると、どちらを残すか確認する画面が出ます。</p></div>
-    <div class="field"><span class="lbl">事業</span><div class="labels bizpick">${["seikatsu","houkago"].map(k=>`<label style="--c:var(--b-${k})"><input type="radio" name="f-biz" id="f-biz-${k}" value="${k}" ${bizOf(d)===k?"checked":""} ${ro?"disabled":""}><span>${BIZN[k]}</span></label>`).join("")}</div></div>
+    <div class="field"><span class="lbl">事業</span><div class="labels bizpick">${["seikatsu","houkago"].map(k=>`<label style="--c:var(--b-${k})"><input type="radio" name="f-biz" id="f-biz-${k}" value="${k}" ${bizOf(d)===k?"checked":""} ${ro?"disabled":""}><span>${BIZN[k]}</span></label>`).join("")}</div>${(()=>{const mm=bizMismatch({biz:d.biz,sg:sgOf(d.label,d.w)});return mm.length?`<p class="err" data-bizmis>⚠ ${esc(mm.join("・"))}さんは${BIZN[otherBiz(bizOf(d))]}の人です。事業が合っているか確かめてください。</p>`:""})()}</div>
     <div class="field"><span class="lbl">ラベル</span><div class="labels lblpick">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
     ${d.label==="other"?"":box}
     ${d.label==="other"?`<div class="field"><label for="f-title">タイトル</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="例：週次定例" ${v()}></div>`:""}
@@ -536,6 +567,8 @@ function save(){
   if(!d.allDay&&!d.start)return showErr("開始時刻を入れてください。");
   if(!d.allDay&&d.endDate===d.date&&d.end<=d.start)return showErr("終了時刻は開始時刻より後にしてください。");
   const ev={title:d.title,date:d.date,endDate:d.endDate,allDay:d.allDay,start:d.allDay?"":d.start,end:d.allDay?"":d.end,label:lab(d.label),biz:bizOf(d),place:d.place,memo:d.memo,members:d.members,tanto:d.label==="other"?[...d.w.staff]:[],sg:d.sg||null};
+  {const mm=bizMismatch(ev),sig=bizOf(ev)+"|"+mm.join(",");   // 事業の取り違えの確認（放課後デイの職員の休みを生活介護に入れる、など）
+    if(mm.length&&ed.bizWarned!==sig){ed.bizWarned=sig;return showErr(`この予定は「${BIZN[bizOf(ev)]}」の予定ですが、${mm.join("・")}さんは${BIZN[otherBiz(bizOf(ev))]}の人です。このまま入れるときは、もう一度「保存」を押してください（上の「事業」で変えられます）。`)}}
   if(!ed.base){const dup=dupOf(ev);if(dup&&ed.dupWarned!==dup.id){ed.dupWarned=dup.id;return showErr(`同じ予定がもう入っています（${dup.date.slice(5).replace("-","/")}「${dup.title}」）。それでも入れるときは、もう一度「保存」を押してください。`)}}
   const r=core.save(ev,ed.base);
   closeEditor();S.sel=ev.date;
@@ -615,7 +648,7 @@ $("todayBtn").onclick=()=>{TODAY=ymd(new Date());S.sel=TODAY;const c=new Date(ne
 $("vMonth").onclick=()=>{S.view="month";render()};$("vList").onclick=()=>{S.view="list";render()};$("vTrash").onclick=()=>{S.view="trash";render()};
 $("addBtn").onclick=()=>openEditor(null,S.sel);
 $("syncBtn").onclick=openSync;
-$("bizTabs").addEventListener("click",e=>{const b=e.target.closest("[data-biz]");if(!b)return;S.biz=b.dataset.biz;try{ls&&ls.setItem("sg:biz",S.biz)}catch{}render()});
+$("bizTabs").addEventListener("click",e=>{const b=e.target.closest("[data-biz]");if(!b)return;S.biz=b.dataset.biz;S.bizTouched=true;try{ls&&ls.setItem("sg:biz",S.biz)}catch{}render()});
 $("filters").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;if(b.hasAttribute("data-mine"))S.mine=!S.mine;else S.label=b.dataset.label;render()});
 $("restoreFile").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(f)planRestore(f)});
 document.addEventListener("click",async e=>{
@@ -638,7 +671,7 @@ document.addEventListener("click",async e=>{
   if(evEl&&!t.closest("#sheetRoot")){const x=allEvents().find(z=>z.id===evEl.dataset.ev);if(x)openEditor(x);return}
   const day=t.closest("[data-day]");if(day){S.sel=day.dataset.day;render();return}
   if(t.closest("[data-add-day]")){openEditor(null,S.sel);return}
-  const qk=t.closest("[data-quick]");if(qk&&!t.closest("#sheetRoot")){const k=$("qKind")?$("qKind").value:"";S.qKind=k;quickOff(k);return}
+  const qk=t.closest("[data-quick]");if(qk&&!t.closest("#sheetRoot")){const k=$("qKind")?$("qKind").value:"";S.qKind=k;if(k.startsWith("L:"))quickOpen(k.slice(2));else quickOff(k);return}
   const rs=t.closest("[data-restore]");if(rs){const x=allEvents().find(z=>z.id===rs.dataset.restore);if(x&&core){core.restore(x);toast("元に戻しました")}return}
   if(!$("ov"))return;
   if(t.id==="ov"||t.closest("[data-close]")){if(ed)closeEditor();else{$("sheetRoot").innerHTML=""}return}
@@ -681,7 +714,7 @@ document.addEventListener("keydown",e=>{
 document.addEventListener("change",e=>{if(ed&&e.target.name==="f-biz"){ed.d.biz=e.target.value;["users"].forEach(k=>{const i=$("f-sgq-"+k);if(i&&document.activeElement===i)sgHits(k,i.value)})}
 
   if(e.target.id==="qStaff"){S.qStaff=e.target.value;return}
-  if(e.target.id==="qKind"){S.qKind=e.target.value;return}
+  if(e.target.id==="qKind"){S.qKind=e.target.value;const b=document.querySelector("[data-quick]");if(b)b.textContent=S.qKind.startsWith("L:")?"開く":"入れる";return}
   if(!ed)return;
   // ラベル・休みの形などを変えたら、入力欄を作り直す（入力済みの値は残す）
   if(e.target.name==="f-label"||e.target.id==="w-plan"||["w-leave","w-meet","w-send","w-ws","w-we","w-hdur"].includes(e.target.name)){
@@ -728,7 +761,7 @@ render();
   if(user){try{S.me=await user.id()}catch{}try{if(await user.can("data.write")===false)S.canWrite=false}catch{}try{S.isAdmin=await user.canEdit()}catch{}}
   if(!db){S.dbState="none";render();return}
   core=C.createCore({db,store,me:S.me,runOp:window.SGHost.runOp});
-  loadNames().then(()=>render());
+  loadNames().then(()=>{const hb=homeBiz();if(hb&&!S.bizTouched)S.biz=hb;render()});   // 職員の事業のタブから開く（放課後デイの職員は放課後デイ）
   window.SGHost.startPolling(20000);   // ほかの人が入れた予定が早く出るように（二重に入れるのを防ぐ）
   window.SGHost.onLogin(()=>core.kick());
   core.on(()=>{render();if(ed)drawComments();else if($("ov")&&$("sy-t"))openSync()});

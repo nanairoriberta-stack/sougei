@@ -14,7 +14,7 @@ const D = path.join(__dirname, "../gas/out");
   let t = api("", "auth.login", ["000", pin0, "node"]).data.token; api(t, "auth.changePin", [pin0, "5829"]);
   const date = "2026-11-02";
   for (const ed of ["v1", "v2"]) { const E = engFor(ed), ns = ed === "v1" ? "" : "v2:"; const m = E.mergeSeedMaster(null, E.seedMaster()); api(t, "kv.cas", [{ key: ns + "master", rev: 0, value: m }]); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.mon); api(t, "kv.cas", [{ key: ns + "sheet:" + date, rev: 0, value: Object.assign(E.emptySheet(), { runs: p.runs, blocks: p.blocks }) }]); }
-  { const m1 = api(t, "kv.get", ["master"]).data.value; api(t, "kv.cas", [{ key: "v3:master", rev: 0, value: { ...m1, users: [{ ...m1.users[0], id: "k_hoshino", name: "星野こども" }], staff: m1.staff.slice(0, 3) } }]); }   // りんく・ぷれいす版（放課後デイ）の利用者
+  { const m1 = api(t, "kv.get", ["master"]).data.value; api(t, "kv.cas", [{ key: "v3:master", rev: 0, value: { ...m1, users: [{ ...m1.users[0], id: "k_hoshino", name: "星野こども" }], staff: [...m1.staff.slice(0, 3), { ...m1.staff[0], id: "st_hd1", name: "放デイ太郎" }] } }]); }   // りんく・ぷれいす版（放課後デイ）の利用者・職員
   { const s0 = api(t, "kv.get", ["sheet:" + date]).data.value, m0 = api(t, "kv.get", ["master"]).data.value;   // その他予定「黒田給食利用」（コマだけ消すの試し）
     api(t, "kv.merge", [{ key: "sheet:" + date, base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, { id: "blkNote1", kind: "block", time: "12:00", staffId: m0.staff.find((x) => x.name === "八壁").id, label: "黒田給食利用", vehicleId: "" }] } }]); }
   const yo = rows().find((r) => r[1] === "余村慎");
@@ -189,7 +189,7 @@ const D = path.join(__dirname, "../gas/out");
   // よみがな：送迎表の名前は「よみがな」シートに自動で並ぶ。読みを入れると、ひらがなで予測が出る
   const ys = g.sheets.get("よみがな"); assert.ok(ys && ys.data.some((r) => r[0] === "中村" && r[2] === "利用者"), "よみがなシートに利用者が並ぶ");
   ys.data.forEach((r) => { if (r[0] === "中村") r[1] = "なかむら"; if (r[0] === "日野") r[1] = "ひの"; });
-  for (const k of [...g.cache.keys()]) if (k === "names3") g.cache.delete(k);
+  for (const k of [...g.cache.keys()]) if (k === "names4") g.cache.delete(k);
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
@@ -349,6 +349,15 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(!(await A.pg.locator("#evForm").count()), "もう一度押すと入る");
     assert.strictEqual(await A.pg.locator("#panel .ev-row", { hasText: "会議" }).count(), n0 + 1);
     console.log("二重の確認:", msg); }
+  { // 「予定を入れる」のプルダウン：休み以外のラベルも選べて、選ぶとそのラベルの入力画面が開く（選んだ職員が入っている）
+    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(400);
+    const kinds = await A.pg.$$eval("#qKind option", (o) => o.map((x) => x.textContent));
+    assert.ok(kinds.includes("休み（1日）") && kinds.includes("休日出勤") && kinds.includes("ヘルプ") && kinds.includes("職員休み（時間で）"), kinds.join(","));
+    await A.pg.locator(".ds-quick").screenshot({ path: "g_quick_more.png" });
+    await A.pg.selectOption("#qStaff", "日野"); await A.pg.selectOption("#qKind", "L:hwork"); await A.pg.click("[data-quick]"); await A.pg.waitForTimeout(400);
+    assert.ok(await A.pg.locator("#f-label-hwork").isChecked(), "休日出勤の入力画面"); assert.ok((await A.pg.locator(".sgbox").innerText()).includes("日野"), "選んだ職員が入っている");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200); await A.pg.selectOption("#qKind", ""); await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+    console.log("予定を入れる: ほかのラベルも選べる"); }
   { // 1つの予定に1人：休み・送迎・ヘルプなどは1人選ぶと検索の欄が消える（×で外すと戻る）。その他予定の担当は何人でも
     await add("leave"); await pick("staff", "八壁");
     assert.strictEqual(await A.pg.locator("#f-sgq-staff").count(), 0, "1人選んだら検索の欄は出ない");
@@ -363,6 +372,23 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await A.pg.locator('.sgbox [data-sgrm="staff"]').count(), 2, "その他予定の担当は何人でも");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
     console.log("1つの予定に1人: 休み・ヘルプは1人 / その他予定の担当は複数"); }
+  { // 事業の取り違え：放課後デイだけの職員の休みを生活介護に入れようとすると確認が出る。入れた予定には「⚠別の事業」の印
+    await A.pg.click('[data-biz="seikatsu"]'); await A.pg.waitForTimeout(300);
+    await add("leave"); await pick("staff", "放デイ太郎");
+    await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(300);
+    const msg = await A.pg.locator("#f-err").innerText(); assert.ok(msg.includes("「生活介護」の予定ですが、放デイ太郎さんは放課後デイの人です"), msg);
+    await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(1500); assert.strictEqual(await A.pg.locator("#evForm").count(), 0, "もう一度押すと入る");
+    const row = A.pg.locator("#panel .ev-row", { hasText: "放デイ太郎" }); assert.ok((await row.innerHTML()).includes("⚠別の事業"), "カレンダーに別の事業の印");
+    await A.pg.click('[data-biz="all"]'); await A.pg.waitForTimeout(300);
+    console.log("事業の取り違え:", msg.slice(0, 40)); }
+  { // 放課後デイだけの職員がログインすると、最初は「放課後デイ」のタブ
+    const r = rows().find((x) => x[1] === "放デイ太郎"); assert.ok(r, "職員IDに放デイ太郎");
+    const H = await open("calendar.html", { width: 390, height: 844 }, boot, "calendar_hd.html");
+    await H.pg.waitForTimeout(500); await H.pg.fill("#sghNo", String(r[0])); await H.pg.fill("#sghPin", String(r[3])); await H.pg.click("#sghGo"); await H.pg.waitForTimeout(800);
+    await H.pg.fill("#sghOld", String(r[3])); await H.pg.fill("#sghNew", "4826"); await H.pg.fill("#sghNew2", "4826"); await H.pg.evaluate(() => document.getElementById("sghPinF").requestSubmit()); await H.pg.waitForTimeout(3000);
+    assert.strictEqual(await H.pg.evaluate(() => document.documentElement.dataset.biz), "houkago", "放課後デイのタブから開く");
+    await H.pg.click("#addBtn"); await H.pg.waitForTimeout(300); assert.ok(await H.pg.locator("#f-biz-houkago").isChecked(), "新しい予定も放課後デイ");
+    assert.deepStrictEqual(real(H.errs), []); await H.pg.context().close(); console.log("放課後デイの職員: 最初は放課後デイのタブ"); }
   { // 予定の検索：上の🔍。ほかの月の予定も出る。押すと開いて、閉じると検索に戻る
     api(t, "cal.apply", [{ kind: "upsert", opId: "op_srch0001", id: "ev_srch0001", baseRev: null, ev: { title: "余村慎検診", date: "2026-12-23", endDate: "2026-12-23", allDay: true, start: "", end: "", label: "other", place: "", memo: "", members: [] } }]);
     await A.pg.click("#searchBtn"); await A.pg.waitForTimeout(300);

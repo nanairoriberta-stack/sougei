@@ -361,3 +361,7 @@ html[data-biz] .biztabs button[aria-selected="true"]{color:var(--bz);box-shadow:
 .cell:hover .cell-add{opacity:.75}
 .cell-add:hover{opacity:1;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
 @media (max-width:560px){.cell-add{display:none}}
+/* 別の事業の人が入っている予定の印（2026-10-30） */
+.tag-mis{display:inline-block;font-size:10px;font-weight:700;color:#fff;background:#dc2626;border-radius:4px;padding:0 4px;margin-right:4px;vertical-align:1px}
+.mis-dot{font-style:normal;color:#dc2626;font-weight:800;margin-right:2px}
+@media (max-width:560px){.ev-chip .mis-dot{color:#fff;background:#dc2626;border-radius:2px;padding:0 1px}}
