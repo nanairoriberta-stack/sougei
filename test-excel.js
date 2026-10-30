@@ -43,6 +43,19 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     assert.strictEqual(fillOf(row13, col2), "FFF5F5F4", "AM休：13:00は灰色"); assert.notStrictEqual(fillOf(row13 + 1, col2), "FFF5F5F4", "AM休：13:30から白");
     console.log("PM休・AM休のExcel OK");
   }
+  { // 出力したExcelを取り込む：車つきのその他予定（例：ケロ／会議）は1つのコマのまま戻る（2026-10-30）
+    const yk = m.staff.find((x) => x.name === "八壁"), kero = m.vehicles.find((v) => /ケロ/.test(v.name)) || m.vehicles[0];
+    const sh3 = Object.assign({}, sheet, { blocks: [...sheet.blocks, { id: "bk1", kind: "block", time: "13:00", staffId: yk.id, label: "会議", vehicleId: kero.id }] });
+    const dm3 = E.applyDayDept(m, 1, null, null, null, date);
+    const wb3 = E.buildWorkbook(ExcelJS, dm3, sh3, date); const b3 = new ExcelJS.Workbook(); await b3.xlsx.load(await wb3.xlsx.writeBuffer());
+    const ws3 = b3.getWorksheet("送迎表"), aoa = [];
+    ws3.eachRow({ includeEmpty: true }, (row, rn) => { const a = []; row.eachCell({ includeEmpty: true }, (c, cn) => { const v = c.value; a[cn - 1] = v && v.richText ? v.richText.map((x) => x.text).join("") : v; }); aoa[rn - 1] = a; });
+    const back3 = E.importMondayGrid(aoa, dm3);
+    const kb = back3.blocks.filter((b) => b.staffId === yk.id && b.time === "13:00");
+    assert.ok(kb.some((b) => b.label === "会議" && b.vehicleId === kero.id), "会議に車が付いて戻る: " + JSON.stringify(kb));
+    assert.ok(!back3.blocks.some((b) => b.staffId === yk.id && (b.label === kero.name || /^ケロ/.test(b.label))), "車の名前だけのコマはできない");
+    console.log("取り込み：車つきの予定は1つのコマ OK");
+  }
   console.log("excel OK");
 })().catch((e) => { console.error(e); process.exit(1); });
 // ===== 井上入浴・黒田入浴は同じ時刻の井上ヘルプ・黒田ヘルプにそろえる（2026-10-29） =====

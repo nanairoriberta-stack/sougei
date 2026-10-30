@@ -1651,17 +1651,24 @@ function importAppExport(aoa, master) {
         }
         const mHead = part.match(/^[【\[](.+?)[】\]]([\s\S]*)/);
         if (!mHead) {
-          // 見出しなしのテキスト=その他の予定(1行ずつ別の予定として復元)
-          part.split("\n").map((x) => x.trim()).filter(Boolean).forEach((raw2) => {
+          // 見出しなしのテキスト=その他の予定(1行ずつ別の予定として復元)。
+          // 出力では車つきの予定を「車名」「予定」の2行で書くので、車名だけの行は次の行の予定の車として1つにまとめる(例: ケロ／会議 → 会議(車ケロ)。2026-10-30)
+          const ls2 = part.split("\n").map((x) => x.trim()).filter(Boolean);
+          for (let li = 0; li < ls2.length; li++) {
+            let raw2 = ls2[li], vehicleId = "";
+            if ((vByName[raw2] || raw2 === "自車") && li + 1 < ls2.length && !vByName[ls2[li + 1]] && ls2[li + 1] !== "自車") {
+              vehicleId = raw2 === "自車" ? (sByName[staffName] ? "own:" + sByName[staffName] : "") : vByName[raw2];
+              li++; raw2 = ls2[li];
+            }
             const mt2 = raw2.match(/^(.*?)[\s\u3000]*(\d{1,2}:\d{2})[〜~]?$/);
             const label = mt2 ? mt2[1].trim() : raw2;
             const tm2 = mt2 ? mt2[2] : null;
-            if (/便に同乗$/.test(label)) return; // 同乗表示は元の便から復元されるためスキップ
+            if (/便に同乗$/.test(label)) continue; // 同乗表示は元の便から復元されるためスキップ
             const dk0 = staffName + "|" + rowTime + "|block|" + label;
-            if (seen.has(dk0)) return;
+            if (seen.has(dk0)) continue;
             seen.add(dk0);
-            blocks.push({ id: uid(), kind: "block", time: tm2 || rowTime, staffId: sByName[staffName] || HOLD_ID, label, vehicleId: "", userIds: [] });
-          });
+            blocks.push({ id: uid(), kind: "block", time: tm2 || rowTime, staffId: sByName[staffName] || HOLD_ID, label, vehicleId, userIds: [] });
+          }
           continue;
         }
         const kindLabel = mHead[1];
