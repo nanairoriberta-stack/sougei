@@ -282,6 +282,8 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(await A.pg.locator(".daysheet").isVisible(), "日を押すとその日の一覧");
     const rows = await A.pg.locator(".daysheet .ds-row b").allInnerTexts(); assert.strictEqual(rows.length, await A.pg.locator("#panel .ev-row").count(), "その日の予定がぜんぶ並ぶ");
     await A.pg.screenshot({ path: "g_daysheet.png" });
+    { const bgD = await A.pg.evaluate(() => getComputedStyle(document.querySelector(".daysheet")).backgroundColor), bgB = await A.pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      assert.strictEqual(bgD, bgB, "日の一覧も月の背景と同じ色"); }
     await A.pg.click(".daysheet [data-add-day]"); await A.pg.waitForTimeout(300);
     assert.ok(await A.pg.locator("#evForm").isVisible(), "＋で入力画面"); assert.strictEqual(await A.pg.inputValue("#f-date"), date, "その日の予定として");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
