@@ -87,6 +87,28 @@ console.log('half OK');
  y=C.reconcile(m2,x,[],D); assert.strictEqual(mine(y,busy.id).length,all.length,'消すと元どおり');
  x=C.reconcile(m2,sheet,ev({sg:{type:'staff_off',staff:[busy.name],half:'am'}}),D);
  assert.ok(C.summary(m2,x,ev({sg:{type:'staff_off',staff:[busy.name],half:'am'}}),D)[0].time.includes(`担当の予定${amHeld.length}件を保留へ`),'送迎表の「反映中」に保留の件数');
+ // 反映したあとで休みの人に入った便・予定（パターン読込・取込・以前の版で反映済みの休みなど）も保存のときに保留へ（2026-10-31 依頼者）
+ x=C.reconcile(m2,sheet,ev({}),D); x=JSON.parse(JSON.stringify(x));
+ const fresh=all.map((a,i)=>Object.assign({},a,{id:'new'+i,staffId:busy.id}));   // パターンを読み直して、休みの人に新しい便・予定が入った
+ x.runs=x.runs.concat(fresh.filter(a=>sheet.runs.some(r=>r.id===all[fresh.indexOf(a)].id))); x.blocks=x.blocks.concat(fresh.filter(a=>sheet.blocks.some(r=>r.id===all[fresh.indexOf(a)].id)));
+ assert.strictEqual(mine(x,busy.id).length,all.length,'休みの人に入っている');
+ y=C.reconcile(m2,x,ev({}),D);
+ assert.strictEqual(mine(y,busy.id).length,0,'保存すると保留へ');
+ assert.ok(fresh.every(a=>[...y.runs,...y.blocks].find(z=>z.id===a.id).staffId===H));
+ assert.strictEqual(y.calApplied.hd1.held.length,all.length*2,'移したものを記録');
+ // 以前の版で反映した休み（held の記録なし）も、保存のときに保留へ
+ x=C.reconcile(m2,sheet,ev({}),D); x=JSON.parse(JSON.stringify(x)); for(const a of all){const z=[...x.runs,...x.blocks].find(q=>q.id===a.id);z.staffId=busy.id} delete x.calApplied.hd1.held;
+ y=C.reconcile(m2,x,ev({}),D); assert.strictEqual(mine(y,busy.id).length,0,'以前の反映でも保留へ');
+ // 保留から手で休みの人に戻したもの（記録あり）は、もう動かさない
+ y=JSON.parse(JSON.stringify(y)); [...y.runs,...y.blocks].find(z=>z.id===all[0].id).staffId=busy.id;
+ const y2=C.reconcile(m2,y,ev({}),D); assert.strictEqual([...y2.runs,...y2.blocks].find(z=>z.id===all[0].id).staffId,busy.id,'手で戻したものはそのまま');
+ // AM休：あとから入った13:30より前のものだけ保留へ
+ x=C.reconcile(m2,sheet,ev({sg:{type:'staff_off',staff:[busy.name],half:'am'}}),D); x=JSON.parse(JSON.stringify(x));
+ x.blocks.push({id:'newAm',kind:'block',time:'9:00',staffId:busy.id,label:'会議'},{id:'newPm',kind:'block',time:'15:00',staffId:busy.id,label:'記録'});
+ y=C.reconcile(m2,x,ev({sg:{type:'staff_off',staff:[busy.name],half:'am'}}),D);
+ assert.strictEqual(y.blocks.find(b=>b.id==='newAm').staffId,H); assert.strictEqual(y.blocks.find(b=>b.id==='newPm').staffId,busy.id);
+ // 予定を消すと、保留のままのものは元の担当へ
+ const y3=C.reconcile(m2,y,[],D); assert.strictEqual(y3.blocks.find(b=>b.id==='newAm').staffId,busy.id,'消すと戻る');
  console.log('hold OK', busy.name, '予定', all.length, '件 / AM休で保留', amHeld.length, '件');
 }
 // ===== ラベルごとの項目：ヘルプ（開始時刻・行き先）・送迎（迎え・送りの変更）・休日出勤（時間） =====

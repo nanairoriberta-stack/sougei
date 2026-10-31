@@ -137,18 +137,7 @@ function applySpec(next, spec) {
   // 休み・半休・不在・勤務時間変更で、勤務していない時間にかかるその職員の便・予定（ヘルプなど）は保留へ移す。
   // 移したものは記録し、予定を消したら（まだ保留のままなら）元の担当に戻す。反映した時だけ動かす（その後に手で戻したものは触らない）
   if (spec.type === "staff_off" || spec.type === "shift") spec.staff.forEach((s) => {
-    const ov = (next.staffOv || {})[s.id] || {};
-    const st = toMinX(spec.type === "shift" ? spec.wstart : spec.half === "am" ? ov.start : ""), en = toMinX(spec.type === "shift" ? spec.wend : spec.half === "pm" ? ov.end : "");
-    const f = toMinX(spec.from), t = toMinX(spec.to === "24:00" ? "23:59" : spec.to);
-    const off = (t0, dur) => t0 == null ? false
-      : spec.type === "staff_off" && spec.whole && !spec.half ? true
-      : spec.type === "staff_off" && !spec.whole ? (f != null && t != null && t0 < t && t0 + dur > f)
-      : (st != null && t0 < st) || (en != null && t0 + dur > en);
-    for (const t2 of ["runs", "blocks"]) for (const it of next[t2] || []) {
-      if (it.staffId !== s.id || String(it.id || "").startsWith("cal_")) continue;   // カレンダーから入れた「不在」「予定」はそのまま
-      if (!off(toMinX(it.time), Number(it.durMin) || 30)) continue;
-      it.staffId = HOLD_ID; (rec.held = rec.held || []).push({ t: t2, id: it.id, staff: s.id });
-    }
+    for (const [t2, it] of offItems(next, spec, s)) { it.staffId = HOLD_ID; (rec.held = rec.held || []).push({ t: t2, id: it.id, staff: s.id }); }
   });
   if (spec.type === "user_absent") spec.users.forEach((u) => put("userAbsent", u.id, true));
   // 利用日外利用：その日だけ利用日にする（送迎表の「今日だけ利用」）。迎え・送りが未割当として出るので担当者が気づける
@@ -177,6 +166,36 @@ function applySpec(next, spec) {
 
 /* 反映済みなのに、パターン読込・Excel取込などで消えてしまった項目を入れ直す。
    手で別の値に変えた項目（休み→出勤など）はそのまま */
+/* 休み・半休・不在・勤務時間変更の職員の、勤務していない時間にかかる便・予定（カレンダーから入れた「不在」「予定」は除く） */
+function offItems(sheet, spec, s) {
+  const ov = (sheet.staffOv || {})[s.id] || {};
+  const st = toMinX(spec.type === "shift" ? spec.wstart : spec.half === "am" ? ov.start : ""), en = toMinX(spec.type === "shift" ? spec.wend : spec.half === "pm" ? ov.end : "");
+  const f = toMinX(spec.from), t = toMinX(spec.to === "24:00" ? "23:59" : spec.to);
+  const off = (t0, dur) => t0 == null ? false
+    : spec.type === "staff_off" && spec.whole && !spec.half ? true
+    : spec.type === "staff_off" && !spec.whole ? (f != null && t != null && t0 < t && t0 + dur > f)
+    : (st != null && t0 < st) || (en != null && t0 + dur > en);
+  const out = [];
+  for (const t2 of ["runs", "blocks"]) for (const it of sheet[t2] || []) {
+    if (it.staffId !== s.id || String(it.id || "").startsWith("cal_")) continue;
+    if (off(toMinX(it.time), Number(it.durMin) || 30)) out.push([t2, it]);
+  }
+  return out;
+}
+/* 反映したあとに休みの人に入った便・予定も保留へ（2026-10-31 依頼者：パターン読込・取込・以前の版で反映した休みなどで、休みの人の枠に残っていた）。
+   一度保留へ移したもの（held に記録あり）は、手で戻した可能性があるので触らない */
+function healHeld(get, work, sp) {
+  if (sp.type !== "staff_off" && sp.type !== "shift") return;
+  for (const s of sp.staff) {
+    const rec = get().calApplied[sp.id], done = new Set((rec.held || []).map((h) => h.t + ":" + h.id));
+    for (const [t2, it] of offItems(get(), sp, s)) {
+      if (done.has(t2 + ":" + it.id)) continue;
+      const n = work(); const nit = (n[t2] || []).find((x) => x.id === it.id); if (!nit) continue;
+      nit.staffId = HOLD_ID;
+      const r2 = n.calApplied[sp.id]; r2.held = (r2.held || []).concat([{ t: t2, id: it.id, staff: s.id }]);
+    }
+  }
+}
 function heal(sheet, rec, work) {
   let changed = false;
   for (const field of ["staffOv", "userTime", "noRide", "userAbsent", "userExtra"]) {
@@ -229,6 +248,7 @@ function reconcile(master, sheet, events, date) {
     // 反映済みの予定は、消えてしまった項目と便・予定の欠けを補う（パターン読込・Excel取込で消えた場合など）
     heal(next || sheet, cur, work);
     healPlaces(() => next || sheet, work, sp.id);
+    healHeld(() => next || sheet, work, sp);
     const bl = blocksOf(sp); const have = new Set(((next || sheet).blocks || []).map((b) => b.id));
     if (bl.some((b) => !have.has(b.id))) { const n = work(); n.blocks = (n.blocks || []).filter((b) => !bl.some((x) => x.id === b.id)).concat(bl); }
   }
