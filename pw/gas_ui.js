@@ -153,7 +153,11 @@ const D = path.join(__dirname, "../gas/out");
       await P.pg.click('button:has-text("版の切替")'); await P.pg.waitForTimeout(200);
       await P.pg.click('button:has-text("りんく・ぷれいす版")'); await P.pg.waitForTimeout(200);
       const go = await P.pg.evaluate(() => window.__go);
-      assert.ok(/^https:\/\/script\.google\.com\/.*\/exec\?page=sougei&e=v3$/.test(go || ""), "公開URLで開く " + go);
+      assert.ok(/^https:\/\/script\.google\.com\/.*\/exec\?page=sougei&e=v3&d=2026-11-02$/.test(go || ""), "公開URLで、見ている日付のまま開く " + go);
+      await P.pg.click(".sgh-chip"); await P.pg.waitForTimeout(200);   // 右下の名前のメニューのリンクも日付つき
+      const hrefs = await P.pg.$$eval(".sgh-menu a", (as) => as.map((x) => x.getAttribute("href")));
+      assert.ok(hrefs.some((h) => /e=v3&d=2026-11-02$/.test(h)) && hrefs.some((h) => /page=calendar&d=2026-11-02$/.test(h)), "メニューも日付つき " + hrefs.join(" "));
+      await P.pg.click(".sgh-chip"); await P.pg.waitForTimeout(200);
       console.log("版の切替:", go); }
     { // 本物のGoogleでは、サーバーが画面に書いた版（__SG_EDITION）が届かないことがある → アドレス（?e=v3）から読む（2026-10-31 実機：りんく・ぷれいす版が現体制版で開いた）
       const R = await open("sougei.html", { width: 1400, height: 900 }, "", "sougei_noboot.html",

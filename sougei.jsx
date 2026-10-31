@@ -9165,7 +9165,10 @@ function EditionSwitcher() {
   const [open, setOpen] = useState(false);
   // 公開URL（…/exec）はログイン後に教わったもの（SGHost.url）を使う。開いたときの __SG_BASE は本物のGoogleで届かないことがあり、
   // そのままだと中身用のアドレス（googleusercontent…/userCodeAppPanel）へ飛んで真っ白になった（2026-10-31 実機）
-  const go = (q) => {
+  // 送迎表の版を切り替えても、見ている日付のまま開く（2026-10-31 依頼者：本日に戻ってしまっていた）
+  const withDate = (q) => (/^\?page=sougei/.test(q) || q === "?page=calendar") && /^\d{4}-\d{2}-\d{2}$/.test(window.__sgCurDate || "") ? q + "&d=" + window.__sgCurDate : q;
+  const go = (q0) => {
+    const q = withDate(q0);
     const href = typeof window !== "undefined" && window.SGHost && window.SGHost.url ? window.SGHost.url(q) : (/\/exec$/.test((typeof window !== "undefined" && window.__SG_BASE) || "") ? window.__SG_BASE + q : "");
     if (!href) { window.alert("ほかの版を開くには、スプレッドシートの「設定」シートのB2に公開URL（最後が /exec）を貼ってください。右下の名前のメニューからも開けます。"); return; }
     const a = document.createElement("a"); a.href = href; a.target = "_top"; document.body.appendChild(a); a.click(); a.remove();
@@ -9234,6 +9237,7 @@ function AppInner() {
     return EDITION_START && t < EDITION_START ? EDITION_START : t;
   });
   const [sheet, setSheet] = useState(null);
+  useEffect(() => { window.__sgCurDate = date; }, [date]);   // 版の切替・メニューのリンクに今の日付を付けるため
   // Undo/Redo履歴。日別シートと週間パターンで別々に持つ。
   // past=戻れる過去の状態(古い→新しい)、future=進める未来の状態(新しい→古い)
   const histRef = useRef({ sheet: { past: [], future: [] }, pattern: { past: [], future: [] } });

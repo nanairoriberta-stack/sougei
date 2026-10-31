@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.31j";
+const APP_VERSION="2026.10.31k";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
