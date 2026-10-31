@@ -267,7 +267,7 @@ function propApply_(me, id) {
     if (!SGKV.eq(pr.base.master, pr.draft.master)) {
       var mp = kvPath_(ns + 'master'), mc = docGet_(mp, idx);
       docSet_(mp, { k: ns + 'master', v: merge(pr.base.master, pr.draft.master, mc ? mc.value.v : null), by: me.no }, (mc ? mc.rev : 0) + 1, { k: ns + 'master' }, idx); done.push('利用者・職員・車両・部署・ルール');
-      syncStaffIds_(); try { CacheService.getScriptCache().remove('names4'); } catch (e) {}
+      syncStaffIds_(); try { CacheService.getScriptCache().remove('names5'); } catch (e) {}
     }
     if (pr.date && pr.base.sheet && !SGKV.eq(pr.base.sheet, pr.draft.sheet)) {
       var key = ns + 'sheet:' + pr.date, sp = kvPath_(key), sc = docGet_(sp, idx);

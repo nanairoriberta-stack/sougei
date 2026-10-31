@@ -204,12 +204,6 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
 .sghits button:hover,.sghits button:focus-visible{background:var(--sunken)}
 .sghits small{color:var(--muted)}
 .tag-sg{font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 8px}
-.quick{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:10px;background:color-mix(in srgb,var(--l-leave) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--l-leave) 35%,var(--line))}
-.quick b{font-size:13px}
-.quick .qrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
-.quick .qrow select{height:48px;font-size:16px;font-weight:700}
-.quick .qrow .primary{height:48px;padding:0 22px;font-size:16px}
-.quick select{height:36px}
 @media (max-width:560px){.bar-in .seg{order:5}.bar-in #addBtn{order:6}}
 /* スマホ：上の帯は流れるように（固定すると画面の3分の1を取る）、ラベルの絞り込みは横に流す、入力欄は16px（iPhoneで拡大されない） */
 @media (max-width:560px){
@@ -353,8 +347,6 @@ html[data-biz] .biztabs button[aria-selected="true"]{color:var(--bz);box-shadow:
   .ev-chip{height:14px;line-height:14px;padding:0 2px;font-size:10px;font-weight:700;border-radius:3px;border-left:0;background:var(--c);color:#fff}
   .ev-chip span{text-overflow:clip}
   .more{font-size:9.5px;line-height:13px;padding-left:2px}
-  .ds-quick{padding:0 12px 6px}
-  .ds-quick:empty{display:none}
 }
 /* パソコン：マスの日付の右を押すと、その日の予定を追加（マスに入ると＋が見える） */
 .cell-add{margin-left:auto;flex:1 1 auto;min-width:28px;height:22px;border:0;background:none;color:var(--muted);text-align:right;padding:0 4px;font-size:16px;line-height:1;opacity:0;cursor:pointer;border-radius:6px}

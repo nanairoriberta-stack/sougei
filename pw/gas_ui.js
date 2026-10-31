@@ -40,8 +40,12 @@ const D = path.join(__dirname, "../gas/out");
   await pg.evaluate(() => { const f = document.getElementById("sghPinF"); f.requestSubmit(); f.requestSubmit(); });   // 2回押し（Enterとクリック）でもエラーにならない await pg.waitForTimeout(2500);
   await pg.screenshot({ path: "g_cal.png" });
   await pg.click(`.cell[data-day="${date}"]`); await pg.waitForTimeout(400);   // スマホは日を押すと一覧が出て、その中に「休みを入れる」
-  await pg.selectOption("#qKind", "am"); await pg.locator('.quick').screenshot({ path: 'g_quick.png' }); await pg.click('[data-quick]'); await pg.waitForTimeout(2500);
-  await pg.keyboard.press("Escape"); await pg.waitForTimeout(300);
+  assert.strictEqual(await pg.locator("#qKind, .ds-quick, .quick").count(), 0, "「予定を入れる（この日）」の欄は出さない");
+  await pg.click(".daysheet [data-add-day]"); await pg.waitForTimeout(400);   // ＋から職員休み（AM休）
+  await pg.locator("label:has(#f-label-leave)").click(); await pg.waitForTimeout(300);
+  await pg.locator('label:has(input[name="w-leave"][value="am"])').click(); await pg.waitForTimeout(300);
+  await pg.click("[data-hsave]"); await pg.waitForTimeout(2500);
+  await pg.click("[data-day-close]"); await pg.waitForTimeout(300);
   await pg.screenshot({ path: "g_cal_after.png" });
   await pg.click("#addBtn"); await pg.waitForTimeout(400); await pg.screenshot({ path: "g_editor.png" });
   // 一般職員：利用者が関わるラベル（ヘルプ・送迎・利用者休み）は選べない。休日出勤は自分の分だけ
@@ -221,7 +225,7 @@ const D = path.join(__dirname, "../gas/out");
   // よみがな：送迎表の名前は「よみがな」シートに自動で並ぶ。読みを入れると、ひらがなで予測が出る
   const ys = g.sheets.get("よみがな"); assert.ok(ys && ys.data.some((r) => r[0] === "中村" && r[2] === "利用者"), "よみがなシートに利用者が並ぶ");
   ys.data.forEach((r) => { if (r[0] === "中村") r[1] = "なかむら"; if (r[0] === "日野") r[1] = "ひの"; });
-  for (const k of [...g.cache.keys()]) if (k === "names4") g.cache.delete(k);
+  for (const k of [...g.cache.keys()]) if (k === "names5") g.cache.delete(k);
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
@@ -421,15 +425,18 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(!(await A.pg.locator("#evForm").count()), "もう一度押すと入る");
     assert.strictEqual(await A.pg.locator("#panel .ev-row", { hasText: "会議" }).count(), n0 + 1);
     console.log("二重の確認:", msg); }
-  { // 「予定を入れる」のプルダウン：休み以外のラベルも選べて、選ぶとそのラベルの入力画面が開く（選んだ職員が入っている）
-    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(400);
-    const kinds = await A.pg.$$eval("#qKind option", (o) => o.map((x) => x.textContent));
-    assert.ok(kinds.includes("休み（1日）") && kinds.includes("休日出勤") && kinds.includes("ヘルプ") && kinds.includes("職員休み（時間で）"), kinds.join(","));
-    await A.pg.locator(".ds-quick").screenshot({ path: "g_quick_more.png" });
-    await A.pg.selectOption("#qStaff", "日野"); await A.pg.selectOption("#qKind", "L:hwork"); await A.pg.click("[data-quick]"); await A.pg.waitForTimeout(400);
-    assert.ok(await A.pg.locator("#f-label-hwork").isChecked(), "休日出勤の入力画面"); assert.ok((await A.pg.locator(".sgbox").innerText()).includes("日野"), "選んだ職員が入っている");
-    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200); await A.pg.selectOption("#qKind", ""); await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
-    console.log("予定を入れる: ほかのラベルも選べる"); }
+  { // 休日出勤・職員時間変更の「その日の部署」：最初からその職員のいつもの部署（嫁島など）。いつもと同じなら変更なしで保存
+    const m0 = api(t, "kv.get", ["v2:master"]).data.value, hi = m0.staff.find((x) => x.name === "日野"), dn = (id) => (m0.departments.find((x) => x.id === id) || {}).name;
+    const usual = dn((hi.deptByDay || {})["1"] || hi.deptId);   // 11/2は月曜
+    await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-shift"); await A.pg.waitForTimeout(300);
+    assert.ok(!(await A.pg.locator("#w-dept").innerText()).includes("いつもの部署"), "「いつもの部署」とは出さない");
+    await A.pg.fill("#f-sgq-staff", "日野"); await A.pg.click('[data-sgpick="staff"][data-name="日野"]'); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await A.pg.inputValue("#w-dept"), usual, "最初から日野のいつもの部署");
+    assert.ok((await A.pg.locator("#w-dept option:checked").innerText()).includes("（いつも）"));
+    await A.pg.locator(".sgbox").screenshot({ path: "g_dept_usual.png" });
+    await A.pg.locator("[data-close]").first().click(); await A.pg.waitForTimeout(300);
+    if (await A.pg.locator("#evForm").count()) { await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
+    console.log("その日の部署: 日野 →", usual); }
   { // 1つの予定に1人：休み・送迎・ヘルプなどは1人選ぶと検索の欄が消える（×で外すと戻る）。その他予定の担当は何人でも
     await add("leave"); await pick("staff", "八壁");
     assert.strictEqual(await A.pg.locator("#f-sgq-staff").count(), 0, "1人選んだら検索の欄は出ない");
