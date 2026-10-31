@@ -149,3 +149,28 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  require('fs').writeFileSync('pw/print_sample.html',E6.buildPrintHtml(m6));
  console.log('print lists OK', secs.map(s=>s.title+s.rows.length).join(' / '));
 }
+// りんく・ぷれいす版の初期データ（2026-10-31）：部署ぷれいす・車①〜④・職員6名・利用者1〜20。以前の仮の名前は中のIDのまま直す
+{
+ const assert=require('assert'); const E8=require('./eng.cjs');
+ const f=E8.seedMasterLink();
+ assert.deepStrictEqual(f.departments.map(d=>d.name),['ぷれいす']);
+ assert.deepStrictEqual(f.vehicles.map(v=>v.name),['車①','車②','車③','車④']);
+ assert.deepStrictEqual(f.staff.map(s=>s.name),['小瀧','鳥屋尾','石倉','山本','職員1','白戸']);
+ assert.deepStrictEqual(f.users.map(u=>u.name),Array.from({length:20},(_,i)=>'利用者'+(i+1)));
+ assert.ok(f.users.slice(0,10).every(u=>u.session==='am')&&f.users.slice(10).every(u=>u.session==='pm'),'1〜10は午前・11〜20は午後');
+ // 以前の初期データ
+ const d='d_old', st=(n)=>({id:'s_'+n,name:n,deptId:d,memo:'仮登録。職員タブで実名・勤務時間・性別に変更してください'});
+ const old={departments:[{id:d,name:'りんく・ぷれいす'}],staff:[1,2,3,4,5].map(i=>st('職員'+i)),vehicles:[1,2,3].map(i=>({id:'v'+i,name:'車'+i,deptId:d})),
+  users:[...Array.from({length:10},(_,i)=>({id:'a'+i,name:'午前'+(i+1),deptId:d})),...Array.from({length:10},(_,i)=>({id:'p'+i,name:'午後'+(i+1),deptId:d}))]};
+ old.staff[3].name='山田';   // 画面で名前を変えた人はそのまま
+ const u=E8.upgradeLinkSeed(old);
+ assert.ok(u.linkSeed2&&u.departments[0].name==='ぷれいす'&&u.departments[0].id===d,'部署はIDのまま名前だけ');
+ assert.deepStrictEqual(u.staff.map(s=>s.id+':'+s.name),['s_職員1:小瀧','s_職員2:鳥屋尾','s_職員3:石倉','s_職員4:山田','s_職員5:職員1',u.staff[5].id+':山本',u.staff[6].id+':白戸'],'IDのまま名前を直し、足りない人を足す');
+ assert.ok(u.staff.slice(5).every(s=>s.deptId===d),'足した人もぷれいす');
+ assert.deepStrictEqual(u.vehicles.map(v=>v.name),['車①','車②','車③','車④']); assert.strictEqual(u.vehicles[0].id,'v1');
+ assert.strictEqual(u.users.find(x=>x.id==='a0').name,'利用者1'); assert.strictEqual(u.users.find(x=>x.id==='p9').name,'利用者20'); assert.strictEqual(u.users.length,20);
+ assert.strictEqual(E8.upgradeLinkSeed(u),u,'2回目は何もしない');
+ const real={departments:[{id:'x',name:'嫁島'}],staff:[{id:'y',name:'八壁',deptId:'x'}],vehicles:[],users:[]};
+ const r2=E8.upgradeLinkSeed(real); assert.deepStrictEqual(r2.staff,real.staff,'ふつうのデータは触らない'); assert.ok(r2.linkSeed2);
+ console.log('link seed OK', u.staff.map(s=>s.name).join('・'));
+}

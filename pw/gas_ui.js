@@ -212,6 +212,7 @@ const D = path.join(__dirname, "../gas/out");
     const stTxt = await Q.pg.locator('[data-reqst="rqUI"]').innerText(); assert.ok(stTxt.includes(`生活介護：八壁・${veh.name}で対応`), stTxt);
     await Q.pg.locator('[data-item-id="rqUI"]').screenshot({ path: "g_req_chip.png" });
     assert.ok(await Q.pg.locator("[data-req-col]").isVisible(), "りんく版の表に「生活介護へ依頼」の枠");
+    assert.strictEqual(await Q.pg.evaluate(() => { const th = document.querySelector("[data-req-col]"); return th.previousElementSibling && th.previousElementSibling.textContent; }), "時間", "時間のすぐ右（2026-10-31〜。右端では見つけにくい）");
     assert.strictEqual(await Q.pg.locator('[data-req-cell] [data-item-id="rqUI"]').count(), 1, "依頼の便はその枠に出る");
     await Q.pg.screenshot({ path: "g_req_col.png" });
     await Q.pg.hover('[data-req-cell="16:00"]'); await Q.pg.click('[data-req-cell="16:00"] button[title*="生活介護へ依頼"]'); await Q.pg.waitForTimeout(400);

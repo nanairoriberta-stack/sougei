@@ -634,18 +634,23 @@ function stripSameShift(s) {
 }
 
 function seedMaster() { return EDITION === "v3" ? seedMasterLink() : seedMasterNanairo(); }
+/* りんく・ぷれいす版の初期データ（2026-10-31 依頼者）：部署は「ぷれいす」だけ、車①〜④、職員6名、利用者は午前10名（利用者1〜10）・午後10名（利用者11〜20） */
+const LINK_DEPT = "ぷれいす";
+const LINK_STAFF = ["小瀧", "鳥屋尾", "石倉", "山本", "職員1", "白戸"];
+const LINK_VEH = ["車①", "車②", "車③", "車④"];
+const LINK_USERS = (slot) => Array.from({ length: 10 }, (_, i) => `利用者${slot === "am" ? i + 1 : i + 11}`);
 function seedMasterLink() {
   const d1 = uid();
-  const departments = [{ id: d1, name: "りんく・ぷれいす", maleGapMin: 30 }];
+  const departments = [{ id: d1, name: LINK_DEPT, maleGapMin: 30 }];
   const WEEK = [1, 2, 3, 4, 5];
-  const staff = [1, 2, 3, 4, 5].map((i) => ({
-    id: uid(), name: `職員${i}`, deptId: d1, position: "", emp: "常勤",
+  const staff = LINK_STAFF.map((name) => ({
+    id: uid(), name, deptId: d1, position: "", emp: "常勤",
     start: "8:30", end: "17:30", canDrive: true, isMale: false, hasOwnCar: false, ownCarCap: 3,
     sortLast: false, hideInPartList: false, subDeptId: "", offDays: [0, 6],
-    memo: "仮登録。職員タブで実名・勤務時間・性別に変更してください",
+    memo: "仮登録。職員タブで勤務時間・性別を直してください",
   }));
-  const vh = (name, capNormal, wheelchairOK, capWc) => ({ id: uid(), name, deptId: d1, capNormal, capWc, wheelchairOK, memo: "仮登録。車両タブで実際の車に変更してください" });
-  const vehicles = [vh("車1", 7, false, 0), vh("車2", 7, false, 0), vh("車3", 4, true, 2)];
+  const vh = (name, capNormal, wheelchairOK, capWc) => ({ id: uid(), name, deptId: d1, capNormal, capWc, wheelchairOK, memo: "仮登録。車両タブで定員などを直してください" });
+  const vehicles = [vh("車①", 7, false, 0), vh("車②", 7, false, 0), vh("車③", 4, true, 2), vh("車④", 7, false, 0)];
   const us = (name, slot) => ({
     id: uid(), name, deptId: d1,
     meetTime: LP_TIMES[slot].meet, sendTime: LP_TIMES[slot].send,
@@ -653,11 +658,35 @@ function seedMasterLink() {
     helpNote: slot === "am" ? "午前利用" : "午後利用", session: slot,
     days: WEEK, isMale: true,
   });
-  const users = [
-    ...Array.from({ length: 10 }, (_, i) => us(`午前${i + 1}`, "am")),
-    ...Array.from({ length: 10 }, (_, i) => us(`午後${i + 1}`, "pm")),
-  ];
-  return { departments, staff: staff.map(stripSameShift), vehicles, users, rules: seedRules(), seeded: true, seedVersion: SEED_VERSION };
+  const users = [...LINK_USERS("am").map((n) => us(n, "am")), ...LINK_USERS("pm").map((n) => us(n, "pm"))];
+  return { departments, staff: staff.map(stripSameShift), vehicles, users, rules: seedRules(), seeded: true, seedVersion: SEED_VERSION, linkSeed2: true };
+}
+/* 以前の初期データ（部署「りんく・ぷれいす」・職員1〜5・車1〜3・午前1〜10/午後1〜10）を新しい名前に直す。
+   中のID（送迎表の日の表が指している）はそのままで名前だけ変え、足りない人・車は足す。画面で名前を変えた人はそのまま */
+function upgradeLinkSeed(cur) {
+  if (!cur || cur.linkSeed2) return cur;
+  const m = JSON.parse(JSON.stringify(cur));
+  const old = (m.departments || []).some((d) => d.name === "りんく・ぷれいす") || (m.staff || []).some((x) => /^仮登録/.test(x.memo || ""));
+  m.linkSeed2 = true;
+  if (!old) return m;
+  const dept = (m.departments || []).find((d) => d.name === "りんく・ぷれいす") || (m.departments || [])[0];
+  if (dept && dept.name === "りんく・ぷれいす") dept.name = LINK_DEPT;
+  const fresh = seedMasterLink();
+  const retarget = (x) => Object.assign(x, { deptId: dept ? dept.id : x.deptId });
+  const rename = (list, pairs, kind) => {
+    const have = new Set((list || []).map((x) => x.name));
+    pairs.forEach(([from, to]) => {
+      const x = (list || []).find((y) => y.name === from && !y._renamed);
+      if (x && (!have.has(to) || from === to)) { have.delete(from); x.name = to; x._renamed = true; have.add(to); if (x._seed) x._seed = Object.assign({}, x._seed, { name: to }); }
+    });
+    (list || []).forEach((x) => delete x._renamed);
+    fresh[kind].forEach((f) => { if (!have.has(f.name)) { list.push(retarget(Object.assign({}, f))); have.add(f.name); } });
+  };
+  m.staff = m.staff || []; m.vehicles = m.vehicles || []; m.users = m.users || [];
+  rename(m.staff, [1, 2, 3, 4, 5].map((i) => [`職員${i}`, LINK_STAFF[i - 1]]), "staff");
+  rename(m.vehicles, [1, 2, 3].map((i) => [`車${i}`, LINK_VEH[i - 1]]), "vehicles");
+  rename(m.users, [...LINK_USERS("am").map((n, i) => [`午前${i + 1}`, n]), ...LINK_USERS("pm").map((n, i) => [`午後${i + 1}`, n])], "users");
+  return m;
 }
 
 // なないろ(現体制・新体制)版の初期データ。この版では使わない(参考として残す)
@@ -6794,6 +6823,16 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
         <thead className="sticky top-0 z-20">
           <tr>
             <th className="sticky left-0 z-30 bg-stone-100 border border-stone-300 text-[10px] text-stone-500 px-0.5 w-11 min-w-11">時間</th>
+            {/* りんく・ぷれいす版は時間のすぐ右に「生活介護へ依頼」（生活介護の版の「りんくからの依頼」と同じ場所。2026-10-31 依頼者：右端では見つけにくい） */}
+            {showReq && (
+              <th className="border border-stone-300 border-dashed p-0 min-w-24 w-24 align-top bg-amber-50" data-req-col>
+                <div className="bg-amber-500 h-1.5" />
+                <div className="px-1 py-0.5">
+                  <div className="text-[13px] font-bold text-amber-800">🤝 生活介護へ依頼</div>
+                  <div className="text-[9px] text-amber-700 leading-tight">迎え・送りをここに置くと生活介護の送迎表へ</div>
+                </div>
+              </th>
+            )}
             {showLink && (
               <th className="border border-stone-300 border-dashed p-0 min-w-24 w-24 align-top bg-pink-50" data-link-col>
                 <div className="bg-pink-400 h-1.5" />
@@ -6852,15 +6891,6 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                 <div className="text-[9px] text-yellow-700/70 leading-tight">クリックで再割当</div>
               </div>
             </th>
-            {showReq && (
-              <th className="border border-stone-300 border-dashed p-0 min-w-24 w-24 align-top bg-amber-50" data-req-col>
-                <div className="bg-amber-500 h-1.5" />
-                <div className="px-1 py-0.5">
-                  <div className="text-[13px] font-bold text-amber-800">🤝 生活介護へ依頼</div>
-                  <div className="text-[9px] text-amber-700 leading-tight">迎え・送りをここに置くと生活介護の送迎表へ</div>
-                </div>
-              </th>
-            )}
           </tr>
         </thead>
         <tbody>
@@ -6875,6 +6905,17 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
               <td className={`sticky left-0 z-10 bg-stone-50 border border-stone-200 text-[11px] text-right pr-1 align-top leading-none py-0.5 ${m % 60 === 0 ? "font-bold text-stone-600" : "text-stone-400"}`}>
                 {toStr(m)}
               </td>
+              {showReq && (
+                <td
+                  onDragOver={cellDragOver(`${REQ_ID}:${m}`)}
+                  onDragLeave={() => { if (overKey === `${REQ_ID}:${m}`) setOverKey(null); }}
+                  onDrop={cellDrop(REQ_ID, m)}
+                  data-req-cell={toStr(m)}
+                  className={`border border-stone-200 border-dashed align-top p-0.5 ${emptyCell} bg-amber-50/60 group ${overKey === `${REQ_ID}:${m}` ? "outline outline-2 outline-amber-500 bg-amber-100" : ""}`}>
+                  {renderItems(cellMap[`${REQ_ID}:${m}`] || [], REQ_ID, m)}
+                  <button className="w-full text-amber-500/50 text-xs opacity-0 group-hover:opacity-100 hover:text-amber-700 leading-none" onClick={() => onCell(REQ_ID, toStr(m))} title="この時刻の迎え・送りを生活介護へ依頼">+</button>
+                </td>
+              )}
               {showLink && (
                 <td
                   onDragOver={cellDragOver(`${LINK_COL}:${m}`)}
@@ -6911,17 +6952,6 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                 {renderItems(cellMap[`${HOLD_ID}:${m}`] || [], HOLD_ID, m)}
                 <button className="w-full text-yellow-500/40 text-xs opacity-0 group-hover:opacity-100 hover:text-yellow-700 leading-none" onClick={() => onCell(HOLD_ID, toStr(m))}>+</button>
               </td>
-              {showReq && (
-                <td
-                  onDragOver={cellDragOver(`${REQ_ID}:${m}`)}
-                  onDragLeave={() => { if (overKey === `${REQ_ID}:${m}`) setOverKey(null); }}
-                  onDrop={cellDrop(REQ_ID, m)}
-                  data-req-cell={toStr(m)}
-                  className={`border border-stone-200 border-dashed align-top p-0.5 ${emptyCell} bg-amber-50/60 group ${overKey === `${REQ_ID}:${m}` ? "outline outline-2 outline-amber-500 bg-amber-100" : ""}`}>
-                  {renderItems(cellMap[`${REQ_ID}:${m}`] || [], REQ_ID, m)}
-                  <button className="w-full text-amber-500/50 text-xs opacity-0 group-hover:opacity-100 hover:text-amber-700 leading-none" onClick={() => onCell(REQ_ID, toStr(m))} title="この時刻の迎え・送りを生活介護へ依頼">+</button>
-                </td>
-              )}
             </tr>
             );
           })}
@@ -9290,6 +9320,11 @@ function AppInner() {
             return empty ? resolveSeedPattern(m, SEED_PATTERNS[key]) : cur;
           });
         }
+      }
+      // りんく・ぷれいす版：以前の仮の名前（職員1〜5など）を新しい名前に直す（1回だけ。ロックの中で読み直して）
+      if (EDITION === "v3" && m && !m.linkSeed2) {
+        m = await sUpdate("master", (cur) => (cur && !cur.linkSeed2 ? upgradeLinkSeed(cur) : cur));
+        notify("りんく・ぷれいす版の職員・車・利用者を新しい名前にしました（職員・車両・利用者のタブで確かめてください）", "info");
       }
       setMaster(m);
     })();
