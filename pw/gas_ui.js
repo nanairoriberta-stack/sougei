@@ -48,21 +48,23 @@ const D = path.join(__dirname, "../gas/out");
   await pg.click("[data-day-close]"); await pg.waitForTimeout(300);
   await pg.screenshot({ path: "g_cal_after.png" });
   await pg.click("#addBtn"); await pg.waitForTimeout(400); await pg.screenshot({ path: "g_editor.png" });
-  // 一般職員：利用者が関わるラベル（ヘルプ・送迎・利用者休み）は選べない。休日出勤は自分の分だけ
+  // 一般職員もすべてのラベルを使える（2026-10-31〜）。ほかの職員の分も入れられる
   const dis = await pg.$$eval('input[name="f-label"]', (o) => o.filter((x) => x.disabled).map((x) => x.value));
-  assert.deepStrictEqual(dis.sort(), ["extra", "help", "ride", "user"]);
-  { // 押せないラベルは灰色に見え、押すと理由が出る（何も起きないと「反応しない」に見える）
-    const op = await pg.$eval("#f-label-help + span", (x) => Number(getComputedStyle(x).opacity)), op2 = await pg.$eval("#f-label-leave + span", (x) => Number(getComputedStyle(x).opacity));
-    assert.ok(op < 0.6 && op2 === 1, "押せないラベルは薄い " + op + " / " + op2);
-    await pg.locator("label:has(#f-label-help)").click({ force: true }); await pg.waitForTimeout(200);
-    assert.ok((await pg.locator("#toast").innerText()).includes("送迎表の担当者・管理者だけ"), "押すと理由");
-    assert.ok(await pg.locator("#toast").isVisible(), "理由が見える");
-    assert.notStrictEqual(await pg.evaluate(() => document.querySelector('input[name="f-label"]:checked').value), "help", "選ばれない");
-    await pg.locator(".sheet").screenshot({ path: "g_label_gray.png" }); }
+  assert.deepStrictEqual(dis, [], "押せないラベルはない");
+  assert.strictEqual(await pg.evaluate(() => document.querySelector('input[name="f-label"]:checked').value), "leave", "一般職員の新しい予定は職員休みから");
+  for (const k of ["help", "ride", "user", "extra"]) {
+    await pg.locator(`label:has(#f-label-${k})`).click(); await pg.waitForTimeout(250);
+    assert.ok(await pg.locator("#f-sgq-users").isVisible(), k + "：利用者を選ぶ欄が出る");
+  }
+  await pg.locator("label:has(#f-label-help)").click(); await pg.waitForTimeout(250);
+  assert.ok(await pg.locator("#w-dest").isVisible(), "ヘルプの行き先も入力できる");
+  await pg.locator(".sheet").screenshot({ path: "g_label_all.png" });
   await pg.check("#f-label-hwork"); await pg.waitForTimeout(400);
+  await pg.click('[data-sgrm="staff"][data-name="余村慎"]'); await pg.waitForTimeout(200);
+  assert.strictEqual(await pg.locator("#f-sgq-staff").count(), 1, "最初は自分。×で外すとほかの職員を選べる（2026-10-31〜）");
+  await pg.fill("#f-sgq-staff", "余村慎"); await pg.click('[data-sgpick="staff"][data-name="余村慎"]'); await pg.waitForTimeout(300);
   await pg.locator(".sgbox").screenshot({ path: "g_sgbox.png" });
   const self = await pg.locator(".sgbox .sgchip").innerText(); assert.ok(self.includes("余村慎"));
-  assert.strictEqual(await pg.locator("#f-sgq-staff").count(), 0, "他人を選ぶ欄は出ない");
   await pg.fill("#f-start", "09:00"); await pg.fill("#f-end", "17:00");      // 休日出勤は時間を入れる
   // スマホ：打っている間は下の帯を隠し、保存は右上（TimeTreeのように）
   assert.ok(await pg.evaluate(() => document.documentElement.classList.contains("kb")), "入力中の印");
@@ -126,6 +128,25 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(rowsDept.every((r) => r.bg), "部署ごとに背景の色");
     const changes = rowsDept.filter((r, i) => i > 0 && rowsDept[i - 1].d !== r.d); assert.ok(changes.length >= 2 && changes.every((r) => r.bt.includes("3px")), "部署が変わる行に区切り線");
     assert.strictEqual(new Set(rowsDept.map((r) => r.d)).size, changes.length + 1, "同じ部署はまとまっている");
+    { // 🖨 一覧を印刷：選んだ一覧だけを罫線つきの表で（A4）。印刷用の見えない枠に入る
+      await P.pg.click("[data-print-btn]"); await P.pg.waitForTimeout(300);
+      assert.ok(await P.pg.locator("[data-print-dialog]").isVisible(), "印刷の画面");
+      assert.strictEqual(await P.pg.locator("[data-print-kind]:checked").count(), 5, "はじめは全部");
+      await P.pg.locator("[data-print-dialog]").screenshot({ path: "g_print_dialog.png" });
+      await P.pg.uncheck('[data-print-kind="users"]'); await P.pg.uncheck('[data-print-kind="rules"]');
+      await P.pg.evaluate(() => { window.print = () => {}; });
+      await P.pg.click("[data-print-go]"); await P.pg.waitForTimeout(800);
+      const doc = await P.pg.$eval("[data-print-frame]", (f) => f.srcdoc);
+      assert.deepStrictEqual([...doc.matchAll(/data-print-sec="(\w+)"/g)].map((x) => x[1]), ["staff", "vehicles", "help"], "選んだ一覧だけ");
+      assert.ok(doc.includes("border:1px solid #000") && doc.includes("A4"), "罫線・A4");
+      // テストの画面はファイルから開いているため、ブラウザがファイル名を使わない。画面が付けた名前と中身を確かめる
+      await P.pg.evaluate(() => { const o = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) { window.__dl = { name: this.download, href: this.href }; return; } return o.call(this); }; });
+      await P.pg.click("[data-print-file]"); await P.pg.waitForTimeout(300);
+      const f = await P.pg.evaluate(async () => ({ name: window.__dl.name, body: await (await fetch(window.__dl.href)).text() }));
+      f.suggestedFilename = () => f.name;
+      assert.ok(/送迎表の一覧_.*\.html$/.test(f.name) && f.body.includes('data-print-sec="staff"'), "ファイルにも保存できる " + f.name);
+      await P.pg.click('[data-print-dialog] button:text-is("閉じる")'); await P.pg.waitForTimeout(200);
+      console.log("一覧の印刷: 職員・車・ヘルプ表 / ファイル", f.suggestedFilename()); }
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(400);
     assert.deepStrictEqual(real(P.errs), [], "タブを開いても画面エラーなし"); }
   // その他予定「コマだけ消す」：表からは消えて、特記事項には残る。下の一覧から表に戻せる
@@ -243,6 +264,35 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await A.pg.locator("[data-ro-why]").count(), 0, "入力できる画面には理由の帯は出ない");
     await A.pg.locator("[data-close]").first().click(); await A.pg.waitForTimeout(300);
     if (await A.pg.locator("#evForm").count()) { await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); } }
+  { // 職員時間変更の勤務：ﾏﾝｼｮﾝは時刻が入り送迎なし。9時間の職員（余村・森・窪田）は早6:00〜15:00、ほかは6:00〜14:00。休みは中抜け・時間休みの題名
+    const D20 = "2026-11-20", setDay = async () => { await A.pg.fill("#f-date", D20); await A.pg.fill("#f-enddate", D20); };
+    await add("shift"); await setDay(); await pick("staff", "森");
+    assert.deepStrictEqual(await A.pg.$$eval('input[name="w-kinmu"]', (o) => o.map((x) => x.value)), ["", "早番", "遅番", "日勤", "早遅ﾏﾝｼｮﾝのみ", "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝｼｮﾝのみ"]);
+    await A.pg.locator('label:has(input[name="w-kinmu"][value="早ﾏﾝｼｮﾝのみ"])').click(); await A.pg.waitForTimeout(300);
+    assert.deepStrictEqual([await A.pg.inputValue("#w-wst"), await A.pg.inputValue("#w-wet")], ["06:00", "15:00"], "森は9時間");
+    assert.ok((await A.pg.locator(".sgbox").innerText()).includes("送迎（便）には入りません"));
+    await A.pg.click('[data-sgrm="staff"][data-name="森"]'); await A.pg.waitForTimeout(200); await pick("staff", "八壁"); await A.pg.waitForTimeout(200);
+    assert.deepStrictEqual([await A.pg.inputValue("#w-wst"), await A.pg.inputValue("#w-wet")], ["06:00", "14:00"], "ほかの職員は8時間");
+    await A.pg.locator(".sgbox").screenshot({ path: "g_kinmu.png" });
+    await save(1500);
+    await add("shift"); await setDay(); await pick("staff", "窪田"); await A.pg.locator('label:has(input[name="w-kinmu"][value="遅ﾏﾝｼｮﾝのみ"])').click(); await A.pg.waitForTimeout(300);
+    assert.deepStrictEqual([await A.pg.inputValue("#w-wst"), await A.pg.inputValue("#w-wet")], ["13:00", "22:00"], "窪田の遅は13:00から");
+    await save(1500);
+    await add("shift"); await setDay(); await pick("staff", "日野"); await A.pg.locator('label:has(input[name="w-kinmu"][value="早番"])').click(); await A.pg.waitForTimeout(300);
+    assert.ok((await A.pg.locator(".sgbox").innerText()).includes("早番の出勤・退勤の時刻を入れてください"), "早番は時刻を入れる");
+    await A.pg.fill("#w-wst", "07:00"); await A.pg.fill("#w-wet", "16:00"); await save(1500);
+    await add("leave"); await setDay(); await pick("staff", "白戸"); await A.pg.locator('label:has(input[name="w-leave"][value="naka"])').click(); await A.pg.waitForTimeout(300);
+    await A.pg.fill("#f-start", "10:00"); await A.pg.fill("#f-end", "11:00"); await save(1500);
+    await add("leave"); await setDay(); await pick("staff", "白戸"); await A.pg.locator('label:has(input[name="w-leave"][value="hours"])').click(); await A.pg.waitForTimeout(300);
+    await A.pg.fill("#f-start", "13:00"); await A.pg.fill("#f-end", "15:00"); await save(1500);
+    await add("leave"); await setDay(); await pick("staff", "安部"); await A.pg.locator('label:has(input[name="w-leave"][value="pm"])').click(); await A.pg.waitForTimeout(300); await save(1500);
+    const evs = Object.values(api(t, "docs.query", [{ col: "days", from: D20, to: D20 }]).data.reduce((a, d) => Object.assign(a, d.events), {}));
+    const by = (tt) => evs.find((e) => e.title === tt);
+    assert.ok(by("八壁 早ﾏﾝｼｮﾝのみ") && by("八壁 早ﾏﾝｼｮﾝのみ").sg.noRide === true && by("八壁 早ﾏﾝｼｮﾝのみ").sg.wstart === "06:00", "題名・送迎なし " + evs.map((e) => e.title).join(","));
+    assert.ok(by("窪田 遅ﾏﾝｼｮﾝのみ") && by("日野 早番") && !by("日野 早番").sg.noRide, "早番は送迎あり");
+    assert.ok(by("白戸 中抜け") && by("白戸 2時間休み") && by("安部 PM休み"), "中抜け・時間休み・PM休みの題名 " + evs.map((e) => e.title).join(","));
+    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300);   // 選んでいる日を元に戻す
+    console.log("勤務・休みの題名:", evs.map((e) => e.title).join(" / ")); }
   // 送迎：迎えは「受診後送り」、送りは時間変更
   await add("ride"); assert.strictEqual(await A.pg.locator("#f-title").count(), 0, "その他予定以外はタイトルの欄なし"); await pick("users", "森");
   const meetOpts = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
@@ -355,7 +405,7 @@ const D = path.join(__dirname, "../gas/out");
     console.log("スマホの日の一覧:", rows.length, "件 / バー:", chipTxt); }
   { // 左右になぞると月が変わる。保存は月の読み直しを待たずに出る（遅れて届いた古い読み込みでも消えない）
     const cdp = await A.pg.context().newCDPSession(A.pg); await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
-    const swipeX = async (dx, dy) => { const g = await A.pg.locator("#grid").boundingBox(); const x = g.x + g.width / 2, y = g.y + g.height / 2;
+    const swipeX = async (dx, dy) => { await A.pg.waitForTimeout(400); /* 読み直しで表を描き直している間になぞらない */ const g = await A.pg.locator("#grid").boundingBox(); const x = g.x + g.width / 2, y = g.y + g.height / 2;
       await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
       for (const f of [0.3, 0.6, 1]) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + dx * f, y: y + (dy || 0) * f }] });
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); await A.pg.waitForTimeout(400); };
@@ -437,7 +487,7 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.locator("[data-close]").first().click(); await A.pg.waitForTimeout(300);
     if (await A.pg.locator("#evForm").count()) { await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
     console.log("その日の部署: 日野 →", usual); }
-  { // 1つの予定に1人：休み・送迎・ヘルプなどは1人選ぶと検索の欄が消える（×で外すと戻る）。その他予定の担当は何人でも
+  { // 1つの予定に1人：休み・送迎・ヘルプ・その他予定の担当は1人選ぶと検索の欄が消える（×で外すと戻る）。モニタリング・支援会議の対応者だけ何人でも
     await add("leave"); await pick("staff", "八壁");
     assert.strictEqual(await A.pg.locator("#f-sgq-staff").count(), 0, "1人選んだら検索の欄は出ない");
     assert.ok((await A.pg.locator(".sgbox").innerText()).includes("1つの予定に1人です"));
@@ -447,10 +497,14 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
     await add("help"); await pick("users", "中村"); assert.strictEqual(await A.pg.locator("#f-sgq-users").count(), 0, "ヘルプも1人");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
-    await add("other"); await pick("staff", "八壁"); await pick("staff", "日野");
-    assert.strictEqual(await A.pg.locator('.sgbox [data-sgrm="staff"]').count(), 2, "その他予定の担当は何人でも");
+    await add("other"); await pick("staff", "八壁");
+    assert.strictEqual(await A.pg.locator("#f-sgq-staff").count(), 0, "その他予定の担当も1人（2026-10-31〜）");
+    assert.strictEqual(await A.pg.locator('.sgbox [data-sgrm="staff"]').count(), 1);
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
-    console.log("1つの予定に1人: 休み・ヘルプは1人 / その他予定の担当は複数"); }
+    await add("monitor"); await pick("staff", "八壁"); await pick("staff", "日野");
+    assert.strictEqual(await A.pg.locator('.sgbox [data-sgrm="staff"]').count(), 2, "モニタリングの対応者は何人でも");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
+    console.log("1つの予定に1人: 休み・ヘルプ・その他予定は1人 / モニタリングの対応者は複数"); }
   { // 事業の取り違え：放課後デイだけの職員の休みを生活介護に入れようとすると確認が出る。入れた予定には「⚠別の事業」の印
     await A.pg.click('[data-biz="seikatsu"]'); await A.pg.waitForTimeout(300);
     await add("leave"); await pick("staff", "放デイ太郎");

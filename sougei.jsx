@@ -2072,6 +2072,7 @@ function runWarnings(run, master, data, wd) {
   if (stf) {
     if (run.mode !== "walk" && !stf.canDrive && !(veh && veh.ownerOnly)) w.push("運転不可の職員");
     const ov = ovAll[stf.id] || {};
+    if (ov.noRide) w.push("この日は送迎なしの職員(ﾏﾝｼｮﾝなど)");   // カレンダーの職員時間変更「ﾏﾝｼｮﾝのみ」：送迎表には載るが送迎はしない
     if (ov.off) w.push("休みの職員");
     if (wd != null && (stf.offDays || []).includes(wd) && !ov.workToday) w.push("固定休の職員");
     const eff0 = staffTimeOf(stf, wd, ov);
@@ -2201,7 +2202,7 @@ function computeSuggestion({ deptId, time, userIds, includeOtherDept, master, da
     .filter((s) => {
       if (!s.canDrive) return false;
       const ov = (data.staffOv || {})[s.id] || {};
-      if (ov.off) return false;
+      if (ov.off || ov.noRide) return false;
       if (weekday != null && (s.offDays || []).includes(weekday) && !ov.workToday) return false;
       const eff0 = staffTimeOf(s, weekday, ov);
       const st = toMin(eff0.start), en = toMin(eff0.end);
@@ -3011,6 +3012,89 @@ function buildMasterWorkbook(ExcelJS, master, patterns) {
     // ※ ヘルプの基本担当は「ヘルプ表」シートに出します
   }
   return wb;
+}
+
+/* 紙で確かめる一覧（職員・車・ヘルプ表・利用者・ルール）。罫線つきの表をA4で印刷する（2026-10-31 依頼者）。
+   職員・利用者は列が多いのでA4横、車・ヘルプ表・ルールはA4縦。並びは画面と同じ（基本の部署の順、パートは各部署の下） */
+const PRINT_KINDS = [["staff", "職員"], ["vehicles", "車"], ["help", "ヘルプ表"], ["users", "利用者"], ["rules", "ルール"]];
+function masterPrintSections(master, kinds) {
+  const dn = (id) => (master.departments.find((d) => d.id === id) || {}).name || "";
+  const yes = (v) => (v ? "◯" : "");
+  const today = todayStr();
+  const out = [];
+  const want = (k) => !kinds || kinds.includes(k);
+  if (want("staff")) {
+    const list = byBaseDept(master, master.staff.filter((s) => !(s.retireDate && s.retireDate <= today)), partLast);
+    out.push({ key: "staff", title: "職員", land: true, cols: ["部署", "名前", "役職", "雇用", "勤務時間", "曜日別の勤務", "固定休", "曜日別の部署", "運転", "男性", "自車", "備考"],
+      rows: list.map((s) => [dn(s.deptId), s.name, s.position || "", s.emp || "常勤", s.start && s.end ? `${s.start}〜${s.end}` : "", shiftToStr(s.shiftByDay),
+        daysToStr(s.offDays), deptDayToStr(s.deptByDay, master), yes(s.canDrive), yes(s.isMale), s.hasOwnCar ? `◯${s.ownCarCap != null ? `(${s.ownCarCap}人)` : ""}` : "", s.memo || ""]) });
+  }
+  if (want("vehicles")) {
+    const list = byBaseDept(master, master.vehicles);
+    out.push({ key: "vehicles", title: "車", cols: ["部署", "名前", "定員(運転手込み)", "車いす時の定員", "車いす", "備考"],
+      rows: list.map((v) => [dn(v.deptId), v.name, v.capNormal == null ? "" : v.capNormal, v.capWc == null ? "" : v.capWc, yes(v.wheelchairOK), v.memo || ""]) });
+  }
+  if (want("help")) {
+    const R = rulesOf(master);
+    const hb = [...(R.helpBase || [])].sort((a, b) => (toMin(a.time) || 0) - (toMin(b.time) || 0) || String(a.label).localeCompare(String(b.label), "ja"));
+    out.push({ key: "help", title: "ヘルプ表（基本の担当）", cols: ["時刻", "ヘルプ", ...DAY_ORDER.map((wd) => DAYS[wd])],
+      rows: hb.map((r) => [r.time || "", r.label || "", ...DAY_ORDER.map((wd) => (r.byDay || {})[wd] || "")]) });
+  }
+  if (want("users")) {
+    const list = byBaseDept(master, master.users);
+    out.push({ key: "users", title: "利用者", land: true, cols: ["部署", "名前", "利用曜日", "迎え", "送り", "曜日別の時刻", "迎え先", "送り先", "車いす", "ヘルプ", "2名体制", "男性", "利用開始日", "メモ"],
+      rows: list.map((u) => [dn(u.deptId), u.name, daysToStr(u.days), u.meetTime || "", u.sendTime || "", timeDayToStr(u.timeByDay), u.meetPlace || "", u.sendPlace || "",
+        yes(u.wheelchair), yes(u.hasHelp), yes(u.helpTwo), yes(u.isMale), u.startDate || "", u.helpNote || ""]) });
+  }
+  if (want("rules")) {
+    const R = rulesOf(master), rows = [];
+    const add = (type, o) => rows.push([type, o.t1 || "", o.t2 || "", o.days || "", o.staff || "",
+      [o.only && `${o.only}だけ`, o.from && `${o.from}以降`, o.before && `${o.before}より前`, o.cond].filter(Boolean).join("・")]);
+    (R.ngPairs || []).forEach((x) => add(RULE_T.ng, { t1: x.a, t2: x.b }));
+    (R.fixedRun || []).forEach((x) => add(x.kind === "send" ? RULE_T.send : RULE_T.meet, { t1: x.user, days: daysToStr(x.days), staff: x.staff }));
+    (R.fixedVeh || []).forEach((x) => add(RULE_T.veh, { t1: x.veh, days: daysToStr(x.days), staff: x.staff, before: x.before }));
+    (R.fixedBlock || []).forEach((x) => add(RULE_T.block, { t1: x.label, t2: x.kind === "help" ? "ヘルプ" : x.kind === "block" ? "予定" : "", days: daysToStr(x.days), staff: x.staff, only: x.time, from: x.from, cond: x.exact ? "完全一致" : "" }));
+    (R.requiredHelp || []).forEach((x) => add(RULE_T.req, { t1: x.user, days: daysToStr(x.days) }));
+    (R.helpTwo || []).forEach((x) => add(RULE_T.two, { t1: x.user, days: daysToStr(x.days) }));
+    (R.maleOnly || []).forEach((x) => add(RULE_T.male, { t1: x.user, from: x.from, cond: x.bathOnly ? "入浴のみ" : "" }));
+    (R.userVeh || []).forEach((x) => add(RULE_T.uveh, { t1: x.user, t2: x.veh }));
+    (R.otherRules || []).forEach((x) => add(RULE_T.other, { t1: x.text, days: daysToStr(x.days), cond: x.check !== false ? "出力前に確認" : "" }));
+    out.push({ key: "rules", title: "ルール", cols: ["種類", "対象", "相手・内容", "曜日", "担当", "条件"], rows });
+  }
+  return out;
+}
+function buildPrintHtml(master, kinds) {
+  // 全部空の列は出さない（No・名前などの最初の2列は残す）。短い列（名前・時刻など）は折り返さない
+  const secs = masterPrintSections(master, kinds).map((sec) => {
+    const keep = sec.cols.map((c, j) => j < 2 || sec.rows.some((r) => String(r[j] == null ? "" : r[j]) !== ""));
+    const cols = sec.cols.filter((c, j) => keep[j]), rows = sec.rows.map((r) => r.filter((v, j) => keep[j]));
+    const nw = cols.map((c, j) => Math.max(String(c).length, ...rows.map((r) => String(r[j] == null ? "" : r[j]).length)) <= 9);
+    return Object.assign({}, sec, { cols, rows, nw });
+  });
+  const when = `${todayStr()} 印刷`;
+  const body = secs.map((sec, i) => `<section class="${sec.land ? "land" : "port"}${i ? " brk" : ""}" data-print-sec="${sec.key}">
+<h1>${esc(sec.title)}<small>${esc(EDITION_LABEL)}　${sec.rows.length}件　${esc(when)}</small></h1>
+<table><thead><tr><th class="no">No</th>${sec.cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+<tbody>${sec.rows.length ? sec.rows.map((r, j) => `<tr><td class="no">${j + 1}</td>${r.map((v, k) => `<td${sec.nw[k] ? ' class="nw"' : ""}>${esc(v)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${sec.cols.length + 1}" class="none">登録がありません</td></tr>`}</tbody></table></section>`).join("\n");
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>送迎表の一覧（${esc(EDITION_LABEL)}）</title><style>
+@page{size:A4 portrait;margin:12mm 10mm}
+@page land{size:A4 landscape;margin:10mm}
+section.land{page:land}
+section.brk{break-before:page}
+body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif;color:#000;margin:0;padding:8px}
+h1{font-size:16px;margin:0 0 6px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #000;padding-bottom:3px}
+h1 small{font-size:10px;font-weight:normal}
+table{border-collapse:collapse;width:100%;font-size:10px;line-height:1.35}
+th,td{border:1px solid #000;padding:2px 4px;vertical-align:top;word-break:break-all}
+th{background:#e8e8e8;font-weight:bold;white-space:nowrap}
+thead{display:table-header-group}
+tr{break-inside:avoid}
+td.no,th.no{width:22px;text-align:right;color:#444}
+td.nw{white-space:nowrap;word-break:keep-all}
+td.none{text-align:center;color:#666;padding:8px}
+tbody tr:nth-child(even) td{background:#f6f6f6}
+@media print{body{padding:0}tbody tr:nth-child(even) td{-webkit-print-color-adjust:exact;print-color-adjust:exact}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>${body}</body></html>`;
 }
 
 // Excelを読み戻して {master, patterns, log} を作る。名前で突き合わせ、無い行は追加。Excelに無い既存データは消さない。
@@ -5251,6 +5335,7 @@ function autoAssignSheet(master, data, wd) {
       }
       if (!isHelp && s.helpOnly) return false; // 久保田等は送迎不可
       if (needDrive && !s.canDrive) return false;
+      if (!isHelp && (ovAll[s.id] || {}).noRide) return false;   // この日は送迎なし（ﾏﾝｼｮﾝなど）
       if (!inWork(s, t0, dur)) return false;
       if (staffBusy(s.id, t0, dur, exceptId)) return false;
       const aw0 = toMin(s.awayFrom), aw1 = toMin(s.awayTo);
@@ -6742,6 +6827,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                       {!ov.off && ov.start && toMin(ov.start) > toMin(s.start) ? "遅" : ""}
                       {!ov.off && ov.end && toMin(ov.end) < toMin(s.end) ? "早" : ""}
                     </div>
+                    {ov.noRide && !ov.off && <div className="text-[10px] font-bold text-violet-700" data-noride={s.id}>送迎なし(ﾏﾝｼｮﾝ)</div>}
                     {ov.note && <div className="text-[10px] text-amber-700">{ov.note}</div>}
                   </div>
                   {sheetMode && (
@@ -9066,6 +9152,8 @@ function EditionSwitcher() {
 
 function AppInner() {
   const [tab, setTab] = useState("sheet");
+  const [printOpen, setPrintOpen] = useState(false);   // 紙で確かめる一覧（職員・車・ヘルプ表・利用者・ルール）
+  const [printKinds, setPrintKinds] = useState(() => PRINT_KINDS.map((k) => k[0]));
   // 送迎表の右側にカレンダーを出す（パソコン向け）。開いているか・幅はこの端末に覚える
   const [calSide, setCalSide] = useState(() => { try { return localStorage.getItem("sg:calSide") === "1"; } catch (e) { return false; } });
   const [calSideW, setCalSideW] = useState(() => { try { return Math.min(800, Math.max(360, Number(localStorage.getItem("sg:calSideW")) || 440)); } catch (e) { return 440; } });
@@ -9838,6 +9926,28 @@ function AppInner() {
     }
     setAllPatterns(next);
     return removed;
+  };
+
+  // ---- 一覧の印刷：罫線つきの表を、見えない枠の中に作って印刷（A4）。印刷できない端末のためにファイルでも保存できる ----
+  const printLists = (asFile) => {
+    if (!master || !printKinds.length) return;
+    const html = buildPrintHtml(master, printKinds);
+    if (asFile) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      a.download = `送迎表の一覧_${EDITION_LABEL}_${todayStr()}.html`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+      notify("一覧をファイルに保存しました。開いて印刷してください");
+      return;
+    }
+    const old = document.getElementById("sg-print-frame"); if (old) old.remove();
+    const f = document.createElement("iframe");
+    f.id = "sg-print-frame"; f.setAttribute("data-print-frame", "1");
+    f.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0";
+    f.srcdoc = html;
+    f.onload = () => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { notify("この画面からは印刷できませんでした。「ファイルに保存」から開いて印刷してください", "warn"); } };
+    document.body.appendChild(f);
   };
 
   // ---- マスタExcel(職員・利用者・車両・週間パターン)の出力/取込 ----
@@ -10898,7 +11008,30 @@ function AppInner() {
               📥 マスタExcel取込
               <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importMasterExcel(f); }} />
             </label>
+            <button className={`${btnSec} text-xs py-1`} onClick={() => setPrintOpen(true)} data-print-btn title="職員・車・ヘルプ表・利用者・ルールを、罫線つきの表でA4に印刷します">🖨 一覧を印刷</button>
             <span className="text-[11px] text-stone-500">部署・職員・利用者・車両・週間パターン・ヘルプ表・ルールを1つのExcelでやりとりできます。新しい版への引っ越しにも使えます</span>
+          </div>
+        )}
+        {printOpen && (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setPrintOpen(false); }}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-4 space-y-3" data-print-dialog>
+              <div className="font-bold">🖨 一覧を印刷（A4・罫線つき）</div>
+              <div className="text-xs text-stone-500">印刷するものを選んでください。職員・利用者はA4横、そのほかはA4縦で、それぞれ新しいページから始まります。</div>
+              <div className="grid grid-cols-2 gap-1">
+                {PRINT_KINDS.map(([k, n]) => (
+                  <label key={k} className="flex items-center gap-2 text-sm py-1">
+                    <input type="checkbox" data-print-kind={k} checked={printKinds.includes(k)}
+                      onChange={(e) => setPrintKinds((a) => (e.target.checked ? PRINT_KINDS.map((x) => x[0]).filter((x) => x === k || a.includes(x)) : a.filter((x) => x !== k)))} />
+                    {n}
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-2 justify-end flex-wrap">
+                <button className={`${btnSec} text-sm`} onClick={() => setPrintOpen(false)}>閉じる</button>
+                <button className={`${btnSec} text-sm`} disabled={!printKinds.length} data-print-file onClick={() => printLists(true)}>ファイルに保存</button>
+                <button className="px-3 py-1.5 rounded bg-sky-600 text-white text-sm font-bold disabled:opacity-40" disabled={!printKinds.length} data-print-go onClick={() => printLists(false)}>印刷する</button>
+              </div>
+            </div>
           </div>
         )}
         {tab === "staff" && <StaffTab master={master} update={updateMaster} />}

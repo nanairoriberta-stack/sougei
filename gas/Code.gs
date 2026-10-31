@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.31c',
+  VERSION: '2026.10.31e',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -628,16 +628,9 @@ function calApply_(me, op) {
   op = sanitizeOp_(op);
   op.by = me.no;                                   // 誰の操作かはサーバーが決める（端末の申告は使わない）
   if (op.comment) op.comment.by = me.no;
-  // 職員の休み・予定・休日出勤・勤務時間変更は本人の分だけ（管理者は全員分）。利用者が関わるもの（利用者休み・送迎の変更・ヘルプ）は送迎表の担当以上
+  // 職員の休み・予定・休日出勤・勤務時間変更も、ほかの職員の分を入れられる（2026-10-31 依頼者。以前は本人の分だけ）。変更・削除は作った人か管理者だけ（下）
+  // 利用者が関わるもの（利用者休み・送迎の変更・利用日外利用・ヘルプ）も、すべての職員が入力できる
   var sg = op.kind === 'upsert' ? op.ev.sg : null;
-  if (sg) {
-    // モニタリング・支援会議（対応者の予定）は、送迎表の担当者も他の職員を対応者にできる
-    var planForOthers = sg.type === 'staff_plan' && (op.ev.label === 'monitor' || op.ev.label === 'shien') && me.role === '送迎表';
-    if ((sg.type === 'staff_off' || sg.type === 'staff_plan' || sg.type === 'hwork' || sg.type === 'shift') && me.role !== '管理者' && !planForOthers && !(sg.staff.length === 1 && sg.staff[0] === me.name))
-      throw { code: 'invalid_argument', message: '他の職員の休み・予定・休日出勤・職員時間変更は管理者だけが入力できます' };
-    if ((sg.type === 'user_absent' || sg.type === 'user_time' || sg.type === 'user_extra' || sg.type === 'help') && me.role === '一般')
-      throw { code: 'invalid_argument', message: '利用者休み・送迎の変更・利用日外利用・ヘルプは送迎表の担当者だけが入力できます' };
-  }
   return withLock_(function () {
     var idx = docIndex_();
     var paths = TCCore.targetsOf(op);

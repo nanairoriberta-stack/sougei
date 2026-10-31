@@ -103,16 +103,18 @@ async function bootstrap() {
     return `余村慎（${st.start}〜${st.end}）→ ${s1.staffOv[st.id].start} から出勤。変更履歴：「${log.find((l) => l.includes("AM休")).split(" | ").slice(1, 6).join(" / ")}」`;
   });
 
-  await test("権限：一般職員は他人の休みを入れられない・送迎表を直接変更できない・端末の名乗りは使わず本人として記録", async () => {
+  await test("権限：一般職員もほかの職員の休みを入れられる（作った人として記録・ほかの人は変えられない）・送迎表を直接変更できない・端末の名乗りは使わず本人として記録", async () => {
     const { g } = await bootstrap();
     const d = device(g); const me = await d.login(noOf(g, "八壁"), pinOf(g, "八壁"));
-    await d.call("cal.apply", { kind: "upsert", opId: "op_aaaaaaa1", id: "ev_aaaaaaa1", baseRev: null, ev: evOff("2026-11-03", "日野") }).then(() => assert.fail("他人の休み"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+    assert.strictEqual((await d.call("cal.apply", { kind: "upsert", opId: "op_aaaaaaa1", id: "ev_aaaaaaa1", baseRev: null, ev: evOff("2026-11-03", "日野") })).status, "ok", "ほかの職員の休みも入れられる（2026-10-31〜）");
+    { const o = device(g); await o.login(noOf(g, "白戸"), pinOf(g, "白戸")); const ex = Object.values(TC.mergeDays(await o.call("docs.query", { col: "days", from: "2026-11-03", to: "2026-11-03" }))).find((e) => e.id === "ev_aaaaaaa1");
+      await o.call("cal.apply", { kind: "delete", opId: "op_aaaaaaa9", id: "ev_aaaaaaa1", date: "2026-11-03", baseRev: ex.rev }).then(() => assert.fail("作った人でも管理者でもない"), (e) => assert.strictEqual(e.code, "invalid_argument")); }
     await d.call("kv.merge", { key: "master", base: null, mine: { staff: [] }, baseKnown: false }).then(() => assert.fail("送迎表の変更"), (e) => assert.strictEqual(e.code, "invalid_argument"));
     const ar = await d.call("cal.apply", { kind: "upsert", opId: "op_aaaaaaa2", id: "ev_aaaaaaa2", baseRev: null, by: "999", ev: { title: "研修", date: "2026-11-03", endDate: "2026-11-03", allDay: true, label: "event" } });
     const day = Object.values(TC.mergeDays(await d.call("docs.query", { col: "days", from: "2026-11-03", to: "2026-11-03" })));
     assert.strictEqual(day[0].createdBy, me.no, "作成者はサーバーが決める");
     assert.ok(ar.docs && ar.docs.some((x) => x.date === "2026-11-03" && x.events.ev_aaaaaaa2), "書いた日の文書が返る（画面はこれで表を直す）");
-    return "他人の休み・送迎表の変更を拒否、作成者は本人の番号";
+    return "ほかの職員の休みは入れられ、作った人以外は消せない・送迎表の変更を拒否、作成者は本人の番号";
   });
 
   await test("朝に50人が一斉に自分の休み・AM休・PM休を入れる → 50件すべて保存・送迎表にも50人分反映", async () => {
@@ -197,12 +199,14 @@ async function bootstrap() {
     const ride = ev("森 家族送り・家族迎え", "ride", { type: "user_time", users: ["森"], noMeet: "家族送り", noSend: "家族迎え" });
     const mr = p.runs.find((r) => r.kind === "meet" && r.userIds.length), mu = m.users.find((u) => u.id === mr.userIds[0]);
     const place = ev(mu.name + " 迎え先実家", "ride", { type: "user_time", users: [mu.name], meetPlace: "実家" });
-    // 一般職員：利用者が関わるヘルプ・送迎は入れられない。休日出勤は自分の分だけ
+    // 一般職員：すべてのラベルを使える（2026-10-31〜。ヘルプ・送迎・利用者休み・利用日外利用も）。休日出勤などは自分の分だけ
     const ip = device(g); await ip.login(noOf(g, "八壁"), pinOf(g, "八壁"));
-    for (const [i, e] of [help, ride, ev("日野 休日出勤", "hwork", { type: "hwork", staff: ["日野"] }, ["09:00", "13:00"]), ev("森 利用日外利用", "extra", { type: "user_extra", users: ["森"] })].entries())
-      await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl0000" + i, id: "ev_lbl0000" + i, baseRev: null, ev: e }).then(() => assert.fail("入れられないはず " + e.title), (x) => assert.strictEqual(x.code, "invalid_argument"));
+    assert.strictEqual((await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl00000", id: "ev_lbl00000", baseRev: null, ev: Object.assign(ev("日野 休日出勤", "hwork", { type: "hwork", staff: ["日野"] }, ["09:00", "13:00"]), { date: "2026-11-03", endDate: "2026-11-03" }) })).status, "ok", "ほかの職員の休日出勤も入れられる");
+    const d3 = (e) => Object.assign({}, e, { date: "2026-11-03", endDate: "2026-11-03" });   // 下の確認と混ざらないよう別の日に
+    for (const [i, e] of [help, ride, ev("森 利用日外利用", "extra", { type: "user_extra", users: ["森"] }), ev("園山 欠席", "user", { type: "user_absent", users: ["園山"] })].entries())
+      assert.strictEqual((await ip.call("cal.apply", { kind: "upsert", opId: "op_lblg000" + i, id: "ev_lblg000" + i, baseRev: null, ev: d3(e) })).status, "ok", "一般職員も入れられる " + e.title);
     await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl00010", id: "ev_lbl00010", baseRev: null, ev: ev("八壁 休日出勤", "hwork", { type: "hwork", staff: ["八壁"], dept: "津田" }, ["09:00", "13:00"]) });
-    await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl00011", id: "ev_lbl00011", baseRev: null, ev: ev("日野 勤務時間変更", "shift", { type: "shift", staff: ["日野"], wend: "15:00" }) }).then(() => assert.fail("他人の勤務時間変更"), (x) => assert.strictEqual(x.code, "invalid_argument"));
+    assert.strictEqual((await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl00011", id: "ev_lbl00011", baseRev: null, ev: Object.assign(ev("日野 勤務時間変更", "shift", { type: "shift", staff: ["日野"], wend: "15:00" }), { date: "2026-11-03", endDate: "2026-11-03" }) })).status, "ok", "ほかの職員の職員時間変更も入れられる");
     await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl00012", id: "ev_lbl00012", baseRev: null, ev: ev("八壁 退勤15:00", "shift", { type: "shift", staff: ["八壁"], wend: "15:00" }) });
     // その他予定の担当は、送迎表に載せなければ誰でも書ける（予定に残る）
     await ip.call("cal.apply", { kind: "upsert", opId: "op_lbl00013", id: "ev_lbl00013", baseRev: null, ev: ev("会議", "other", null, ["13:00", "14:00"], { place: "2階", tanto: ["日野", "八壁"] }) });
@@ -221,11 +225,11 @@ async function bootstrap() {
     assert.deepStrictEqual(s.staffOv[S("八壁")], { workToday: true, start: "9:00", end: "15:00", deptId: m.departments.find((d) => d.name === "津田").id }, "休日出勤（時間）＋勤務時間変更（退勤）");
     assert.strictEqual(s.runs.length, p.runs.length, "便はそのまま");
     const names = await sg.call("names.list"); assert.ok(names.depts.includes("津田") && names.users.length, "部署・利用者の一覧");
-    // モニタリング・支援会議：送迎表の担当者は他の職員を対応者にできる。一般職員は自分だけ。その他予定は今までどおり
+    // モニタリング・支援会議・その他予定：ほかの職員を対応者・担当にできる（2026-10-31〜 一般職員も）
     const mon = (who, extra) => ev("モニタリング（森）", "monitor", { type: "staff_plan", staff: who, users: ["森"] }, ["13:30", "14:30"], Object.assign({ place: "自宅" }, extra));
     await sg.call("cal.apply", { kind: "upsert", opId: "op_mon00001", id: "ev_mon00001", baseRev: null, ev: mon(["日野"]) });
-    await sg.call("cal.apply", { kind: "upsert", opId: "op_mon00002", id: "ev_mon00002", baseRev: null, ev: Object.assign(mon(["日野"]), { label: "other", title: "その他" }) }).then(() => assert.fail("その他予定で他人"), (x) => assert.strictEqual(x.code, "invalid_argument"));
-    await ip.call("cal.apply", { kind: "upsert", opId: "op_mon00003", id: "ev_mon00003", baseRev: null, ev: mon(["日野"]) }).then(() => assert.fail("一般が他人を対応者に"), (x) => assert.strictEqual(x.code, "invalid_argument"));
+    assert.strictEqual((await sg.call("cal.apply", { kind: "upsert", opId: "op_mon00002", id: "ev_mon00002", baseRev: null, ev: Object.assign(mon(["日野"]), { label: "other", title: "その他" }) })).status, "ok", "その他予定でほかの職員を担当に");
+    assert.strictEqual((await ip.call("cal.apply", { kind: "upsert", opId: "op_mon00003", id: "ev_mon00003", baseRev: null, ev: Object.assign(mon(["日野"]), { date: "2026-11-03", endDate: "2026-11-03" }) })).status, "ok", "一般職員もほかの職員を対応者に");
     await ip.call("cal.apply", { kind: "upsert", opId: "op_mon00004", id: "ev_mon00004", baseRev: null, ev: Object.assign(mon(["八壁"]), { title: "支援会議（森）", label: "shien" }) });
     const sm = (await admin.call("kv.get", "sheet:" + date)).value;
     assert.ok(sm.blocks.some((b) => b.calId === "ev_mon00001" && b.staffId === S("日野") && b.time === "13:30"), "モニタリング → 対応者の予定");

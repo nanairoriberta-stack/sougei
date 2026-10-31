@@ -126,3 +126,26 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  assert.ok(chk.includes('休みの職員に入っています')&&chk.includes('勤務時間外(この日は12:30で退勤)'),'出力前の確認に出る');
  console.log('off-time check OK');
 }
+// 紙で確かめる一覧（職員・車・ヘルプ表・利用者・ルール）：罫線つき・A4（職員・利用者は横）・並びは基本の部署の順（2026-10-31）
+{
+ const assert=require('assert'); const E6=require('./eng.cjs'); const m6=E6.mergeSeedMaster(null,E6.seedMaster());
+ const secs=E6.masterPrintSections(m6);
+ assert.deepStrictEqual(secs.map(s=>s.key),['staff','vehicles','help','users','rules']);
+ const st=secs[0]; const today=new Date().toISOString().slice(0,10);
+ assert.strictEqual(st.rows.length,m6.staff.filter(s=>!(s.retireDate&&s.retireDate<=today)).length,'職員は全員（退職した人を除く）');
+ assert.deepStrictEqual(st.rows.map(r=>r[1]),E6.byBaseDept(m6,m6.staff.filter(s=>!(s.retireDate&&s.retireDate<=today)),E6.partLast).map(s=>s.name),'画面と同じ並び');
+ assert.strictEqual(secs[1].rows.length,m6.vehicles.length); assert.strictEqual(secs[3].rows.length,m6.users.length);
+ assert.ok(secs[4].rows.length>0,'ルールも出る');
+ const m7=JSON.parse(JSON.stringify(m6)); m7.rules=Object.assign({},m7.rules,{helpBase:[{time:'10:00',label:'井上ヘルプ',byDay:{1:'日野',3:'八壁'}}]});
+ const hp=E6.masterPrintSections(m7,['help'])[0]; assert.deepStrictEqual(hp.rows[0].slice(0,4),['10:00','井上ヘルプ','日野',''],'ヘルプ表は時刻・ヘルプ・月〜日');
+ assert.ok(E6.buildPrintHtml(m6,['help']).includes('登録がありません'),'空のときもわかる');
+ assert.ok(st.land&&secs[3].land&&!secs[1].land,'職員・利用者はA4横');
+ const html=E6.buildPrintHtml(m6,['vehicles','rules']);
+ assert.ok(/@page\{size:A4 portrait/.test(html)&&/@page land\{size:A4 landscape/.test(html),'A4');
+ assert.ok(/th,td\{border:1px solid #000/.test(html),'罫線');
+ assert.strictEqual((html.match(/data-print-sec=/g)||[]).length,2,'選んだものだけ');
+ assert.ok(html.includes(m6.vehicles[0].name)&&!html.includes('<h1>職員'),'車はあり・職員はなし');
+ assert.ok(!E6.buildPrintHtml(Object.assign({},m6,{users:[{id:'x',name:'<b>悪</b>',deptId:'',days:[]}]}),['users']).includes('<b>悪</b>'),'名前の < は文字のまま');
+ require('fs').writeFileSync('pw/print_sample.html',E6.buildPrintHtml(m6));
+ console.log('print lists OK', secs.map(s=>s.title+s.rows.length).join(' / '));
+}

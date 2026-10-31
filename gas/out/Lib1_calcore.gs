@@ -88,7 +88,8 @@ function normSg(x) {
     reason: str(x.reason, 40), note: str(x.note, 40),                            // 理由（欠席・勤務時間変更）／行き先（ヘルプ）
     dept: x.type === "hwork" || x.type === "shift" ? str(x.dept, 40) : "",       // その日の部署は送迎表の名前で持つ
     wstart: x.type === "shift" ? t(x.wstart) : "", wend: x.type === "shift" ? t(x.wend) : "",  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
-    meetPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.meetPlace, 40) : "", sendPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.sendPlace, 40) : "" };  // 送迎：その日の迎え先・送り先  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
+    meetPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.meetPlace, 40) : "", sendPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.sendPlace, 40) : "",
+    ...(x.type === "shift" && x.noRide === true ? { noRide: true } : {}) };   // 職員時間変更「ﾏﾝｼｮﾝのみ」：送迎表には載るが送迎はしない（2026-10-31）  // 送迎：その日の迎え先・送り先  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
 }
 const strip = e => { const x = clone(e); x.prev = null; return x; };
 

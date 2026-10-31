@@ -109,6 +109,19 @@ console.log('half OK');
  assert.strictEqual(y.blocks.find(b=>b.id==='newAm').staffId,H); assert.strictEqual(y.blocks.find(b=>b.id==='newPm').staffId,busy.id);
  // 予定を消すと、保留のままのものは元の担当へ
  const y3=C.reconcile(m2,y,[],D); assert.strictEqual(y3.blocks.find(b=>b.id==='newAm').staffId,busy.id,'消すと戻る');
+ // 職員時間変更「ﾏﾝｼｮﾝのみ」（送迎なし。2026-10-31）：勤務時間はその時刻、送迎表には載るが便はすべて保留へ（予定はそのまま）。予定を消すと戻る
+ {const T=require('./calcore.js');const nm=T.normEvent({id:'ev_mz00001',title:'x',date:D,endDate:D,allDay:true,label:'shift',sg:{type:'shift',staff:[busy.name],wstart:'06:00',wend:'15:00',reason:'早ﾏﾝｼｮﾝのみ',noRide:true}},'ev_mz00001',0);
+  assert.strictEqual(nm.sg.noRide,true,'送迎なしは残る');
+  const n2=T.normEvent({id:'ev_mz00001',title:'x',date:D,endDate:D,allDay:true,label:'shift',sg:{type:'shift',staff:[busy.name],wstart:'06:00'}},'ev_mz00001',0); assert.ok(!('noRide' in n2.sg),'ふつうの時間変更には付かない');}
+ const mz=ev({id:'mz1',title:'早ﾏﾝｼｮﾝのみ',sg:{type:'shift',staff:[busy.name],wstart:'06:00',wend:'15:00',reason:'早ﾏﾝｼｮﾝのみ',noRide:true}});
+ x=C.reconcile(m2,sheet,mz,D);
+ assert.deepStrictEqual(x.staffOv[busy.id],{start:'6:00',end:'15:00',noRide:true},'時刻と送迎なし');
+ assert.strictEqual(x.runs.filter(r=>r.staffId===busy.id).length,0,'便はすべて保留へ');
+ const runsB=sheet.runs.filter(r=>r.staffId===busy.id).map(r=>r.id); assert.ok(runsB.length>0,'試す職員に便がある');
+ runsB.forEach(id=>assert.strictEqual(x.runs.find(r=>r.id===id).staffId,H));
+ assert.ok(C.summary(m2,x,mz,D)[0].time.includes('送迎なし'),'反映中に送迎なし');
+ y=C.reconcile(m2,x,[],D); assert.ok(!(y.staffOv||{})[busy.id],'消すと時刻・送迎なしも外れる'); assert.strictEqual(y.runs.filter(r=>r.staffId===busy.id).length,runsB.length,'便も戻る');
+ {const w=E.runWarnings(Object.assign({},sheet.runs.find(r=>r.id===runsB[0]),{staffId:busy.id}),m2,x,wd); assert.ok(w.some(t=>t.includes('送迎なし')),'送迎なしの人に便を入れると注意 '+w.join(','));}
  console.log('hold OK', busy.name, '予定', all.length, '件 / AM休で保留', amHeld.length, '件');
 }
 // ===== ラベルごとの項目：ヘルプ（開始時刻・行き先）・送迎（迎え・送りの変更）・休日出勤（時間） =====
