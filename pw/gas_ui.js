@@ -290,6 +290,10 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await A.pg.locator(".sgbox").innerText()).includes("送迎（便）には入りません"));
     await A.pg.click('[data-sgrm="staff"][data-name="森"]'); await A.pg.waitForTimeout(200); await pick("staff", "八壁"); await A.pg.waitForTimeout(200);
     assert.deepStrictEqual([await A.pg.inputValue("#w-wst"), await A.pg.inputValue("#w-wet")], ["06:00", "14:00"], "ほかの職員は8時間");
+    for (const [nm, end] of [["余村和", "14:00"], ["余村慎", "15:00"]]) {   // 9時間の余村は慎さんだけ
+      await A.pg.click('.sgbox [data-sgrm="staff"]'); await A.pg.waitForTimeout(200); await pick("staff", nm); await A.pg.waitForTimeout(200);
+      assert.strictEqual(await A.pg.inputValue("#w-wet"), end, nm); }
+    await A.pg.click('.sgbox [data-sgrm="staff"]'); await A.pg.waitForTimeout(200); await pick("staff", "八壁"); await A.pg.waitForTimeout(200);
     await A.pg.locator(".sgbox").screenshot({ path: "g_kinmu.png" });
     await save(1500);
     await add("shift"); await setDay(); await pick("staff", "窪田"); await A.pg.locator('label:has(input[name="w-kinmu"][value="遅ﾏﾝｼｮﾝのみ"])').click(); await A.pg.waitForTimeout(300);
