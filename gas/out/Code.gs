@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.31i',
+  VERSION: '2026.10.31j',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -207,6 +207,7 @@ var HANDLERS = {
   'kv.cas': function (me, a) { return kvCas_(me, a[0]); },
   'sync.poll': function (me, a) { return poll_(a[0] || {}); },
   'sg.exportAlerts': function (me, a) { return exportAlerts_(String((a[0] || {}).ns || '')); },
+  'sg.linkReqs': function (me, a) { return linkReqsOf_(String(a[0] || '')); },   // 生活介護の画面に、りんく・ぷれいす版からの依頼を出す（表示だけ）
   'docs.query': function (me, a) { return docsQuery_(a[0] || {}); },
   'docs.get': function (me, a) { return docGetPublic_(String(a[0])); },
   'cal.apply': function (me, a) { return calApply_(me, a[0]); },
@@ -712,6 +713,14 @@ function linkSheetValue_(ns, date, value, idx) {
   if (ns !== tns) return value;
   var v3s = docGet_(kvPath_('v3:sheet:' + date), idx), v3m2 = v3s ? docGet_(kvPath_('v3:master'), idx) : null;
   return SGCal.linkApply(value, v3s ? SGCal.linkReqs(v3s.value.v, v3m2 ? v3m2.value.v : null) : []);
+}
+/* りんく・ぷれいす版のその日の依頼（生活介護の画面で表示するため）。生活介護のその日の表がまだ保存されていなくても出せるように
+   （2026-10-31 実機：まだ保存されていない日の生活介護の表に依頼が出なかった） */
+function linkReqsOf_(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+  var idx = docIndex_(), s = docGet_(kvPath_('v3:sheet:' + date), idx); if (!s) return [];
+  var m = docGet_(kvPath_('v3:master'), idx);
+  return SGCal.linkReqs(s.value.v, m ? m.value.v : null);
 }
 /* 保存のあと、相手の版の送迎表にも伝える（ロックの中で呼ぶ）。相手の送迎表がまだ無い日は、作られたときに入る */
 function linkAfterSave_(key, value, idx) {

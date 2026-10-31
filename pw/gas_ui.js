@@ -256,6 +256,16 @@ const D = path.join(__dirname, "../gas/out");
     let st3 = null; for (let i = 0; i < 20; i++) { await V.pg.waitForTimeout(300); st3 = (api(t, "kv.get", ["v3:sheet:" + date]).data.value.reqStatus || {}).rqLK; if (st3 && st3.staff) break; }
     assert.strictEqual(st3.staff, "日野", "りんく側にも担当が出る");
     assert.deepStrictEqual(real(V.errs), []); await V.pg.context().close(); console.log("りんくからの依頼の枠: OK"); }
+  { // 生活介護のその日の表がまだ保存されていない日でも、りんく・ぷれいす版からの依頼が「りんくからの依頼」の枠に出る（2026-10-31 実機：10/1で出なかった）
+    const D5 = "2026-10-01", m3 = api(t, "kv.get", ["v3:master"]).data.value;
+    assert.ok(!api(t, "kv.get", ["sheet:" + D5]).data.value, "生活介護（現体制版）の10/1はまだ無い");
+    api(t, "kv.cas", [{ key: "v3:sheet:" + D5, rev: 0, value: { runs: [{ id: "rqNEW", kind: "meet", time: "9:00", staffId: "__req__", vehicleId: "", userIds: [m3.users[0].id], staffRiderIds: [], note: "" }], blocks: [], staffOv: {} } }]);
+    const W = await open("sougei.html", { width: 1400, height: 900 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${D5}";`, "sougei_v1_1001.html");
+    await W.pg.waitForTimeout(500); await W.pg.fill("#sghNo", "000"); await W.pg.fill("#sghPin", "5829"); await W.pg.click("#sghGo"); await W.pg.waitForTimeout(5000);
+    assert.strictEqual(await W.pg.locator('[data-link-cell] [data-item-id="lk_rqNEW"]').count(), 1, "まだ保存されていない日でも依頼が出る");
+    assert.ok((await W.pg.locator('[data-item-id="lk_rqNEW"]').innerText()).includes("りんく依頼"));
+    await W.pg.screenshot({ path: "g_link_unsaved.png" });
+    assert.deepStrictEqual(real(W.errs), []); await W.pg.context().close(); console.log("まだ無い日のりんく依頼: OK"); }
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   assert.strictEqual(await P.pg.getByRole("button", { name: /AI調整|AIと相談/ }).count(), 0, "料金がかかるAIのボタンは、キーが無ければ出ない");
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);

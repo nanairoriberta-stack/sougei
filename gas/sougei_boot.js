@@ -22,6 +22,9 @@
     const db = await window.claude.use("db");
     window.__sgWatchCalendar = (date, cb) => db.collection("days").where("maxEnd", ">=", date).where("date", "<=", date)
       .onSnapshot((s) => cb(Object.values(TCCore.mergeDays(s.docs.map((d) => d.data())))));
+    // 生活介護の版：りんく・ぷれいす版からの依頼を30秒ごとに聞く（表示だけ。保存したときにサーバーが送迎表に入れる）
+    window.__sgWatchLink = (date, cb) => { let alive = true; const run = () => H.call("sg.linkReqs", date).then((r) => { if (alive) cb(r || []); }).catch(() => {});
+      run(); const tm = setInterval(run, 30000); return () => { alive = false; clearInterval(tm); }; };
     const hand = () => (window.__sgSetKV ? window.__sgSetKV(kv) : setTimeout(hand, 20)); hand();
     if (!me.canSougei) alertBar("閲覧のみです。送迎表を変更するには、管理者に「送迎表」の権限をもらってください。", "warn");
     if (!H.store.persistent) alertBar("このブラウザでは端末への一時保存が使えません（プライベートモードなど）。未送信の内容がある間は画面を閉じないでください。", "warn");

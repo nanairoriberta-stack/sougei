@@ -9388,6 +9388,20 @@ function AppInner() {
     setCalEvents({ date: null, list: [] });
     return window.__sgWatchCalendar(date, (list) => setCalEvents({ date, list }));
   }, [date, master ? 1 : 0]);
+  // 生活介護の版：その日のりんく・ぷれいす版からの依頼を、保留（「りんくからの依頼」の枠）に出す。
+  // 表示だけ（保存したときにサーバーが同じものを入れる）。生活介護のその日の表がまだ保存されていない日にも出るように（2026-10-31 実機）
+  const [linkReqs, setLinkReqs] = useState({ date: null, list: [] });
+  const linkHere = EDITION !== "v3" && (String(date) >= "2026-11-01" ? "v2" : "v1") === EDITION;
+  useEffect(() => {
+    if (!master || !linkHere || !window.__sgWatchLink) return;
+    setLinkReqs({ date: null, list: [] });
+    return window.__sgWatchLink(date, (list) => setLinkReqs({ date, list }));
+  }, [date, master ? 1 : 0, linkHere]);
+  useEffect(() => {
+    if (!sheet || !window.SGCal || !window.SGCal.linkApply || linkReqs.date !== date) return;
+    const next = window.SGCal.linkApply(sheet, linkReqs.list);
+    if (next !== sheet) setSheet(next);
+  }, [sheet, linkReqs, date]);
   // カレンダーの予定をこの日の送迎表に反映(予定の変更・削除で自動的に取り消し)。読み込めていない間は何もしない
   useEffect(() => {
     if (!master || !sheet || !window.SGCal || calEvents.date !== date) return;
