@@ -20,11 +20,12 @@ const D = path.join(__dirname, "../gas/out");
   const yo = rows().find((r) => r[1] === "余村慎");
   const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js" };
   const b = await chromium.launch();
-  async function open(file, vp, boot, outName) {
+  async function open(file, vp, boot, outName, extraInit) {
     const ctx = await b.newContext({ viewport: vp, colorScheme: "light" }); const pg = await ctx.newPage();
     const errs = []; pg.on("pageerror", (e) => errs.push(String(e))); pg.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errs.push(m.text().slice(0, 200)); });
     await pg.exposeFunction("__gasApi", (tk, m, a) => api(tk, m, a));
     await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { const h = m === "docs.query" && window.__HOLDQ; if (h) window.__QN = (window.__QN || 0) + 1; setTimeout(() => window.__gasApi(tk, m, a).then((r) => setTimeout(() => s && s(r), h || 0), (e) => f && f(e)), 30); } }; })() } }; });
+    if (extraInit) await pg.addInitScript(extraInit);
     await pg.route("https://**/*", async (r) => { const u = r.request().url(); for (const k in LOC) if (u.endsWith(k)) return r.fulfill({ path: LOC[k], contentType: "application/javascript" }); return r.abort(); });
     const html = fs.readFileSync(path.join(D, file), "utf8").replace("/*__BOOT__*/", boot);
     const out = "g_" + (outName || file);   // 同じ画面を別の版で開くときは別の名前（開き直したときに混ざらない）
@@ -147,6 +148,21 @@ const D = path.join(__dirname, "../gas/out");
       assert.ok(/送迎表の一覧_.*\.html$/.test(f.name) && f.body.includes('data-print-sec="staff"'), "ファイルにも保存できる " + f.name);
       await P.pg.click('[data-print-dialog] button:text-is("閉じる")'); await P.pg.waitForTimeout(200);
       console.log("一覧の印刷: 職員・車・ヘルプ表 / ファイル", f.suggestedFilename()); }
+    { // 「⇄ 版の切替」は公開URL（…/exec）で開く。開いたときの __SG_BASE が届いていなくても中身用のアドレスへ飛ばない（2026-10-31 実機で真っ白）
+      await P.pg.evaluate(() => { window.__SG_BASE = ""; const o = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.target === "_top") { window.__go = this.getAttribute("href"); return; } return o.call(this); }; });
+      await P.pg.click('button:has-text("版の切替")'); await P.pg.waitForTimeout(200);
+      await P.pg.click('button:has-text("りんく・ぷれいす版")'); await P.pg.waitForTimeout(200);
+      const go = await P.pg.evaluate(() => window.__go);
+      assert.ok(/^https:\/\/script\.google\.com\/.*\/exec\?page=sougei&e=v3$/.test(go || ""), "公開URLで開く " + go);
+      console.log("版の切替:", go); }
+    { // 本物のGoogleでは、サーバーが画面に書いた版（__SG_EDITION）が届かないことがある → アドレス（?e=v3）から読む（2026-10-31 実機：りんく・ぷれいす版が現体制版で開いた）
+      const R = await open("sougei.html", { width: 1400, height: 900 }, "", "sougei_noboot.html",
+        () => { const w = setInterval(() => { if (window.google && window.google.script && !window.google.script.url) { window.google.script.url = { getLocation: (cb) => setTimeout(() => cb({ parameter: { page: "sougei", e: "v3" }, parameters: {}, hash: "" }), 50) }; clearInterval(w); } }, 0); });
+      await R.pg.waitForTimeout(800); await R.pg.fill("#sghNo", "000"); await R.pg.fill("#sghPin", "5829"); await R.pg.click("#sghGo"); await R.pg.waitForTimeout(4000);
+      assert.strictEqual(await R.pg.evaluate(() => window.__SG_EDITION), "v3", "アドレスの版");
+      assert.ok((await R.pg.locator("body").innerText()).includes("りんく・ぷれいす版"), "りんく・ぷれいす版で開く");
+      assert.deepStrictEqual(real(R.errs), [], "画面エラーなし");
+      console.log("アドレスから版を読む: v3 で開いた"); await R.pg.context().close(); }
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(400);
     assert.deepStrictEqual(real(P.errs), [], "タブを開いても画面エラーなし"); }
   // その他予定「コマだけ消す」：表からは消えて、特記事項には残る。下の一覧から表に戻せる

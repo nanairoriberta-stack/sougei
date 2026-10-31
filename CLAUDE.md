@@ -254,6 +254,9 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
   さらに実機で、公開URLが分からないまま作ったメニューのリンクが中身用のアドレス（`…googleusercontent.com/userCodeAppPanel?page=sougei…`）を指し、
   送迎表が真っ白になった → 公開URL（`…/exec`）が分からないときはリンクを作らず「設定シートB2に貼って」と出す。B2は後ろの `?page=…` を落として読む。
   B2を入れても開いたときの `__SG_BASE` が届かなかった（原因未確認）ので、ログイン後に `app.base` でサーバーに聞き、端末にも覚える（gashost の `learnBase`・`sg:base`）
+  2026-10-31 実機：送迎表の「⇄ 版の切替」（`EditionSwitcher`）だけが `__SG_BASE` をそのまま使っていて、りんく・ぷれいす版を開くと中身用のアドレスで真っ白 → `SGHost.url()` を使う。画面の中のリンクは必ず `SGHost.url()`
+  同じ日の実機：メニューの「送迎表（りんく・ぷれいす版）」（リンクは正しく `?page=sougei&e=v3`）でも現体制版で開いた＝サーバーが画面に書き込む `/*__BOOT__*/`（`__SG_EDITION` など）が本物のGoogleで届いていない（原因未確認）。
+  → `assemble_gas.py`：画面のプログラムはすぐ動かさず `window.__sgRun` に積み、最後の `START` で `google.script.url.getLocation` からアドレスの `e`（版）・`d`（日付）を読んでから順に動かす（2.5秒で読めなければそのまま）。テストは `pw/gas_ui.js` の「アドレスから版を読む」
 - **本物のGoogleで画面が真っ白／カレンダーが「接続中…」のまま**（2026-10-28 実機）：Googleは画面をいったん自分の仕組み（mae_html_user の document.write）で書き出し、
   プログラムの中の「タグに見える文字」でログインの土台（gashost）を途中で切った（`Failed to execute 'write' … Unexpected end of input`）。
   → `assemble_gas.py` の `ev()` で、画面のプログラムはすべて「<」を含まない文字列にして `(0,eval)(…)` で実行する。確認画面のプログラムも同じ。

@@ -14,6 +14,13 @@ def lit(c): return json.dumps(c, ensure_ascii=False).replace('<', '\\u003c').rep
 def ev(code):
     parts = [code[i:i + 20000] for i in range(0, len(code), 20000)] or ['']
     return '(0,eval)([\n' + ',\n'.join(lit(x) for x in parts) + '\n].join(""))'
+# 開くときの版（e）・日付（d）は、Googleのアドレスからも読む（google.script.url.getLocation）。
+# サーバーが画面に書き込んだ値（/*__BOOT__*/ の置きかえ）が本物のGoogleで届かず、りんく・ぷれいす版を開いても現体制版になった（2026-10-31 実機）。
+# そのため画面のプログラムはすぐには動かさず（RUN に積む）、アドレスを読んでから順に動かす。読めない・遅いとき（2.5秒）はそのまま動かす
+def runjs(p): return 'window.__sgRun.push(function(){' + js(p) + '});'
+START = ev('''(function(){var done=false;function go(){if(done)return;done=true;var r=window.__sgRun;for(var i=0;i<r.length;i++){try{r[i]()}catch(e){(function(x){setTimeout(function(){throw x})})(e)}}}
+try{var u=window.google&&google.script&&google.script.url;if(u&&u.getLocation){var t=setTimeout(go,2500);u.getLocation(function(l){clearTimeout(t);var p=(l&&l.parameter)||{};
+if(/^v[123]$/.test(p.e||""))window.__SG_EDITION=p.e;if(/^\\d{4}-\\d{2}-\\d{2}$/.test(p.d||""))window.__SG_DATE=p.d;go()});return}}catch(e){}go()})();''')
 cal_html = f'''<!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
@@ -25,9 +32,11 @@ cal_html = f'''<!DOCTYPE html>
 </head><body>
 {rd('gas/calendar_body.txt')}
 <script>/*__BOOT__*/window.__SG_PAGE="calendar";</script>
-<script>{js('calcore.js')}</script>
-<script>{js('gas/gashost.js')}</script>
-<script>{js('gas/calendar_app.js')}</script>
+<script>window.__SG_PAGE="calendar";window.__sgRun=[];</script>
+<script>{runjs('calcore.js')}</script>
+<script>{runjs('gas/gashost.js')}</script>
+<script>{runjs('gas/calendar_app.js')}</script>
+<script>{START}</script>
 </body></html>'''
 sg_html = f'''<!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -43,16 +52,18 @@ sg_html = f'''<!DOCTYPE html>
 <div id="sg-alert" class="sg-alert" hidden></div>
 <div id="root"></div>
 <script>/*__BOOT__*/</script>
+<script>window.__sgRun=[];</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>{js('calcore.js')}</script>
-<script>{js('kvsync.js')}</script>
-<script>{js('calsync.js')}</script>
-<script>{js('gas/kvgas.js')}</script>
-<script>{js('gas/gashost.js')}</script>
-<script>{js('gas/sougei_boot.js')}</script>
-<script>{js('build/app.bundle.gas.js')}</script>
+<script>{runjs('calcore.js')}</script>
+<script>{runjs('kvsync.js')}</script>
+<script>{runjs('calsync.js')}</script>
+<script>{runjs('gas/kvgas.js')}</script>
+<script>{runjs('gas/gashost.js')}</script>
+<script>{runjs('gas/sougei_boot.js')}</script>
+<script>{runjs('build/app.bundle.gas.js')}</script>
+<script>{START}</script>
 </body></html>'''
 open(O+'calendar.html','w',encoding='utf-8').write(cal_html)
 open(O+'sougei.html','w',encoding='utf-8').write(sg_html)

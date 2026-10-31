@@ -62,12 +62,12 @@
  {
   "name": "動作の確認画面（?page=check）：ファイルが最後まで貼れているか・シートがあるかを返し、秘密は出さない",
   "ok": true,
-  "info": "sougei 925660文字・calendar 157324文字、シート5枚"
+  "info": "sougei 927105文字・calendar 158056文字、シート5枚"
  },
  {
   "name": "画面のプログラムに「<」を含めない（Googleが画面を書き出すとき、タグに見える文字でプログラムを途中で切るため）",
   "ok": true,
-  "info": "calendar 5個・sougei 12個・check 1個"
+  "info": "calendar 7個・sougei 14個・check 1個"
  },
  {
   "name": "公開URL：Googleがテスト用の …/dev を返しても、「設定」シートB2の公開URLでメニューのリンク・Claude接続URLを作る",

@@ -9163,8 +9163,13 @@ function DeptTab({ master, update, onReseed }) {
 // 他の版(別のアーティファクト)をタブで開く。URLはこの版の保存領域に覚えておく
 function EditionSwitcher() {
   const [open, setOpen] = useState(false);
-  const base = (typeof window !== "undefined" && window.__SG_BASE) || "";
-  const go = (q) => { const a = document.createElement("a"); a.href = base + q; a.target = "_top"; document.body.appendChild(a); a.click(); a.remove(); };
+  // 公開URL（…/exec）はログイン後に教わったもの（SGHost.url）を使う。開いたときの __SG_BASE は本物のGoogleで届かないことがあり、
+  // そのままだと中身用のアドレス（googleusercontent…/userCodeAppPanel）へ飛んで真っ白になった（2026-10-31 実機）
+  const go = (q) => {
+    const href = typeof window !== "undefined" && window.SGHost && window.SGHost.url ? window.SGHost.url(q) : (/\/exec$/.test((typeof window !== "undefined" && window.__SG_BASE) || "") ? window.__SG_BASE + q : "");
+    if (!href) { window.alert("ほかの版を開くには、スプレッドシートの「設定」シートのB2に公開URL（最後が /exec）を貼ってください。右下の名前のメニューからも開けます。"); return; }
+    const a = document.createElement("a"); a.href = href; a.target = "_top"; document.body.appendChild(a); a.click(); a.remove();
+  };
   return (
     <span className="relative self-end mb-0.5">
       <button className="text-[10px] px-1.5 py-0.5 rounded border border-stone-300 text-stone-500 hover:bg-stone-50" onClick={() => setOpen(!open)}>⇄ 版の切替</button>
