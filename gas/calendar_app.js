@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.10.30j";
+const APP_VERSION="2026.10.31a";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -308,7 +308,7 @@ function draftDrop(){clearTimeout(dT);store.del(DKEY)}
    ・モニタリング／支援会議 … 利用者・時間・場所・対応者 → 対応者の予定（その時間は送迎と重なると注意が出る） */
 const HALF={am:"AM休",pm:"PM休"};
 const SGT_SHORT={staff_off:"職員の休み",staff_plan:"職員の予定",user_absent:"欠席",user_time:"送迎の変更",user_extra:"利用日外利用",help:"ヘルプ",hwork:"休日出勤",shift:"職員時間変更"};
-const PICK={user:["体調不良","受診","家族の用事","ショートステイ"],shift:["早出","遅出","残業","遅刻・早退"]};
+const PICK={user:["体調不良","受診","家族の用事","ショートステイ"],shift:["早出","早出残業","遅出","残業","遅刻・早退"]};
 const NO_MEET={fam:"家族送り",clinic:"受診後送り"},NO_SEND={fam:"家族迎え"};   // 送迎表の「迎えなし・送りなし」の理由としてそのまま出る
 const LABEL_OF_SG={staff_off:"leave",user_absent:"user",user_time:"ride",user_extra:"extra",help:"help",hwork:"hwork",shift:"shift",staff_plan:"other"};
 const USER_LABELS=["help","ride","user","extra"];          // 利用者が関わるラベル（送迎表の担当者だけが入力できる）
@@ -512,7 +512,9 @@ function openEditor(ev,day,draft){
   if(d.sg&&LABEL_OF_SG[d.sg.type]&&!(d.sg.type==="staff_plan"&&PLAN_LABELS.includes(d.label)))d.label=LABEL_OF_SG[d.sg.type];
   if(!d.w)d.w=workOf(d);
   if(!ev&&!draft){fixTimes(d);try{window.SGHost&&window.SGHost.pollOnce&&window.SGHost.pollOnce()}catch{}}   // 新しい予定を入れる前に、ほかの人の分を読み直す   // 最初に選ばれているラベルに合わせて終日・時刻をそろえる
-  ed={id:draft?draft.id:ev?.id||null,base:draft?draft.base:base,d,ro:ro||(!!ev&&!canLabel(d.label)),confirmDel:false,comments:[],err:"",changed:false};
+  // 見るだけになる理由（入力できないときに画面に出す）：まだ準備中・権限がない・送迎表の担当者だけのラベル
+  const roWhy=!(db&&core)?"loading":!S.canWrite?"perm":(!!ev&&!canLabel(d.label))?"label":"";
+  ed={id:draft?draft.id:ev?.id||null,base:draft?draft.base:base,d,ro:ro||roWhy==="label",roWhy,confirmDel:false,comments:[],err:"",changed:false};
   if(!SGN.loaded)loadNames().then(()=>{if(ed)drawSg()});
   drawSheet();
   unsubCm?.();unsubCm=null;
@@ -537,6 +539,7 @@ function drawSheet(){
   $("sheetRoot").innerHTML=`<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t">
   <div class="sheet-head"><h2 id="sh-t">${ed.id?"予定の詳細":"新しい予定"}</h2><button class="icon-btn" data-close aria-label="閉じる">×</button>${ro||ed.confirmDel?"":`<button type="button" class="primary head-save" data-hsave>保存</button>`}</div>
   <form class="sheet-body" id="evForm" novalidate>
+    ${ro?`<div class="note warn" data-ro-why><p>${ed.roWhy==="loading"?"まだ読み込み中のため、入力できません。少し待つと入力できるようになります。":ed.roWhy==="label"?`この予定（${esc(LMAP[d.label]?.n||"")}）は送迎表の担当者・管理者だけが変更できます。見るだけです。`:"この予定は見るだけです（変更できません）。"}</p></div>`:""}
     <div class="note warn" id="liveNote" ${ed.changed?"":"hidden"}><p>この予定は、開いている間に他の人が変更または削除しました。このまま保存すると、どちらを残すか確認する画面が出ます。</p></div>
     <div class="field"><span class="lbl">事業</span><div class="labels bizpick">${["seikatsu","houkago"].map(k=>`<label style="--c:var(--b-${k})"><input type="radio" name="f-biz" id="f-biz-${k}" value="${k}" ${bizOf(d)===k?"checked":""} ${ro?"disabled":""}><span>${BIZN[k]}</span></label>`).join("")}</div>${(()=>{const mm=bizMismatch({biz:d.biz,sg:sgOf(d.label,d.w)});return mm.length?`<p class="err" data-bizmis>⚠ ${esc(mm.join("・"))}さんは${BIZN[otherBiz(bizOf(d))]}の人です。事業が合っているか確かめてください。</p>`:""})()}</div>
     <div class="field"><span class="lbl">ラベル</span><div class="labels lblpick">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
@@ -689,6 +692,11 @@ $("filters").addEventListener("click",e=>{const b=e.target.closest("button");if(
 $("restoreFile").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(f)planRestore(f)});
 document.addEventListener("click",async e=>{
   const t=e.target;
+  // 押せないラベル（灰色）を押したら、なぜ押せないかを出す（何も起きないと「反応しない」に見える）
+  {const lp=t.closest(".lblpick label"),inp=lp&&lp.querySelector("input");
+    if(inp&&inp.disabled&&ed){const n=LMAP[inp.value]?.n||"";
+      toast(ed.ro?(ed.roWhy==="loading"?"まだ読み込み中です。少し待つと入力できるようになります":ed.roWhy==="label"?`この予定（${LMAP[ed.d.label]?.n||""}）は送迎表の担当者・管理者だけが変更できます。見るだけです`:"いまは見るだけです（変更できません）")
+        :`「${n}」は送迎表の担当者・管理者だけが入れられます。必要なときは担当者に頼んでください`);return}}
   if(t.closest("[data-reload]")){location.reload();return}
   if(t.closest("[data-draft-open]")){const d=draftGet();if(d){const cur=d.id?allEvents().find(x=>x.id===d.id):null;openEditor(cur||d.base||null,null,d)}return}
   if(t.closest("[data-draft-drop]")){draftDrop();render();return}
@@ -801,6 +809,7 @@ render();
   window.SGHost.startPolling(20000);   // ほかの人が入れた予定が早く出るように（二重に入れるのを防ぐ）
   window.SGHost.onLogin(()=>core.kick());
   core.on(()=>{render();if(ed)drawComments();else if($("ov")&&$("sy-t"))openSync()});
-  S.dbState="ok";subscribe();core.kick();render();   // 起動時に未送信を自動で再送（障害D）
+  S.dbState="ok";subscribe();core.kick();render();
+  if(ed&&ed.roWhy==="loading"&&!ed.confirmDel){ed.ro=!S.canWrite||(!!ed.base&&!canLabel(ed.d.label));ed.roWhy=ed.ro?(S.canWrite?"label":"perm"):"";drawSheet()}   // 準備中に開いた入力画面を、入力できるように開き直す   // 起動時に未送信を自動で再送（障害D）
   setInterval(()=>{if(core.status().queued&&S.online)core.kick()},30000);
 })();

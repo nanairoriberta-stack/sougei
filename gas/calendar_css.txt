@@ -373,3 +373,6 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 @keyframes swl{from{transform:translateX(40px);opacity:.35}to{transform:none;opacity:1}}
 @keyframes swr{from{transform:translateX(-40px);opacity:.35}to{transform:none;opacity:1}}
 #app.sw-l{animation:swl .2s ease-out}#app.sw-r{animation:swr .2s ease-out}
+/* 押せないラベル（一般職員の ヘルプ・送迎・利用者休み・利用日外利用 など）は灰色に。押すと理由が出る（2026-10-31） */
+.labels input:disabled+span{opacity:.38;background:color-mix(in srgb,var(--ink) 6%,transparent);border-style:dashed;cursor:not-allowed}
+.labels input:disabled:checked+span{opacity:.7}

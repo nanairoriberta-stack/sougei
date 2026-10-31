@@ -47,6 +47,14 @@ const D = path.join(__dirname, "../gas/out");
   // 一般職員：利用者が関わるラベル（ヘルプ・送迎・利用者休み）は選べない。休日出勤は自分の分だけ
   const dis = await pg.$$eval('input[name="f-label"]', (o) => o.filter((x) => x.disabled).map((x) => x.value));
   assert.deepStrictEqual(dis.sort(), ["extra", "help", "ride", "user"]);
+  { // 押せないラベルは灰色に見え、押すと理由が出る（何も起きないと「反応しない」に見える）
+    const op = await pg.$eval("#f-label-help + span", (x) => Number(getComputedStyle(x).opacity)), op2 = await pg.$eval("#f-label-leave + span", (x) => Number(getComputedStyle(x).opacity));
+    assert.ok(op < 0.6 && op2 === 1, "押せないラベルは薄い " + op + " / " + op2);
+    await pg.locator("label:has(#f-label-help)").click({ force: true }); await pg.waitForTimeout(200);
+    assert.ok((await pg.locator("#toast").innerText()).includes("送迎表の担当者・管理者だけ"), "押すと理由");
+    assert.ok(await pg.locator("#toast").isVisible(), "理由が見える");
+    assert.notStrictEqual(await pg.evaluate(() => document.querySelector('input[name="f-label"]:checked').value), "help", "選ばれない");
+    await pg.locator(".sheet").screenshot({ path: "g_label_gray.png" }); }
   await pg.check("#f-label-hwork"); await pg.waitForTimeout(400);
   await pg.locator(".sgbox").screenshot({ path: "g_sgbox.png" });
   const self = await pg.locator(".sgbox .sgchip").innerText(); assert.ok(self.includes("余村慎"));
@@ -223,6 +231,14 @@ const D = path.join(__dirname, "../gas/out");
   await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
   const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-" + label); await A.pg.waitForTimeout(300); };
   const save = async (ms) => { await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(ms || 1500); };
+  { // 職員時間変更の理由に「早出残業」（2026-10-31）
+    await add("shift"); const fills = await A.pg.$$eval('[data-fill="w-reason"]', (b) => b.map((x) => x.textContent));
+    assert.deepStrictEqual(fills, ["早出", "早出残業", "遅出", "残業", "遅刻・早退"]);
+    await A.pg.click('[data-fill="w-reason"][data-v="早出残業"]'); await A.pg.waitForTimeout(200);
+    assert.strictEqual(await A.pg.inputValue("#w-reason"), "早出残業", "押すと理由に入る");
+    assert.strictEqual(await A.pg.locator("[data-ro-why]").count(), 0, "入力できる画面には理由の帯は出ない");
+    await A.pg.locator("[data-close]").first().click(); await A.pg.waitForTimeout(300);
+    if (await A.pg.locator("#evForm").count()) { await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); } }
   // 送迎：迎えは「受診後送り」、送りは時間変更
   await add("ride"); assert.strictEqual(await A.pg.locator("#f-title").count(), 0, "その他予定以外はタイトルの欄なし"); await pick("users", "森");
   const meetOpts = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
