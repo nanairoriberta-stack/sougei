@@ -33,7 +33,7 @@ function fakeAI(body) {
   return out({ reply: "わかりません", changes: [] });
 }
 (async () => {
-  const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Code.gs"].map((f) => path.join(D, f))); g.ctx.setup();
+  const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Lib5_shift.gs", "Code.gs"].map((f) => path.join(D, f))); g.ctx.setup();
   g.ctx.aiMessages_ = (me, body) => fakeAI(body);
   g.ctx.aiEnabled_ = () => true;   // キーを入れたときだけボタンが出る
   const api = (t, m, a) => JSON.parse(JSON.stringify(g.ctx.api(t, m, JSON.parse(JSON.stringify(a)))));

@@ -1,0 +1,63 @@
+/* シフト表（マンション職員）：穴の判定・LINE文・基本パターンの下書き・希望のまとめ */
+"use strict";
+const assert = require("assert");
+const S = require("./shiftcore.js");
+const ym = "2026-11", cfg = S.cfgOf("m");
+assert.strictEqual(S.daysOfMonth(ym).length, 30);
+assert.strictEqual(S.label("2026-11-03"), "11/3(火)");
+assert.deepStrictEqual(cfg.members.map((m) => m.name), ["余村", "横田", "秋山", "長島", "近藤", "宮永", "橋本", "野津"], "写真の男性職員");
+assert.deepStrictEqual(S.cfgOf("f").members, [], "女性は職員をこれから入れる");
+
+// 何も入っていない月：要る枠がすべて穴（日2+2・月2+3・火〜木3+3・金3+2・土2+2）
+const need = { 0: 4, 1: 5, 2: 6, 3: 6, 4: 6, 5: 5, 6: 4 };
+assert.strictEqual(S.holes({}, cfg, ym).length, S.daysOfMonth(ym).reduce((a, d) => a + need[S.wdOf(d)], 0));
+
+// 11/2(月)：写真どおりに入れる → 穴なし。橋本は早①と遅②の両方
+const month = { days: { "2026-11-02": { e: { 1: { n: "橋本" }, 2: { n: "野津" } }, l: { 1: { n: "宮永", t: "16~22" }, 2: { n: "橋本" }, 3: { n: "野津" } }, d: ["横田", "近藤", "秋山"] } },
+  wish: { "余村": { "2026-11-03": "休" }, "近藤": { "2026-11-06": "PM休", "2026-11-13": "PM休" } }, wishNote: { "野津": "13〜17日 休" } };
+assert.ok(!S.holes(month, cfg, ym).some((h) => h.date === "2026-11-02"), "11/2は埋まっている");
+assert.deepStrictEqual(S.offList(month, cfg, "2026-11-02"), ["余村", "長島"], "休み＝どこにも入っていない人");
+
+// 11/3(火)：早①②だけ入っている → 早③・遅①②③が穴
+month.days["2026-11-03"] = { e: { 1: { n: "横田" }, 2: { n: "橋本" } }, l: {}, d: [] };
+const h3 = S.holes(month, cfg, ym).filter((h) => h.date === "2026-11-03").map((h) => h.kind + h.idx);
+assert.deepStrictEqual(h3, ["e3", "l1", "l2", "l3"]);
+// 入れそうな人：その日入っていない・希望休ではない（余村は3日休み希望）。遅番の曜日の人が先
+const c3 = S.candidates(month, cfg, "2026-11-03", "l");
+assert.ok(!c3.includes("余村") && !c3.includes("横田") && !c3.includes("橋本"), c3.join());
+assert.strictEqual(c3[0], "長島", "火曜が遅の長島が先");
+
+// LINE文
+const txt = S.lineText(month, cfg, ym, { groupName: "男性", withNames: true });
+assert.ok(txt.startsWith("【11月のシフト（男性） 出勤のお願い】"), txt);
+assert.ok(txt.includes("・11/3(火) 早③・遅①・遅②・遅③（入れそうな人："), txt);
+assert.ok(!txt.includes("11/2(月)"), "埋まっている日は出さない");
+assert.ok(txt.includes("出勤できる方は、日付と「早・遅」を返信してください。"));
+assert.ok(!S.lineText(month, cfg, ym, {}).includes("入れそうな人"), "名前なしも選べる");
+const full = { days: Object.fromEntries(S.daysOfMonth(ym).map((d) => [d, { e: { 1: { n: "a" }, 2: { n: "b" }, 3: { n: "c" } }, l: { 1: { n: "d" }, 2: { n: "e" }, 3: { n: "f" } } }])) };
+assert.ok(S.lineText(full, cfg, ym, {}).includes("空いている枠はありません"));
+
+// 希望休なのに入っている
+month.days["2026-11-06"] = { e: { 1: { n: "近藤" } } };
+assert.deepStrictEqual(S.conflicts(month, cfg, ym), [{ date: "2026-11-06", name: "近藤", wish: "PM休" }]);
+
+// 基本パターンの下書き：空いている枠だけ埋める。入っている枠・希望休は守る
+const dr = S.draft(month, cfg, ym);
+assert.deepStrictEqual(dr.days["2026-11-02"], Object.assign({}, month.days["2026-11-02"], { e: month.days["2026-11-02"].e, l: month.days["2026-11-02"].l }), "埋まっていた日はそのまま");
+assert.strictEqual(dr.days["2026-11-03"].e[1].n, "横田", "入っている枠は変えない");
+assert.ok(!S.workers(dr, "2026-11-03").has("余村"), "希望休の日は入れない");
+const wed = dr.days["2026-11-04"];   // 水曜：早＝余村・横田・橋本、遅＝長島・宮永・橋本、休＝秋山・近藤・野津
+assert.deepStrictEqual(Object.values(wed.e).map((s) => s.n), ["余村", "横田", "橋本"]);
+assert.deepStrictEqual(Object.values(wed.l).map((s) => s.n), ["長島", "宮永", "橋本"], "早・遅の橋本は両方に入る");
+assert.ok(S.holes(dr, cfg, ym).length < S.holes(month, cfg, ym).length, "下書きで穴が減る");
+// 長島が11/11(水)に希望休 → その日の遅③が空く（その日がLINE文に出る）
+const m2 = JSON.parse(JSON.stringify(month)); m2.wish["長島"] = { "2026-11-11": "休" };
+const dr2 = S.draft(m2, cfg, ym);
+assert.deepStrictEqual(S.holes(dr2, cfg, ym).filter((h) => h.date === "2026-11-11").map((h) => h.kind + h.idx), ["l3"], "希望休で空いた枠が穴に残る");
+assert.ok(S.lineText(dr2, cfg, ym, {}).includes("・11/11(水) 遅③"));
+
+// 希望のまとめ（写真の「今月の希望休・希望勤務」）
+assert.strictEqual(S.wishSummary(month, "近藤"), "6(金)・13(金)：PM休");
+assert.strictEqual(S.wishSummary(month, "野津"), "13〜17日 休");
+assert.strictEqual(S.wishSummary(month, "長島"), "なし");
+console.log("shift OK", S.holes(dr, cfg, ym).length, "の穴が下書きのあとに残る");

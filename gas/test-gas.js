@@ -15,7 +15,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms / SCALE)))
 let seed = 4242; const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 const engFor = (ed) => { global.window = { __SG_EDITION: ed }; delete require.cache[require.resolve("../eng.cjs")]; return require("../eng.cjs"); };
 
-function newServer() { const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Code.gs"].map((f) => path.join(D, f))); g.ctx.setup(); return g; }
+function newServer() { const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Lib5_shift.gs", "Code.gs"].map((f) => path.join(D, f))); g.ctx.setup(); return g; }
 function memStore() { const m = new Map(); return { m, get: (k) => (m.has(k) ? m.get(k) : null), set: (k, v) => { m.set(k, String(v)); return true; }, del: (k) => m.delete(k), keys: (p) => [...m.keys()].filter((k) => k.startsWith(p)), persistent: true }; }
 /* 端末：google.script.run の代わりに、通信の遅れ・切断・応答消失を挟んでサーバーの api() を呼ぶ */
 function device(g, fault = {}, store) {
@@ -547,6 +547,47 @@ async function bootstrap() {
     assert.strictEqual(xfo({ page: "calendar" }), 1, "ふつうのカレンダーは今までどおり");
     assert.strictEqual(xfo({ page: "sougei", embed: "1" }), 1, "送迎表は中に出さない");
     return "page=calendar&embed=1 だけ ALLOWALL";
+  });
+
+  await test("シフト表（男性・女性）：G列の人と管理者が組める・表の職員は自分の希望だけ・同時に直しても消えない・変更履歴", async () => {
+    const { g, admin } = await bootstrap();
+    const ids = g.sheets.get("職員ID").data;
+    assert.strictEqual(String(ids[0][6]), "シフト表", "G列の見出し");
+    const row = (nm) => ids.find((r) => r[1] === nm);
+    row("白戸")[6] = "男性"; row("八壁")[6] = "女性";
+    const shiro = device(g); await shiro.login(noOf(g, "白戸"), pinOf(g, "白戸"));
+    const yoko = device(g); await yoko.login(noOf(g, "横田"), pinOf(g, "横田"));   // 写真の表の職員（G列なし）
+    const hachi = device(g); await hachi.login(noOf(g, "八壁"), pinOf(g, "八壁"));
+    const q = { group: "m", ym: "2026-11" };
+    const g0 = await shiro.call("shift.get", q);
+    assert.ok(g0.canEdit && g0.month.rev === 0, "G列「男性」の人は男性の表を組める");
+    assert.deepStrictEqual((await admin.call("shift.get", { group: "f", ym: "2026-11" })).canEdit, true, "管理者は両方");
+    const gy = await yoko.call("shift.get", q); assert.ok(!gy.canEdit && gy.member, "表の職員は見られる（組めない）");
+    await hachi.call("shift.get", q).then(() => assert.fail("女性だけの人は男性の表を見られない"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+    assert.ok((await hachi.call("shift.get", { group: "f", ym: "2026-11" })).canEdit);
+    // 2人が同じ月の別の日を同時に直す → どちらも残る
+    const base = null;
+    await shiro.call("shift.save", Object.assign({ kind: "month", base, baseKnown: true, mine: { days: { "2026-11-02": { e: { 1: { n: "橋本" } } } } } }, q));
+    const r2 = await admin.call("shift.save", Object.assign({ kind: "month", base, baseKnown: true, mine: { days: { "2026-11-03": { l: { 1: { n: "長島" } } } } } }, q));
+    assert.strictEqual(r2.value.days["2026-11-02"].e[1].n, "橋本", "先に保存した日が消えない");
+    assert.strictEqual(r2.value.days["2026-11-03"].l[1].n, "長島");
+    // 表の職員：自分の希望だけ。ほかの欄・ほかの人の希望は送っても使わない
+    const cur = (await yoko.call("shift.get", q)).month.value;
+    const evil = JSON.parse(JSON.stringify(cur)); evil.days = {}; evil.wish = { "横田": { "2026-11-08": "休" }, "秋山": { "2026-11-09": "休" } }; evil.wishNote = { "横田": "8日 休みたい" };
+    const r3 = await yoko.call("shift.save", Object.assign({ kind: "month", base: cur, baseKnown: true, mine: evil }, q));
+    assert.strictEqual(r3.value.wish["横田"]["2026-11-08"], "休", "自分の希望は入る");
+    assert.ok(!r3.value.wish["秋山"], "ほかの人の希望は入らない");
+    assert.strictEqual(r3.value.days["2026-11-02"].e[1].n, "橋本", "シフトは消えない");
+    assert.strictEqual(r3.value.wishNote["横田"], "8日 休みたい");
+    await yoko.call("shift.save", Object.assign({ kind: "cfg", base: null, baseKnown: true, mine: { members: [] } }, q)).then(() => assert.fail("設定は変えられない"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+    // 設定（職員・曜日ごとの枠の数）
+    await hachi.call("shift.save", { group: "f", ym: "2026-11", kind: "cfg", base: null, baseKnown: true, mine: { members: [{ name: "女性A", pat: { 1: "早" } }], need: { 1: { e: 2, l: 2 } } } });
+    const gf = await hachi.call("shift.get", { group: "f", ym: "2026-11" });
+    assert.deepStrictEqual(gf.cfg.value.members.map((m) => m.name), ["女性A"]);
+    const log = g.sheets.get("変更履歴").data.slice(1).map((r) => r.join(" | "));
+    assert.ok(log.some((l) => l.includes("シフト表") && l.includes("男性 2026-11") && l.includes("希望の変更") && l.includes("横田")), "変更履歴");
+    assert.ok(g.ctx.doGet({ parameter: { page: "shift" } }).getContent().includes("SGShift"), "?page=shift でシフト表の画面");
+    return "白戸＝男性を組める・横田＝自分の希望だけ・八壁＝女性だけ、別の日の同時保存はどちらも残る";
   });
 
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {

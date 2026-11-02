@@ -7,7 +7,7 @@ global.window = {}; global.SGKV = require("../kvsync.js");
 const engFor = (ed) => { global.window = { __SG_EDITION: ed }; delete require.cache[require.resolve("../eng.cjs")]; return require("../eng.cjs"); };
 const D = path.join(__dirname, "../gas/out");
 (async () => {
-  const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Code.gs"].map((f) => path.join(D, f))); g.ctx.setup();
+  const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Lib5_shift.gs", "Code.gs"].map((f) => path.join(D, f))); g.ctx.setup();
   const api = (t, m, a) => JSON.parse(JSON.stringify(g.ctx.api(t, m, JSON.parse(JSON.stringify(a)))));
   const rows = () => g.sheets.get("職員ID").data.slice(1).filter((r) => r[0] !== "" && r[0] !== undefined);
   const pin0 = String(rows()[0][3]);
@@ -270,6 +270,66 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await W.pg.locator('[data-item-id="lk_rqNEW"]').innerText()).includes("りんく依頼"));
     await W.pg.screenshot({ path: "g_link_unsaved.png" });
     assert.deepStrictEqual(real(W.errs), []); await W.pg.context().close(); console.log("まだ無い日のりんく依頼: OK"); }
+  { // シフト表（マンション職員・男性/女性）：基本パターンで下書き → 空き → LINE文、枠の入れ替え、希望休、設定、表の職員は自分の希望だけ（2026-11-02）
+    const sb = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-02";`;
+    const T = await open("shift.html", { width: 1400, height: 1000 }, sb, "shift.html");
+    await T.pg.waitForTimeout(500); await T.pg.fill("#sghNo", "000"); await T.pg.fill("#sghPin", "5829"); await T.pg.click("#sghGo"); await T.pg.waitForTimeout(2500);
+    assert.ok((await T.pg.locator(".sh-title").innerText()).includes("男性職員"), "男性の表");
+    assert.strictEqual(await T.pg.locator(".sh-month b").innerText(), "2026年11月");
+    assert.ok(await T.pg.locator(".slot.hole").count() > 100, "はじめは全部空き");
+    await T.pg.click('[data-act="draft"]'); await T.pg.waitForTimeout(1500);
+    assert.strictEqual(await T.pg.locator(".slot.hole").count(), 0, "基本パターンで全部埋まる");
+    const wed = await T.pg.locator('td[data-day="2026-11-04"]').innerText();
+    assert.ok(wed.includes("早①余村") && wed.includes("遅③橋本") && wed.includes("休み：秋山、近藤、野津"), wed);
+    // 11/11(水)の遅③を空ける → 穴になり、LINE文に出る
+    await T.pg.click('[data-slot="2026-11-11|l|3"]'); await T.pg.waitForTimeout(200); await T.pg.click("[data-pick-clear]"); await T.pg.waitForTimeout(300);
+    assert.ok(await T.pg.locator('[data-slot="2026-11-11|l|3"].hole').count() === 1, "空けた枠は穴");
+    const line = await T.pg.inputValue("#shLine");
+    assert.ok(line.includes("【11月のシフト（男性） 出勤のお願い】") && line.includes("・11/11(水) 遅③（入れそうな人：") && line.includes("返信してください"), line);
+    await T.pg.uncheck("#shNames"); await T.pg.waitForTimeout(200);
+    assert.ok(!(await T.pg.inputValue("#shLine")).includes("入れそうな人"), "名前なしにもできる");
+    await T.pg.locator("#shHoles").screenshot({ path: "g_shiftpage_line.png" });
+    await T.pg.click('[data-act="copy"]'); await T.pg.waitForTimeout(300);
+    assert.ok((await T.pg.locator("#shToast").innerText()).includes("コピー"), "コピー");
+    // 枠を入れ替える（時間の補足つき）
+    await T.pg.click('[data-slot="2026-11-03|e|3"]'); await T.pg.waitForTimeout(200);
+    await T.pg.fill("#shTime", "6~9"); await T.pg.click('[data-pick="余村"]'); await T.pg.waitForTimeout(300);
+    assert.ok((await T.pg.locator('[data-slot="2026-11-03|e|3"]').innerText()).includes("余村(6~9)"));
+    // 希望を入れる：秋山 11/9(月) 休 → 入っているので「希望とちがう」
+    await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", "秋山");
+    await T.pg.click('td[data-day="2026-11-09"] .dnum'); await T.pg.waitForTimeout(300);
+    assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("9(月)：休"), "今月の希望の列");
+    assert.ok((await T.pg.locator(".conf").innerText()).includes("秋山さんは「休」の希望ですが入っています"));
+    await T.pg.waitForTimeout(2500);
+    const sv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value;
+    assert.deepStrictEqual(sv.days["2026-11-03"].e[3], { n: "余村", t: "6~9" }, "サーバーに保存");
+    assert.ok(!sv.days["2026-11-11"].l[3], "空けた枠も保存");
+    assert.strictEqual(sv.wish["秋山"]["2026-11-09"], "休");
+    await T.pg.click('[data-mode="shift"]'); await T.pg.waitForTimeout(200);
+    await T.pg.screenshot({ path: "g_shiftpage.png", fullPage: true });
+    // 女性の表：職員を設定で入れる
+    await T.pg.click('[data-group="f"]'); await T.pg.waitForTimeout(1500);
+    assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("職員がまだいません"));
+    await T.pg.click('[data-act="settings"]'); await T.pg.waitForTimeout(200);
+    await T.pg.click("[data-madd]"); await T.pg.fill('[data-mname="0"]', "女性A"); await T.pg.click("[data-madd]"); await T.pg.fill('[data-mname="1"]', "女性B");
+    await T.pg.selectOption('[data-need="e|1"]', "1"); await T.pg.locator(".pk.wide").screenshot({ path: "g_shiftpage_settings.png" });
+    await T.pg.click("[data-set-save]"); await T.pg.waitForTimeout(2500);
+    assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("女性A"), "女性の職員");
+    assert.ok((await T.pg.locator(".sh-title").innerText()).includes("女性職員"));
+    assert.strictEqual(api(t, "shift.get", [{ group: "f", ym: "2026-11" }]).data.cfg.value.members.length, 2);
+    assert.deepStrictEqual(real(T.errs), [], "画面エラーなし"); await T.pg.context().close();
+    // 表の職員（横田・一般）：スマホで開くと自分の希望だけ入れられる
+    const yk = rows().find((r) => r[1] === "横田");
+    const Y = await open("shift.html", { width: 390, height: 844 }, sb, "shift_m.html");
+    await Y.pg.waitForTimeout(500); await Y.pg.fill("#sghNo", String(yk[0]).replace(/^'/, "")); await Y.pg.fill("#sghPin", String(yk[3])); await Y.pg.click("#sghGo"); await Y.pg.waitForTimeout(1000);
+    if (await Y.pg.locator("#sghNew").count()) { await Y.pg.fill("#sghOld", String(yk[3])); await Y.pg.fill("#sghNew", "3871"); await Y.pg.fill("#sghNew2", "3871"); await Y.pg.click("#sghPinF .go"); await Y.pg.waitForTimeout(2500); }
+    assert.strictEqual(await Y.pg.locator('[data-act="draft"]').count(), 0, "組むボタンはない");
+    assert.ok((await Y.pg.locator(".sh-wishbar").innerText()).includes("横田"), "自分の希望");
+    await Y.pg.click('td[data-day="2026-11-20"] .dnum'); await Y.pg.waitForTimeout(2500);
+    assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.wish["横田"]["2026-11-20"], "休", "自分の希望が保存");
+    await Y.pg.screenshot({ path: "g_shiftpage_mobile.png" });
+    assert.deepStrictEqual(real(Y.errs), [], "画面エラーなし"); await Y.pg.context().close();
+    console.log("シフト表: 下書き→穴→LINE文・希望・設定・職員の希望 OK"); }
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   assert.strictEqual(await P.pg.getByRole("button", { name: /AI調整|AIと相談/ }).count(), 0, "料金がかかるAIのボタンは、キーが無ければ出ない");
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);
@@ -593,7 +653,7 @@ const D = path.join(__dirname, "../gas/out");
     await N.pg.waitForTimeout(500); await N.pg.fill("#sghNo", "000"); await N.pg.fill("#sghPin", "5829"); await N.pg.click("#sghGo"); await N.pg.waitForTimeout(2500);
     await N.pg.click(".sgh-chip"); await N.pg.waitForTimeout(300);
     const hrefs = await N.pg.$$eval(".sgh-menu a", (a) => a.map((x) => x.getAttribute("href")));
-    assert.ok(hrefs.length >= 3 && hrefs.every((h) => h.startsWith("https://script.google.com/macros/s/TEST/exec?page=sougei")), "メニューのリンクが公開URL: " + hrefs.join(" "));
+    assert.ok(hrefs.filter((h) => h.startsWith("https://script.google.com/macros/s/TEST/exec?page=sougei")).length >= 3 && hrefs.every((h) => /^https:\/\/script\.google\.com\/macros\/s\/TEST\/exec\?page=(sougei|shift)/.test(h)), "メニューのリンクが公開URL（送迎表3つ＋シフト表）: " + hrefs.join(" "));
     console.log("公開URLが届かないとき → ログイン後のリンク:", hrefs[0]);
   }
   // 動作の確認画面（?page=check）：全部 ✓ になる。普段の画面でエラーが出たら、画面の下に理由が出る

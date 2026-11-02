@@ -8,7 +8,7 @@ const engFor = (ed) => { global.window = { __SG_EDITION: ed }; delete require.ca
 let pass = 0, fail = 0; const ok = (c, m) => { if (c) { pass++; console.log("  ✓ " + m); } else { fail++; console.log("  ✗ " + m); } };
 
 function setupGas() {
-  const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Lib4_engine.gs", "Code.gs", "Mcp.gs"].map((f) => path.join(D, f))); g.ctx.setup();
+  const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Lib5_shift.gs", "Lib4_engine.gs", "Code.gs", "Mcp.gs"].map((f) => path.join(D, f))); g.ctx.setup();
   const api = (t, m, a) => JSON.parse(JSON.stringify(g.ctx.api(t, m, JSON.parse(JSON.stringify(a)))));
   const rows = () => g.sheets.get("職員ID").data.slice(1).filter((r) => r[0] !== "" && r[0] !== undefined);
   const pin0 = String(rows()[0][3]);

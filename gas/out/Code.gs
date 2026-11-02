@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.10.31k',
+  VERSION: '2026.11.02a',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -25,7 +25,7 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.mcp) return ContentService.createTextOutput(JSON.stringify({ name: '送迎表', message: 'これはClaudeのカスタムコネクタ用の接続先です。Claudeの「設定 → コネクタ → カスタムコネクタを追加」にこのURLを貼ってください。' })).setMimeType(ContentService.MimeType.JSON);
   if (p.page === 'check') return checkPage_();
-  var page = p.page === 'sougei' ? 'sougei' : 'calendar';
+  var page = p.page === 'sougei' ? 'sougei' : p.page === 'shift' ? 'shift' : 'calendar';
   var ed = APP.EDITIONS.hasOwnProperty(p.e) ? p.e : 'v1';
   var base = appUrl_();
   var d = /^\d{4}-\d{2}-\d{2}$/.test(String(p.d || '')) ? String(p.d) : '';
@@ -33,7 +33,7 @@ function doGet(e) {
   var html = HtmlService.createHtmlOutputFromFile(page).getContent()
     .replace('/*__BOOT__*/', 'window.__SG_EDITION=' + js(ed) + ';window.__SG_BASE=' + js(base) + ';window.__SG_DATE=' + js(d) + ';');
   return HtmlService.createHtmlOutput(html)
-    .setTitle(page === 'sougei' ? '送迎表（' + APP.EDITION_LABEL[ed] + '）' : 'カレンダー')
+    .setTitle(page === 'sougei' ? '送迎表（' + APP.EDITION_LABEL[ed] + '）' : page === 'shift' ? 'シフト表' : 'カレンダー')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
     // 送迎表の画面の右側に出すカレンダー（?page=calendar&embed=1）だけは、ほかの画面の中に出せるようにする
     .setXFrameOptionsMode(page === 'calendar' && p.embed === '1' ? HtmlService.XFrameOptionsMode.ALLOWALL : HtmlService.XFrameOptionsMode.DEFAULT);
@@ -67,7 +67,7 @@ function checkServer() {
     var ids = ss.getSheetByName(APP.SH.ids); out.staffRows = ids ? Math.max(0, ids.getLastRow() - 1) : 0;
     var docs = ss.getSheetByName(APP.SH.docs); out.docRows = docs ? Math.max(0, docs.getLastRow() - 1) : 0;
   } catch (e) { out.sheetError = String(e && e.message || e); }
-  ['calendar', 'sougei'].forEach(function (f) {
+  ['calendar', 'sougei', 'shift'].forEach(function (f) {
     try { var c = HtmlService.createHtmlOutputFromFile(f).getContent(); out.files[f] = { len: c.length, end: /<\/html>\s*$/.test(c), boot: c.indexOf('/*__BOOT__*/') >= 0 }; }
     catch (e) { out.files[f] = { error: String(e && e.message || e) }; }
   });
@@ -104,7 +104,7 @@ function checkScript_() {
         if (!r) return [false, '返事が空でした'];
         var miss = Object.keys(r.sheets || {}).filter(function (k) { return !r.sheets[k]; });
         var f = r.files || {}, bad = [];
-        ['calendar', 'sougei'].forEach(function (n) { var x = f[n] || {}; if (x.error) bad.push(n + '：ファイルが見つかりません（名前は「' + n + '」）'); else if (!x.end) bad.push(n + '：最後まで貼れていません（' + x.len + '文字で切れています。全部消して貼り直してください）'); else if (!x.boot) bad.push(n + '：中身が違います（貼り直してください）'); });
+        ['calendar', 'sougei', 'shift'].forEach(function (n) { var x = f[n] || {}; if (x.error) bad.push(n + '：ファイルが見つかりません（名前は「' + n + '」）'); else if (!x.end) bad.push(n + '：最後まで貼れていません（' + x.len + '文字で切れています。全部消して貼り直してください）'); else if (!x.boot) bad.push(n + '：中身が違います（貼り直してください）'); });
         var note = '版 ' + r.version + '・職員ID ' + r.staffRows + '行・データ ' + r.docRows + '行・calendar ' + ((f.calendar || {}).len || 0) + '文字・sougei ' + ((f.sougei || {}).len || 0) + '文字';
         if (r.sheetError) return [false, 'スプレッドシートを読めません：' + r.sheetError];
         if (miss.length) return [false, 'シートがありません：' + miss.join('、') + '（エディタで setup を実行してください）。' + note];
@@ -136,7 +136,8 @@ function setup() {
     if (hide) sh.hideSheet();
     return sh;
   };
-  var ids = mk(APP.SH.ids, ['職員番号', '名前', '権限', '初期暗証番号', '利用停止', '備考'], false);
+  var ids = mk(APP.SH.ids, ['職員番号', '名前', '権限', '初期暗証番号', '利用停止', '備考', 'シフト表'], false);
+  if (!String(ids.getRange(1, 7).getValue()).trim()) ids.getRange(1, 7).setValue('シフト表');   // 以前に作ったシートにも見出しを足す
   mk(APP.SH.log, ['日時', '職員番号', '名前', '種類', '対象', '内容'], false);
   mk(APP.SH.auth, ['職員番号', 'salt', 'hash', '失敗回数', 'ロック解除', '変更済み'], true);
   mk(APP.SH.sess, ['tokenHash', '職員番号', '期限', '端末'], true);
@@ -207,6 +208,8 @@ var HANDLERS = {
   'kv.cas': function (me, a) { return kvCas_(me, a[0]); },
   'sync.poll': function (me, a) { return poll_(a[0] || {}); },
   'sg.exportAlerts': function (me, a) { return exportAlerts_(String((a[0] || {}).ns || '')); },
+  'shift.get': function (me, a) { return shiftGet_(me, a[0] || {}); },
+  'shift.save': function (me, a) { return shiftSave_(me, a[0] || {}); },
   'sg.linkReqs': function (me, a) { return linkReqsOf_(String(a[0] || '')); },   // 生活介護の画面に、りんく・ぷれいす版からの依頼を出す（表示だけ）
   'docs.query': function (me, a) { return docsQuery_(a[0] || {}); },
   'docs.get': function (me, a) { return docGetPublic_(String(a[0])); },
@@ -239,7 +242,7 @@ function randomPin_() { var s = ''; for (var i = 0; i < 4; i++) s += Math.floor(
 function hash_(s) { return 'h:' + Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)); }
 function staffRow_(no) {
   var r = rows_(APP.SH.ids);
-  for (var i = 0; i < r.length; i++) if (normNo_(r[i][0]) === no) return { row: i + 2, no: no, name: String(r[i][1]).trim(), role: APP.ROLES.indexOf(String(r[i][2]).trim()) >= 0 ? String(r[i][2]).trim() : '一般', initPin: pinOf_(r[i][3]), stopped: !!String(r[i][4]).trim() };
+  for (var i = 0; i < r.length; i++) if (normNo_(r[i][0]) === no) return { row: i + 2, no: no, name: String(r[i][1]).trim(), role: APP.ROLES.indexOf(String(r[i][2]).trim()) >= 0 ? String(r[i][2]).trim() : '一般', initPin: pinOf_(r[i][3]), stopped: !!String(r[i][4]).trim(), shift: String(r[i][6] == null ? '' : r[i][6]).trim() };
   return null;
 }
 function normNo_(no) { var s = String(no == null ? '' : no).replace(/[^0-9]/g, ''); return s ? pad3_(Number(s)) : ''; }
@@ -262,7 +265,7 @@ function login_(no, pin, device) {
     var token = Utilities.getUuid() + Utilities.getUuid();
     sheet_(APP.SH.sess).appendRow([hash_(token), txt_(no), new Date(now + APP.SESSION_DAYS * 864e5), safe_(String(device || '').slice(0, 80))]);
     log_({ no: no, name: st.name }, 'ログイン', String(device || '').slice(0, 40), '');
-    var me = { no: no, name: st.name, role: st.role, mustChange: !(auth && auth.changed) };
+    var me = { no: no, name: st.name, role: st.role, mustChange: !(auth && auth.changed), shift: st.shift };
     return { token: token, me: publicMe_(me) };
   });
 }
@@ -314,7 +317,7 @@ function session_(token) {
   var st = staffRow_(no);
   if (!st || st.stopped) return null;
   var auth = authRow_(no);
-  var me = { no: no, name: st.name, role: st.role, mustChange: !(auth && auth.changed) };
+  var me = { no: no, name: st.name, role: st.role, mustChange: !(auth && auth.changed), shift: st.shift };
   try { cache.put('m:' + th, JSON.stringify(me), 120); } catch (e) {}
   me.tokenHash = th;
   return me;
@@ -323,7 +326,7 @@ function logout_(token) {
   var th = hash_(String(token || '')); CacheService.getScriptCache().remove('s:' + th); CacheService.getScriptCache().remove('m:' + th);
   withLock_(function () { var r = rows_(APP.SH.sess), sh = sheet_(APP.SH.sess); for (var i = 0; i < r.length; i++) if (r[i][0] === th) sh.getRange(i + 2, 3).setValue(new Date(0)); });
 }
-function publicMe_(me) { return { no: me.no, name: me.name, role: me.role, mustChange: !!me.mustChange, canSougei: me.role === '管理者' || me.role === '送迎表', admin: me.role === '管理者', version: APP.VERSION, aiApi: aiEnabled_() }; }
+function publicMe_(me) { return { no: me.no, name: me.name, role: me.role, mustChange: !!me.mustChange, canSougei: me.role === '管理者' || me.role === '送迎表', admin: me.role === '管理者', version: APP.VERSION, aiApi: aiEnabled_(), shift: shiftGroups_(me) }; }
 /* 料金がかかるAI（API版の AI調整・AIと相談）を使えるか。キーを入れていなければ、送迎表の画面にボタンを出さない */
 function aiEnabled_() { try { return !!PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY'); } catch (e) { return false; } }
 function staffList_() {
@@ -485,7 +488,7 @@ function utf8len_(s) { var n = 0; for (var i = 0; i < s.length; i++) { var c = s
 /* 変更通知用のカウンタ（端末は定期的にこれだけを確認する） */
 function bump_(path) {
   var c = CacheService.getScriptCache();
-  var k = path.indexOf('kv/') === 0 ? 'rev:' + path : path.indexOf('prop/') === 0 ? 'rev:props' : 'rev:cal';
+  var k = path.indexOf('kv/') === 0 ? 'rev:' + path : path.indexOf('prop/') === 0 ? 'rev:props' : path.indexOf('shift/') === 0 ? 'rev:shift' : 'rev:cal';
   try { c.put(k, String(Date.now()), 21600); } catch (e) {}
 }
 function docGetPublic_(path) {
@@ -713,6 +716,55 @@ function linkSheetValue_(ns, date, value, idx) {
   if (ns !== tns) return value;
   var v3s = docGet_(kvPath_('v3:sheet:' + date), idx), v3m2 = v3s ? docGet_(kvPath_('v3:master'), idx) : null;
   return SGCal.linkApply(value, v3s ? SGCal.linkReqs(v3s.value.v, v3m2 ? v3m2.value.v : null) : []);
+}
+/* ================= シフト表（マンション職員の早番・遅番。2026-11-02 依頼者） =================
+   男性・女性の2つ。「職員ID」シートG列（シフト表）に 男性／女性／両方 と書いた人と管理者が組める（作る・直す）。
+   表に名前がある職員は、自分の希望（休・AM休・PM休・早・遅・日）だけ入れられる。
+   保存は送迎表と同じく、ロックの中で3者マージ（ほかの人の変更を消さない）＋変更履歴 */
+function shiftGroups_(me) {
+  if (me.role === '管理者') return ['m', 'f'];
+  var v = String(me.shift || '');
+  if (/両方|全|◯|○|〇/.test(v)) return ['m', 'f'];
+  var out = []; if (/男/.test(v)) out.push('m'); if (/女/.test(v)) out.push('f'); return out;
+}
+function shiftArgs_(a) {
+  var group = a && a.group === 'f' ? 'f' : a && a.group === 'm' ? 'm' : '';
+  var ym = String((a && a.ym) || '');
+  if (!group || !/^\d{4}-\d{2}$/.test(ym)) throw { code: 'invalid_argument', message: 'シフト表の指定が正しくありません' };
+  return { group: group, ym: ym, cfgPath: 'shift/' + group + '/cfg', monthPath: 'shift/' + group + '/' + ym };
+}
+function shiftGet_(me, a) {
+  var q = shiftArgs_(a), idx = docIndex_();
+  var c = docGet_(q.cfgPath, idx), m = docGet_(q.monthPath, idx);
+  var cfg = SGShift.cfgOf(q.group, c ? c.value : null), canEdit = shiftGroups_(me).indexOf(q.group) >= 0;
+  var member = (cfg.members || []).some(function (x) { return x.name === me.name; });
+  if (!canEdit && !member) throw { code: 'invalid_argument', message: 'このシフト表を見る権限がありません（「職員ID」シートG列か、表の職員に入っている人だけ）' };
+  return { cfg: { rev: c ? c.rev : 0, value: c ? c.value : null }, month: { rev: m ? m.rev : 0, value: m ? m.value : null }, canEdit: canEdit, member: member };
+}
+function shiftSave_(me, a) {
+  var q = shiftArgs_(a), kind = a.kind === 'cfg' ? 'cfg' : 'month', canEdit = shiftGroups_(me).indexOf(q.group) >= 0;
+  if (kind === 'cfg' && !canEdit) throw { code: 'invalid_argument', message: 'シフト表の設定を変える権限がありません' };
+  return withLock_(function () {
+    var idx = docIndex_(), path = kind === 'cfg' ? q.cfgPath : q.monthPath, cur = docGet_(path, idx);
+    var theirs = cur ? cur.value : null, rev = cur ? cur.rev : 0, merged;
+    if (!canEdit) {
+      // 組む権限のない職員：自分の希望だけ（ほかの欄は送ってきても使わない）
+      var c = docGet_(q.cfgPath, idx), cfg = SGShift.cfgOf(q.group, c ? c.value : null);
+      if (!(cfg.members || []).some(function (x) { return x.name === me.name; })) throw { code: 'invalid_argument', message: 'このシフト表に入れる権限がありません' };
+      var pick = function (v, k) { return v && v[k] ? v[k][me.name] : undefined; };
+      merged = JSON.parse(JSON.stringify(theirs || {}));
+      ['wish', 'wishNote'].forEach(function (k) {
+        var r = SGKV.merge3(pick(a.base, k), pick(a.mine, k), pick(theirs, k)).value;
+        merged[k] = merged[k] || {}; if (r === undefined || r === null) delete merged[k][me.name]; else merged[k][me.name] = r;
+      });
+    } else merged = a.baseKnown && SGKV.eq(a.base, theirs) ? a.mine : SGKV.merge3(a.baseKnown ? a.base : null, a.mine, theirs).value;
+    if (!SGKV.eq(merged, theirs)) {
+      rev = rev + 1;
+      docSet_(path, merged, rev, { k: path }, idx);
+      log_(me, 'シフト表', SGShift.GROUPS[q.group] + (kind === 'cfg' ? '（設定）' : ' ' + q.ym), canEdit ? (kind === 'cfg' ? '設定の変更' : 'シフトの変更') : '希望の変更');
+    }
+    return { rev: rev, value: merged };
+  });
 }
 /* りんく・ぷれいす版のその日の依頼（生活介護の画面で表示するため）。生活介護のその日の表がまだ保存されていなくても出せるように
    （2026-10-31 実機：まだ保存されていない日の生活介護の表に依頼が出なかった） */

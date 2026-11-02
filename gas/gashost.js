@@ -138,6 +138,7 @@ function toggleMenu() {
   const dq = page === "sougei" && /^\d{4}-\d{2}-\d{2}$/.test(G.__sgCurDate || "") ? "&d=" + G.__sgCurDate : "";
   if (!isExec(BASE)) links.push(`<small style="color:#9a6a00">送迎表・カレンダーをメニューから開くには、スプレッドシートの「設定」シートのB2に公開URL（最後が /exec）を貼ってください</small>`);
   else if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar" + dq))}" target="_top">📅 カレンダー</a>`);
+  if (isExec(BASE) && page !== "shift") links.push(`<a href="${esc(url("?page=shift"))}" target="_top">🗓 シフト表（希望休）</a>`);   // マンション職員の早番・遅番（2026-11-02）
   if (isExec(BASE) && (me.canSougei || me.admin)) [["v1", "現体制版"], ["v2", "新体制版"], ["v3", "りんく・ぷれいす版"]].forEach(([e, l]) => { if (!(page === "sougei" && e === ED)) links.push(`<a href="${esc(url("?page=sougei&e=" + e + dq))}" target="_top">🚌 送迎表（${l}）</a>`); });
   menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
   menu.onclick = (e) => {

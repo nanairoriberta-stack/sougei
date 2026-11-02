@@ -65,6 +65,22 @@ sg_html = f'''<!DOCTYPE html>
 <script>{runjs('build/app.bundle.gas.js')}</script>
 <script>{START}</script>
 </body></html>'''
+shift_html = f'''<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>シフト表</title>
+{GUARD}
+<style>{rd('gas/shift_css.txt')}</style>
+</head><body>
+{rd('gas/shift_body.txt')}
+<script>/*__BOOT__*/window.__SG_PAGE="shift";</script>
+<script>window.__SG_PAGE="shift";window.__sgRun=[];</script>
+<script>{runjs('calcore.js')}</script>
+<script>{runjs('shiftcore.js')}</script>
+<script>{runjs('gas/gashost.js')}</script>
+<script>{runjs('gas/shift_app.js')}</script>
+<script>{START}</script>
+</body></html>'''
+open(O+'shift.html','w',encoding='utf-8').write(shift_html)
 open(O+'calendar.html','w',encoding='utf-8').write(cal_html)
 open(O+'sougei.html','w',encoding='utf-8').write(sg_html)
 open(O+'Code.gs','w',encoding='utf-8').write(rd('gas/Code.gs'))
@@ -73,6 +89,7 @@ open(O+'Lib1_calcore.gs','w',encoding='utf-8').write(hdr+rd('calcore.js'))
 open(O+'Lib2_merge.gs','w',encoding='utf-8').write(hdr+rd('kvsync.js'))
 open(O+'Lib3_calsync.gs','w',encoding='utf-8').write(hdr+rd('calsync.js'))
 open(O+'Lib4_engine.gs','w',encoding='utf-8').write(hdr+rd('mcp/engine.js'))
+open(O+'Lib5_shift.gs','w',encoding='utf-8').write(hdr+rd('shiftcore.js'))
 open(O+'Mcp.gs','w',encoding='utf-8').write(rd('gas/Mcp.gs'))
 # zipにしてWindowsで開いても名前が化けないよう、Googleに貼らない2つも英字の名前にする（手順書はメモ帳で化けないようBOM付き）
 open(O+'relay_cloudflare.js','w',encoding='utf-8').write(rd('mcp/relay-worker.mjs'))
