@@ -10,6 +10,7 @@
     <button class="icon-btn" id="next" aria-label="次の月">›</button>
     <button class="ghost" id="todayBtn">今日</button>
     <button class="icon-btn" id="searchBtn" aria-label="予定を検索" title="予定を検索">🔍</button>
+    <button class="ghost" id="shiftBtn" hidden aria-label="シフト表を開く" title="シフト表（希望休）を開く"><span class="sb-i">🗓</span><span class="sb-t"> シフト表</span></button>
   </div>
   <div class="seg" role="group" aria-label="表示切替">
     <button id="vMonth" aria-pressed="true">月</button>

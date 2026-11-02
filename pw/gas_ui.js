@@ -40,6 +40,7 @@ const D = path.join(__dirname, "../gas/out");
   await pg.fill("#sghOld", String(yo[3])); await pg.fill("#sghNew", "3871"); await pg.fill("#sghNew2", "3871");
   await pg.evaluate(() => { const f = document.getElementById("sghPinF"); f.requestSubmit(); f.requestSubmit(); });   // 2回押し（Enterとクリック）でもエラーにならない await pg.waitForTimeout(2500);
   await pg.screenshot({ path: "g_cal.png" });
+  await pg.waitForTimeout(500); assert.ok(await pg.locator("#shiftBtn").isHidden(), "シフト表を使わない職員にはシフト表のボタンを出さない");
   await pg.click(`.cell[data-day="${date}"]`); await pg.waitForTimeout(400);   // スマホは日を押すと一覧が出て、その中に「休みを入れる」
   assert.strictEqual(await pg.locator("#qKind, .ds-quick, .quick").count(), 0, "「予定を入れる（この日）」の欄は出さない");
   await pg.click(".daysheet [data-add-day]"); await pg.waitForTimeout(400);   // ＋から職員休み（AM休）
@@ -275,6 +276,7 @@ const D = path.join(__dirname, "../gas/out");
     const T = await open("shift.html", { width: 1400, height: 1000 }, sb, "shift.html");
     await T.pg.waitForTimeout(500); await T.pg.fill("#sghNo", "000"); await T.pg.fill("#sghPin", "5829"); await T.pg.click("#sghGo"); await T.pg.waitForTimeout(2500);
     assert.ok((await T.pg.locator(".sh-title").innerText()).includes("男性職員"), "男性の表");
+    assert.ok(await T.pg.locator('[data-act="calendar"]').isVisible(), "シフト表からカレンダーへ戻るボタン");
     assert.strictEqual(await T.pg.locator(".sh-month b").innerText(), "2026年11月");
     assert.ok(await T.pg.locator(".slot.hole").count() > 100, "はじめは全部空き");
     await T.pg.click('[data-act="draft"]'); await T.pg.waitForTimeout(1500);
@@ -352,6 +354,12 @@ const D = path.join(__dirname, "../gas/out");
   await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
   const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.check("#f-label-" + label); await A.pg.waitForTimeout(300); };
   const save = async (ms) => { await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(ms || 1500); };
+  { // カレンダーからシフト表へ切り替えるボタン（使える人だけ。2026-11-02）
+    await A.pg.waitForTimeout(500);
+    assert.ok(await A.pg.locator("#shiftBtn").isVisible(), "管理者にはシフト表のボタン");
+    await A.pg.evaluate(() => { const o = HTMLAnchorElement.prototype.click; window.__goShift = null; HTMLAnchorElement.prototype.click = function () { if (this.target === "_top") { window.__goShift = this.getAttribute("href"); return; } return o.call(this); }; });
+    await A.pg.click("#shiftBtn"); await A.pg.waitForTimeout(200);
+    assert.strictEqual(await A.pg.evaluate(() => window.__goShift), "https://script.google.com/macros/s/TEST/exec?page=shift", "シフト表を開く"); }
   { // 職員時間変更の理由に「早出残業」（2026-10-31）
     await add("shift"); const fills = await A.pg.$$eval('[data-fill="w-reason"]', (b) => b.map((x) => x.textContent));
     assert.deepStrictEqual(fills, ["早出", "早出残業", "遅出", "残業", "遅刻・早退"]);

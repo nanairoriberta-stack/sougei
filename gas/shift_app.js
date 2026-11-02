@@ -82,7 +82,7 @@
     const [y, m] = S.ym.split("-").map(Number);
     let html = `<header class="sh-bar"><div class="sh-title">${esc(c.title)}</div>
       <nav class="sh-tabs">${Object.entries(X.GROUPS).map(([k, n]) => `<button data-group="${k}" aria-pressed="${S.group === k}">${n}</button>`).join("")}</nav>
-      <div class="sh-month"><button data-mon="-1" aria-label="前の月">‹</button><b>${y}年${m}月</b><button data-mon="1" aria-label="次の月">›</button></div>${status}</header>`;
+      ${H.url("") ? `<button class="sh-cal" data-act="calendar" title="職場カレンダーに戻る">📅 カレンダー</button>` : ""}<div class="sh-month"><button data-mon="-1" aria-label="前の月">‹</button><b>${y}年${m}月</b><button data-mon="1" aria-label="次の月">›</button></div>${status}</header>`;
     if (S.err) { root.innerHTML = html + `<p class="sh-err">${esc(S.err)}</p>`; return; }
     if (!S.loaded) { root.innerHTML = html + `<p class="sh-wait">読み込んでいます…</p>`; return; }
     html += `<div class="sh-tools">` + (S.canEdit ? `<span class="seg"><button data-mode="shift" aria-pressed="${S.mode === "shift"}">シフトを組む</button><button data-mode="wish" aria-pressed="${S.mode === "wish"}">希望を入れる</button></span>
@@ -177,6 +177,7 @@
     const act = at("[data-act]") && at("[data-act]").dataset.act;
     if (act === "draft") { const before = X.holes(S.month, cfg(), S.ym).length; S.month = X.draft(S.month, cfg(), S.ym); changed("month"); toast(`空いている枠を基本パターンで埋めました（空き ${before} → ${X.holes(S.month, cfg(), S.ym).length}）`); return; }
     if (act === "excel") { exportExcel(); return; }
+    if (act === "calendar") { const u = H.url("?page=calendar"); if (u) { const l = document.createElement("a"); l.href = u; l.target = "_top"; document.body.appendChild(l); l.click(); l.remove(); } return; }
     if (act === "line") { const h = $("shHoles"); if (h) h.scrollIntoView({ behavior: "smooth" }); return; }
     if (act === "copy") { const ta = $("shLine"); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (x) {} if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => toast("コピーしました。LINEに貼り付けてください"), () => toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください")); else toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください"); return; }
     if (act === "settings") { const c = cfg(); S.settings = { title: c.title, need: clone(c.need), members: clone(c.members) }; drawSettings(); return; }

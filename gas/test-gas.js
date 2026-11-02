@@ -563,6 +563,9 @@ async function bootstrap() {
     assert.ok(g0.canEdit && g0.month.rev === 0, "G列「男性」の人は男性の表を組める");
     assert.deepStrictEqual((await admin.call("shift.get", { group: "f", ym: "2026-11" })).canEdit, true, "管理者は両方");
     const gy = await yoko.call("shift.get", q); assert.ok(!gy.canEdit && gy.member, "表の職員は見られる（組めない）");
+    assert.ok((await yoko.call("auth.me")).shiftOk, "表の職員にはカレンダーにシフト表のボタン");
+    const nobody = device(g); await nobody.login(noOf(g, "日野"), pinOf(g, "日野"));
+    assert.ok(!(await nobody.call("auth.me")).shiftOk, "表にもG列にもない職員にはボタンを出さない");
     await hachi.call("shift.get", q).then(() => assert.fail("女性だけの人は男性の表を見られない"), (e) => assert.strictEqual(e.code, "invalid_argument"));
     assert.ok((await hachi.call("shift.get", { group: "f", ym: "2026-11" })).canEdit);
     // 2人が同じ月の別の日を同時に直す → どちらも残る

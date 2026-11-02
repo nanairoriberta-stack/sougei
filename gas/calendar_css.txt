@@ -332,6 +332,7 @@ html[data-biz] .biztabs button[aria-selected="true"]{color:var(--bz);box-shadow:
   .bar-in .seg{order:6;flex:none} .seg button{height:30px;padding:0 8px;font-size:12px;white-space:nowrap}
   #syncBtn{order:7;margin-left:auto;height:28px;padding:0 8px;font-size:11px}
   #todayBtn{order:8;height:30px;padding:0 10px;margin:0} #searchBtn{order:9;width:32px;height:30px}
+  #shiftBtn{order:4;width:34px;height:32px;padding:0} #shiftBtn .sb-t{display:none}   /* スマホは1段目の名前の横に🗓だけ */
   .bar-in #addBtn{order:10;position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom,0px));width:58px;height:58px;padding:0;border-radius:50%;font-size:0;z-index:15;box-shadow:0 6px 18px color-mix(in srgb,#000 28%,transparent)}
   .bar-in #addBtn::before{content:"＋";font-size:30px;line-height:1;font-weight:400}
   .biztabs{padding-block:6px 0}
@@ -368,3 +369,6 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 /* 押せないラベル（一般職員の ヘルプ・送迎・利用者休み・利用日外利用 など）は灰色に。押すと理由が出る（2026-10-31） */
 .labels input:disabled+span{opacity:.38;background:color-mix(in srgb,var(--ink) 6%,transparent);border-style:dashed;cursor:not-allowed}
 .labels input:disabled:checked+span{opacity:.7}
+
+/* シフト表へのボタン（2026-11-02）。使える人だけに出す */
+#shiftBtn{white-space:nowrap}

@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.02c";
+const APP_VERSION="2026.11.02d";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -673,6 +673,9 @@ async function planRestore(file){
 /* ---------- 操作 ---------- */
 $("prev").onclick=()=>go(-1);$("next").onclick=()=>go(1);
 $("searchBtn").onclick=openSearch;
+/* シフト表へ（使える人＝「職員ID」G列の人・管理者・シフト表に名前がある職員だけに出す。me.shiftOk） */
+$("shiftBtn").onclick=()=>{const u=window.SGHost&&window.SGHost.url("?page=shift");if(!u){toast("シフト表を開くには、スプレッドシートの「設定」シートのB2に公開URL（最後が /exec）を貼ってください");return}const a=document.createElement("a");a.href=u;a.target="_top";document.body.appendChild(a);a.click();a.remove()};
+function showShiftBtn(){const b=$("shiftBtn");if(b)b.hidden=!(meInfo().shiftOk&&window.SGHost&&window.SGHost.url(""))}
 $("todayBtn").onclick=()=>{TODAY=ymd(new Date());S.sel=TODAY;const c=new Date(new Date().getFullYear(),new Date().getMonth(),1);if(+c!==+S.cursor){S.cursor=c;subscribe()}render()};
 $("vMonth").onclick=()=>{S.view="month";render()};$("vList").onclick=()=>{S.view="list";render()};$("vTrash").onclick=()=>{S.view="trash";render()};
 $("addBtn").onclick=()=>openEditor(null,S.sel);
@@ -798,6 +801,7 @@ render();
   window.SGHost.onLogin(()=>core.kick());
   core.on(()=>{render();if(ed)drawComments();else if($("ov")&&$("sy-t"))openSync()});
   S.dbState="ok";subscribe();core.kick();render();
+  showShiftBtn();setInterval(showShiftBtn,5000);   // ログイン後に権限が届いたら出す
   if(ed&&ed.roWhy==="loading"&&!ed.confirmDel){ed.ro=!S.canWrite||(!!ed.base&&!canLabel(ed.d.label));ed.roWhy=ed.ro?(S.canWrite?"label":"perm"):"";drawSheet()}   // 準備中に開いた入力画面を、入力できるように開き直す   // 起動時に未送信を自動で再送（障害D）
   setInterval(()=>{if(core.status().queued&&S.online)core.kick()},30000);
 })();
