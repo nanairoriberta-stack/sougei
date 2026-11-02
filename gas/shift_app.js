@@ -87,7 +87,7 @@
     if (!S.loaded) { root.innerHTML = html + `<p class="sh-wait">読み込んでいます…</p>`; return; }
     html += `<div class="sh-tools">` + (S.canEdit ? `<span class="seg"><button data-mode="shift" aria-pressed="${S.mode === "shift"}">シフトを組む</button><button data-mode="wish" aria-pressed="${S.mode === "wish"}">希望を入れる</button></span>
       <button data-act="draft" title="職員ごとの曜日のパターン（下の表）と希望から、空いている枠だけを埋めます">基本パターンで下書き</button>
-      <button data-act="line" class="primary">空きを見てLINE文を作る</button><button data-act="settings">設定（職員・枠の数）</button>` : `<span class="note">あなたの希望を入れられます（日付を押すたびに 休→PM休→AM休→早→遅→日→なし）</span>`) + `</div>`;
+      <button data-act="line" class="primary">空きを見てLINE文を作る</button><button data-act="excel" data-excel title="この月のシフト表を、紙と同じカレンダーの形でExcelに出します（A4横）">Excelで出力</button><button data-act="settings">設定（職員・枠の数）</button>` : `<span class="note">あなたの希望を入れられます（日付を押すたびに 休→PM休→AM休→早→遅→日→なし）</span>`) + `</div>`;
     if (S.mode === "wish") html += `<div class="sh-wishbar">希望を入れる人：${S.canEdit ? `<select id="shWho">${c.members.map((x) => `<option ${x.name === S.wishWho ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<b>${esc(S.wishWho)}</b>`}
       <span class="note">日付のマスを押すたびに 休→PM休→AM休→早→遅→日→なし</span>
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
@@ -176,6 +176,7 @@
       c.members[mi].pat = Object.assign({}, c.members[mi].pat, { [wd]: next }); S.cfg = c; changed("cfg"); return; }
     const act = at("[data-act]") && at("[data-act]").dataset.act;
     if (act === "draft") { const before = X.holes(S.month, cfg(), S.ym).length; S.month = X.draft(S.month, cfg(), S.ym); changed("month"); toast(`空いている枠を基本パターンで埋めました（空き ${before} → ${X.holes(S.month, cfg(), S.ym).length}）`); return; }
+    if (act === "excel") { exportExcel(); return; }
     if (act === "line") { const h = $("shHoles"); if (h) h.scrollIntoView({ behavior: "smooth" }); return; }
     if (act === "copy") { const ta = $("shLine"); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (x) {} if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => toast("コピーしました。LINEに貼り付けてください"), () => toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください")); else toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください"); return; }
     if (act === "settings") { const c = cfg(); S.settings = { title: c.title, need: clone(c.need), members: clone(c.members) }; drawSettings(); return; }
@@ -197,6 +198,22 @@
     if (e.target.id === "shNames") { S.withNames = e.target.checked; render(); }
     if (e.target.id === "shWishNote") { S.month = S.month || {}; S.month.wishNote = Object.assign({}, S.month.wishNote, { [S.wishWho]: e.target.value.trim() }); changed("month"); }
   });
+  // Excel出力：紙のシフト表と同じカレンダーの形（SGShift.buildWorkbook）。Excelの部品はそのときだけ読み込む
+  let excelJs = null;
+  function loadExcelJS() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    return excelJs || (excelJs = new Promise((ok, ng) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"; sc.onload = () => ok(window.ExcelJS); sc.onerror = () => { excelJs = null; ng(new Error("Excelの部品を読み込めませんでした")); }; document.head.appendChild(sc); }));
+  }
+  async function exportExcel() {
+    try {
+      toast("Excelを作っています…");
+      const ExcelJS = await loadExcelJS();
+      const buf = await X.buildWorkbook(ExcelJS, S.month || {}, cfg(), S.ym, X.GROUPS[S.group]).xlsx.writeBuffer();
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      a.download = X.fileName(S.ym, X.GROUPS[S.group]); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+      toast("Excelを出力しました");
+    } catch (e) { toast((e && e.message) || "Excelを出力できませんでした"); }
+  }
   let tt; function toast(m) { const el = $("shToast"); if (!el) return; el.textContent = m; el.hidden = false; clearTimeout(tt); tt = setTimeout(() => { el.hidden = true; }, 3200); }
   window.addEventListener("online", () => { save("cfg"); save("month"); });
 

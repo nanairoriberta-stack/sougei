@@ -61,3 +61,32 @@ assert.strictEqual(S.wishSummary(month, "近藤"), "6(金)・13(金)：PM休");
 assert.strictEqual(S.wishSummary(month, "野津"), "13〜17日 休");
 assert.strictEqual(S.wishSummary(month, "長島"), "なし");
 console.log("shift OK", S.holes(dr, cfg, ym).length, "の穴が下書きのあとに残る");
+
+// Excel（紙のシフト表と同じカレンダーの形）：題・曜日・各日の早遅・日勤・休み・空き・下の表
+(async () => {
+  const ExcelJS = require("./pw/node_modules/exceljs");
+  const S2 = require("./shiftcore.js"), cfg2 = S2.cfgOf("m");
+  let mo = S2.draft({ wish: { "秋山": { "2026-11-09": "休" } } }, cfg2, "2026-11");
+  delete mo.days["2026-11-11"].l[3];   // 1つ空ける
+  mo.days["2026-11-03"].e[3] = { n: "余村", t: "6~9" };
+  const wb = S2.buildWorkbook(ExcelJS, mo, cfg2, "2026-11", "男性");
+  const buf = await wb.xlsx.writeBuffer();
+  require("fs").writeFileSync("pw/shift_sample.xlsx", Buffer.from(buf));
+  const back = new ExcelJS.Workbook(); await back.xlsx.load(buf); const ws = back.worksheets[0];
+  const txt = (c) => { const v = c.value; return v && v.richText ? v.richText.map((x) => x.text).join("") : String(v == null ? "" : v); };
+  const all = []; ws.eachRow((row, r) => row.eachCell((c, col) => all.push({ r, col, t: txt(c) })));
+  const find = (re) => all.find((x) => re.test(x.t));
+  assert.strictEqual(txt(ws.getCell(1, 1)), "2026年11月　リベルタけやき坂とおり シフト表（男性職員）");
+  assert.deepStrictEqual([1, 3, 5, 7, 9, 11, 13].map((c) => txt(ws.getCell(2, c))), ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"]);
+  const d2 = find(/^2$/); assert.ok(d2 && d2.col === 3, "11/2は月曜の列");
+  assert.strictEqual(txt(ws.getCell(d2.r + 1, 3)), "早①：橋本"); assert.strictEqual(txt(ws.getCell(d2.r + 3, 4)), "遅③：野津");
+  assert.ok(find(/^早③：余村\(6~9\)$/), "時間の補足");
+  const hole = find(/^遅③：空き$/); assert.ok(hole && ws.getCell(hole.r, hole.col).fill.fgColor.argb === "FFFEF3C7", "空きは黄色");
+  assert.ok(find(/^休み：秋山、近藤、野津$/), "休みの行");
+  assert.ok(find(/^日勤：/), "日勤の行");
+  const pt = find(/^今月の希望休・希望勤務$/); assert.ok(pt);
+  assert.ok(find(/^9\(月\)：休$/), "下の表に今月の希望");
+  assert.strictEqual(ws.pageSetup.orientation, "landscape"); assert.strictEqual(ws.pageSetup.fitToWidth, 1);
+  assert.strictEqual(S2.fileName("2026-11", "男性"), "シフト表_男性_2026年11月.xlsx");
+  console.log("shift excel OK");
+})().catch((e) => { console.error(e); process.exit(1); });

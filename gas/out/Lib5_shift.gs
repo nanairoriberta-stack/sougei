@@ -115,5 +115,57 @@
     const note = (((month && month.wishNote) || {})[name] || "").trim();
     return [...Object.keys(by).map((k) => `${by[k].join("・")}：${k}`), note].filter(Boolean).join("　") || "なし";
   }
-  return { GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  /* Excel（紙のシフト表と同じカレンダーの形）。曜日ごとに2列（早・遅）、1週ごとに 日付・①〜③・日勤・休み の行。下に職員の曜日のパターンと今月の希望。A4横で1枚の幅に収める */
+  function buildWorkbook(ExcelJS, month, cfg, ym, groupName) {
+    const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet(`${Number(ym.slice(5, 7))}月`, { pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
+    const thin = { style: "thin", color: { argb: "FF6B7BBF" } }, med = { style: "medium", color: { argb: "FF1E3A8A" } };
+    const RED = "FFC2410C", BLUE = "FF1E40AF", GRAY = "FFF1F5F9", HOLE = "FFFEF3C7";
+    for (let c = 1; c <= 14; c++) ws.getColumn(c).width = 12.5;
+    const cell = (r, c, v, o) => { const x = ws.getCell(r, c); x.value = v; x.font = Object.assign({ name: "Meiryo UI", size: 10 }, (o && o.font) || {}); x.alignment = Object.assign({ vertical: "middle", wrapText: false }, (o && o.align) || {}); if (o && o.fill) x.fill = { type: "pattern", pattern: "solid", fgColor: { argb: o.fill } }; return x; };
+    const box = (r1, c1, r2, c2) => { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const x = ws.getCell(r, c); x.border = { top: r === r1 ? med : undefined, bottom: r === r2 ? med : undefined, left: c === c1 ? med : thin, right: c === c2 ? med : thin }; } };
+    const [y, m] = ym.split("-").map(Number);
+    ws.mergeCells(1, 1, 1, 14); cell(1, 1, `${y}年${m}月　${cfg.title || ("シフト表" + (groupName ? `（${groupName}）` : ""))}`, { font: { bold: true, size: 14 } }); ws.getRow(1).height = 24;
+    {
+      for (let wd = 0; wd < 7; wd++) { ws.mergeCells(2, wd * 2 + 1, 2, wd * 2 + 2); const x = cell(2, wd * 2 + 1, `${WD[wd]}曜日`, { font: { bold: true, color: { argb: "FFFFFFFF" } }, align: { horizontal: "center" }, fill: wd === 0 ? "FFBE123C" : wd === 6 ? "FF1D4ED8" : "FF1E40AF" }); x.border = { top: med, bottom: med, left: med, right: med }; }
+    }
+    const days = daysOfMonth(ym), lead = wdOf(days[0]), cells = Array(lead).fill(null).concat(days);
+    while (cells.length % 7) cells.push(null);
+    let r = 3;
+    for (let w = 0; w < cells.length; w += 7) {
+      const week = cells.slice(w, w + 7);
+      const rows = Math.max(1, ...week.filter(Boolean).map((d) => { const n = needOf(cfg, d), dd = dayOf(month, d); return Math.max(n.e, n.l, ...Object.keys(dd.e || {}).map(Number), ...Object.keys(dd.l || {}).map(Number)); }));
+      const r0 = r, rEnd = r0 + rows + 2;
+      week.forEach((date, wd) => {
+        const c1 = wd * 2 + 1, c2 = c1 + 1;
+        if (!date) { for (let rr = r0; rr <= rEnd; rr++) { cell(rr, c1, "", { fill: GRAY }); cell(rr, c2, "", { fill: GRAY }); } box(r0, c1, rEnd, c2); return; }
+        const d = dayOf(month, date), need = needOf(cfg, date), dd = d.note ? `　${d.note}` : "";
+        ws.mergeCells(r0, c1, r0, c2); cell(r0, c1, `${Number(date.slice(8))}${dd}`, { font: { bold: true, color: { argb: wd === 0 ? "FFBE123C" : wd === 6 ? "FF1D4ED8" : "FF18201D" } }, align: { horizontal: "center" } });
+        for (let i = 1; i <= rows; i++) for (const [k, c] of [["e", c1], ["l", c2]]) {
+          const sl = (d[k] || {})[i], n = slotName(sl), req = i <= need[k];
+          if (!n && !req) { cell(r0 + i, c, ""); continue; }
+          cell(r0 + i, c, { richText: [{ text: `${KIND[k]}${MARK[i] || i}：`, font: { name: "Meiryo UI", size: 10, bold: true, color: { argb: k === "e" ? RED : BLUE } } }, { text: n ? n + (sl && sl.t ? `(${sl.t})` : "") : "空き", font: { name: "Meiryo UI", size: 10, bold: !n, color: { argb: n ? "FF18201D" : "FF92400E" } } }] }, Object.assign({ align: { shrinkToFit: true } }, n ? {} : { fill: HOLE }));   // 長い名前・時間は文字を小さくして枠に収める
+        }
+        ws.mergeCells(r0 + rows + 1, c1, r0 + rows + 1, c2); cell(r0 + rows + 1, c1, `日勤：${(d.d || []).join("、")}`, { font: { size: 9 } });
+        ws.mergeCells(rEnd, c1, rEnd, c2); cell(rEnd, c1, `休み：${offList(month, cfg, date).join("、")}`, { font: { size: 9 } });
+        box(r0, c1, rEnd, c2);
+      });
+      for (let rr = r0; rr <= rEnd; rr++) ws.getRow(rr).height = 16;
+      r = rEnd + 1;
+    }
+    // 下の表：職員ごとの曜日のパターンと今月の希望
+    r += 1;
+    const head = ["職員", ...WD, "今月の希望休・希望勤務"];
+    head.forEach((h, i) => { const c = i === 8 ? 9 : i + 1; const x = cell(r, c, h, { font: { bold: true }, align: { horizontal: "center" }, fill: "FFE0E7FF" }); x.border = { top: thin, bottom: thin, left: thin, right: thin }; });
+    ws.mergeCells(r, 9, r, 14);
+    for (const mm of cfg.members || []) {
+      r++;
+      const row = [mm.name, ...WD.map((_, wd) => String((mm.pat || {})[wd] || ""))];
+      row.forEach((v, i) => { const x = cell(r, i + 1, v, { align: { horizontal: "center" }, font: /休/.test(v) && i ? { color: { argb: "FFEA580C" }, bold: true } : i ? {} : { bold: true } }); x.border = { top: thin, bottom: thin, left: thin, right: thin }; });
+      ws.mergeCells(r, 9, r, 14); cell(r, 9, wishSummary(month, mm.name), { font: { size: 9 } }); for (let c = 9; c <= 14; c++) ws.getCell(r, c).border = { top: thin, bottom: thin, left: c === 9 ? thin : undefined, right: c === 14 ? thin : undefined };
+    }
+    ws.views = [{ showGridLines: false }];
+    return wb;
+  }
+  const fileName = (ym, groupName) => `シフト表_${groupName || ""}_${Number(ym.slice(0, 4))}年${Number(ym.slice(5, 7))}月.xlsx`;
+  return { buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

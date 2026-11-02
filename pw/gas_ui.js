@@ -18,7 +18,7 @@ const D = path.join(__dirname, "../gas/out");
   { const s0 = api(t, "kv.get", ["sheet:" + date]).data.value, m0 = api(t, "kv.get", ["master"]).data.value;   // その他予定「黒田給食利用」（コマだけ消すの試し）
     api(t, "kv.merge", [{ key: "sheet:" + date, base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, { id: "blkNote1", kind: "block", time: "12:00", staffId: m0.staff.find((x) => x.name === "八壁").id, label: "黒田給食利用", vehicleId: "" }] } }]); }
   const yo = rows().find((r) => r[1] === "余村慎");
-  const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js" };
+  const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js", "exceljs.min.js": "node_modules/exceljs/dist/exceljs.min.js" };
   const b = await chromium.launch();
   async function open(file, vp, boot, outName, extraInit) {
     const ctx = await b.newContext({ viewport: vp, colorScheme: "light" }); const pg = await ctx.newPage();
@@ -289,6 +289,11 @@ const D = path.join(__dirname, "../gas/out");
     await T.pg.uncheck("#shNames"); await T.pg.waitForTimeout(200);
     assert.ok(!(await T.pg.inputValue("#shLine")).includes("入れそうな人"), "名前なしにもできる");
     await T.pg.locator("#shHoles").screenshot({ path: "g_shiftpage_line.png" });
+    { // Excelで出力（紙と同じカレンダーの形）。テストの画面はファイルから開いているので、画面が付けた名前と中身を確かめる
+      await T.pg.evaluate(() => { const o = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) { window.__dl = { name: this.download, href: this.href }; return; } return o.call(this); }; });
+      await T.pg.click('[data-act="excel"]'); await T.pg.waitForFunction(() => window.__dl, null, { timeout: 15000 });
+      const x = await T.pg.evaluate(async () => ({ name: window.__dl.name, size: (await (await fetch(window.__dl.href)).arrayBuffer()).byteLength }));
+      assert.ok(x.name === "シフト表_男性_2026年11月.xlsx" && x.size > 5000, "Excelを出力 " + JSON.stringify(x)); }
     await T.pg.click('[data-act="copy"]'); await T.pg.waitForTimeout(300);
     assert.ok((await T.pg.locator("#shToast").innerText()).includes("コピー"), "コピー");
     // 枠を入れ替える（時間の補足つき）
