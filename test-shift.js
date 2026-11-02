@@ -86,7 +86,7 @@ console.log("shift OK", S.holes(dr, cfg, ym).length, "の穴が下書きのあ�
   assert.ok(find(/^日勤：/), "日勤の行");
   const pt = find(/^今月の希望休・希望勤務$/); assert.ok(pt);
   assert.ok(find(/^9\(月\)：休$/), "下の表に今月の希望");
-  assert.strictEqual(ws.pageSetup.orientation, "landscape"); assert.strictEqual(ws.pageSetup.fitToWidth, 1);
+  assert.strictEqual(ws.pageSetup.orientation, "landscape"); assert.strictEqual(ws.pageSetup.fitToWidth, 1); assert.strictEqual(ws.pageSetup.fitToHeight, 1, "A4横1枚に収める");
   assert.strictEqual(S2.fileName("2026-11", "男性"), "シフト表_男性_2026年11月.xlsx");
   console.log("shift excel OK");
 })().catch((e) => { console.error(e); process.exit(1); });
