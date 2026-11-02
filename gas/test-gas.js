@@ -554,15 +554,19 @@ async function bootstrap() {
     const ids = g.sheets.get("職員ID").data;
     assert.strictEqual(String(ids[0][6]), "シフト表", "G列の見出し");
     const row = (nm) => ids.find((r) => r[1] === nm);
-    row("白戸")[6] = "男性"; row("八壁")[6] = "女性";
+    row("白戸")[6] = "男性"; row("安部")[6] = "女性";
     const shiro = device(g); await shiro.login(noOf(g, "白戸"), pinOf(g, "白戸"));
     const yoko = device(g); await yoko.login(noOf(g, "横田"), pinOf(g, "横田"));   // 写真の表の職員（G列なし）
-    const hachi = device(g); await hachi.login(noOf(g, "八壁"), pinOf(g, "八壁"));
+    const hachi = device(g); await hachi.login(noOf(g, "安部"), pinOf(g, "安部"));
+    for (const nm of ["八壁", "井川"]) {   // 依頼者が決めた組む人（G列なしで男性・女性の両方）
+      const d = device(g); await d.login(noOf(g, nm), pinOf(g, nm));
+      assert.ok((await d.call("shift.get", { group: "m", ym: "2026-11" })).canEdit && (await d.call("shift.get", { group: "f", ym: "2026-11" })).canEdit, nm + "は両方組める");
+    }
     const q = { group: "m", ym: "2026-11" };
     const g0 = await shiro.call("shift.get", q);
     assert.ok(g0.canEdit && g0.month.rev === 0, "G列「男性」の人は男性の表を組める");
     assert.deepStrictEqual((await admin.call("shift.get", { group: "f", ym: "2026-11" })).canEdit, true, "管理者は両方");
-    const gy = await yoko.call("shift.get", q); assert.ok(!gy.canEdit && gy.member, "表の職員は見られる（組めない）");
+    const gy = await yoko.call("shift.get", q); assert.ok(!gy.canEdit && gy.member && gy.myName === "横田", "表の職員は見られる（組めない）");
     assert.ok((await yoko.call("auth.me")).shiftOk, "表の職員にはカレンダーにシフト表のボタン");
     const nobody = device(g); await nobody.login(noOf(g, "日野"), pinOf(g, "日野"));
     assert.ok(!(await nobody.call("auth.me")).shiftOk, "表にもG列にもない職員にはボタンを出さない");
@@ -576,10 +580,10 @@ async function bootstrap() {
     assert.strictEqual(r2.value.days["2026-11-03"].l[1].n, "長島");
     // 表の職員：自分の希望だけ。ほかの欄・ほかの人の希望は送っても使わない
     const cur = (await yoko.call("shift.get", q)).month.value;
-    const evil = JSON.parse(JSON.stringify(cur)); evil.days = {}; evil.wish = { "横田": { "2026-11-08": "休" }, "秋山": { "2026-11-09": "休" } }; evil.wishNote = { "横田": "8日 休みたい" };
+    const evil = JSON.parse(JSON.stringify(cur)); evil.days = {}; evil.wish = Object.assign({}, cur.wish, { "横田": { "2026-11-08": "休" }, "秋山": Object.assign({}, (cur.wish || {})["秋山"], { "2026-11-10": "休" }) }); evil.wishNote = { "横田": "8日 休みたい" };
     const r3 = await yoko.call("shift.save", Object.assign({ kind: "month", base: cur, baseKnown: true, mine: evil }, q));
     assert.strictEqual(r3.value.wish["横田"]["2026-11-08"], "休", "自分の希望は入る");
-    assert.ok(!r3.value.wish["秋山"], "ほかの人の希望は入らない");
+    assert.ok(!(r3.value.wish["秋山"] || {})["2026-11-10"], "ほかの人の希望は入らない");
     assert.strictEqual(r3.value.days["2026-11-02"].e[1].n, "橋本", "シフトは消えない");
     assert.strictEqual(r3.value.wishNote["横田"], "8日 休みたい");
     await yoko.call("shift.save", Object.assign({ kind: "cfg", base: null, baseKnown: true, mine: { members: [] } }, q)).then(() => assert.fail("設定は変えられない"), (e) => assert.strictEqual(e.code, "invalid_argument"));

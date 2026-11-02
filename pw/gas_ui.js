@@ -40,7 +40,7 @@ const D = path.join(__dirname, "../gas/out");
   await pg.fill("#sghOld", String(yo[3])); await pg.fill("#sghNew", "3871"); await pg.fill("#sghNew2", "3871");
   await pg.evaluate(() => { const f = document.getElementById("sghPinF"); f.requestSubmit(); f.requestSubmit(); });   // 2回押し（Enterとクリック）でもエラーにならない await pg.waitForTimeout(2500);
   await pg.screenshot({ path: "g_cal.png" });
-  await pg.waitForTimeout(500); assert.ok(await pg.locator("#shiftBtn").isHidden(), "シフト表を使わない職員にはシフト表のボタンを出さない");
+  await pg.waitForTimeout(500); assert.ok(await pg.locator("#shiftBtn").isVisible(), "男性のシフト表に入っている余村慎さん（一般）にはシフト表のボタン");
   await pg.click(`.cell[data-day="${date}"]`); await pg.waitForTimeout(400);   // スマホは日を押すと一覧が出て、その中に「休みを入れる」
   assert.strictEqual(await pg.locator("#qKind, .ds-quick, .quick").count(), 0, "「予定を入れる（この日）」の欄は出さない");
   await pg.click(".daysheet [data-add-day]"); await pg.waitForTimeout(400);   // ＋から職員休み（AM休）
@@ -278,11 +278,25 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await T.pg.locator(".sh-title").innerText()).includes("男性職員"), "男性の表");
     assert.ok(await T.pg.locator('[data-act="calendar"]').isVisible(), "シフト表からカレンダーへ戻るボタン");
     assert.strictEqual(await T.pg.locator(".sh-month b").innerText(), "2026年11月");
-    assert.ok(await T.pg.locator(".slot.hole").count() > 100, "はじめは全部空き");
+    // 2026年11月（男性）は依頼者の紙のシフト表が最初から入っている
+    assert.strictEqual(await T.pg.locator(".slot.hole").count(), 0, "紙の表は全部埋まっている");
+    const d6 = await T.pg.locator('td[data-day="2026-11-06"]').innerText();
+    assert.ok(d6.includes("早②余村慎(6~9)") && d6.includes("日勤：近藤(~13)、宮永") && d6.includes("希望：近藤 PM休"), d6);
+    assert.ok((await T.pg.locator('td[data-day="2026-11-03"]').innerText()).includes("開所日"));
+    assert.ok((await T.pg.locator(".conf").innerText()).includes("11/3(火) 余村慎さんは「休」の希望ですが入っています"), "紙でも希望休の日に入っている");
     await T.pg.click('[data-act="draft"]'); await T.pg.waitForTimeout(1500);
-    assert.strictEqual(await T.pg.locator(".slot.hole").count(), 0, "基本パターンで全部埋まる");
+    assert.strictEqual(await T.pg.locator(".slot.hole").count(), 0, "下書きしても変わらない（入っている枠は変えない）");
     const wed = await T.pg.locator('td[data-day="2026-11-04"]').innerText();
-    assert.ok(wed.includes("早①余村") && wed.includes("遅③橋本") && wed.includes("休み：秋山、近藤、野津"), wed);
+    assert.ok(wed.includes("早①余村慎") && wed.includes("遅③長島") && wed.includes("休み：秋山、近藤、野津"), wed);
+    // 基本シフト（依頼者の表：月〜日・早①②③・遅①②③・日勤・休み）
+    const base = await T.pg.locator(".sh-base").innerText();
+    assert.ok(/月\s+火\s+水\s+木\s+金\s+土\s+日/.test(base), "月〜日の並び " + base.slice(0, 80));
+    assert.strictEqual(await T.pg.locator('[data-bslot="1|e|1"]').innerText(), "橋本", "月曜の早①は橋本");
+    assert.strictEqual(await T.pg.locator('[data-bslot="3|l|3"]').innerText(), "長島");
+    await T.pg.locator(".sh-base").screenshot({ path: "g_shiftpage_base.png" });
+    await T.pg.click('[data-bslot="6|l|2"]'); await T.pg.waitForTimeout(200); await T.pg.click('[data-bpick="長島"]'); await T.pg.waitForTimeout(2500);
+    assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.cfg.value.base[6].l[1], "長島", "基本シフトを変えると保存");
+    await T.pg.click('[data-bslot="6|l|2"]'); await T.pg.waitForTimeout(200); await T.pg.click('[data-bpick="宮永"]'); await T.pg.waitForTimeout(1500);   // 元に戻す
     // 11/11(水)の遅③を空ける → 穴になり、LINE文に出る
     await T.pg.click('[data-slot="2026-11-11|l|3"]'); await T.pg.waitForTimeout(200); await T.pg.click("[data-pick-clear]"); await T.pg.waitForTimeout(300);
     assert.ok(await T.pg.locator('[data-slot="2026-11-11|l|3"].hole').count() === 1, "空けた枠は穴");
@@ -300,30 +314,32 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await T.pg.locator("#shToast").innerText()).includes("コピー"), "コピー");
     // 枠を入れ替える（時間の補足つき）
     await T.pg.click('[data-slot="2026-11-03|e|3"]'); await T.pg.waitForTimeout(200);
-    await T.pg.fill("#shTime", "6~9"); await T.pg.click('[data-pick="余村"]'); await T.pg.waitForTimeout(300);
-    assert.ok((await T.pg.locator('[data-slot="2026-11-03|e|3"]').innerText()).includes("余村(6~9)"));
-    // 希望を入れる：秋山 11/9(月) 休 → 入っているので「希望とちがう」
+    await T.pg.fill("#shTime", "6~9"); await T.pg.click('[data-pick="余村慎"]'); await T.pg.waitForTimeout(300);
+    assert.ok((await T.pg.locator('[data-slot="2026-11-03|e|3"]').innerText()).includes("余村慎(6~9)"));
+    // 希望を入れる：秋山 11/12(木) 休 → 早③に入っているので「希望とちがう」
     await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", "秋山");
-    await T.pg.click('td[data-day="2026-11-09"] .dnum'); await T.pg.waitForTimeout(300);
-    assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("9(月)：休"), "今月の希望の列");
-    assert.ok((await T.pg.locator(".conf").innerText()).includes("秋山さんは「休」の希望ですが入っています"));
+    await T.pg.click('td[data-day="2026-11-12"] .dnum'); await T.pg.waitForTimeout(300);
+    assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("12(木)：休"), "今月の希望の列");
+    assert.ok((await T.pg.locator(".conf").innerText()).includes("11/12(木) 秋山さんは「休」の希望ですが入っています"));
     await T.pg.waitForTimeout(2500);
     const sv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value;
-    assert.deepStrictEqual(sv.days["2026-11-03"].e[3], { n: "余村", t: "6~9" }, "サーバーに保存");
+    assert.deepStrictEqual(sv.days["2026-11-03"].e[3], { n: "余村慎", t: "6~9" }, "サーバーに保存");
     assert.ok(!sv.days["2026-11-11"].l[3], "空けた枠も保存");
-    assert.strictEqual(sv.wish["秋山"]["2026-11-09"], "休");
+    assert.strictEqual(sv.wish["秋山"]["2026-11-12"], "休");
+    assert.deepStrictEqual(sv.days["2026-11-06"].d, ["近藤(~13)", "宮永"], "紙から入れた中身も保存されている");
     await T.pg.click('[data-mode="shift"]'); await T.pg.waitForTimeout(200);
     await T.pg.screenshot({ path: "g_shiftpage.png", fullPage: true });
     // 女性の表：職員を設定で入れる
     await T.pg.click('[data-group="f"]'); await T.pg.waitForTimeout(1500);
-    assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("職員がまだいません"));
+    assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("青木"), "女性の職員（依頼者の表）");
+    assert.strictEqual(await T.pg.locator('[data-bslot="6|l|1"]').innerText(), "窪田(17~22)", "時間つきの基本シフト");
     await T.pg.click('[data-act="settings"]'); await T.pg.waitForTimeout(200);
-    await T.pg.click("[data-madd]"); await T.pg.fill('[data-mname="0"]', "女性A"); await T.pg.click("[data-madd]"); await T.pg.fill('[data-mname="1"]', "女性B");
+    await T.pg.click("[data-madd]"); await T.pg.fill('[data-mname="8"]', "女性A"); await T.pg.click("[data-madd]"); await T.pg.fill('[data-mname="9"]', "女性B");
     await T.pg.selectOption('[data-need="e|1"]', "1"); await T.pg.locator(".pk.wide").screenshot({ path: "g_shiftpage_settings.png" });
     await T.pg.click("[data-set-save]"); await T.pg.waitForTimeout(2500);
     assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("女性A"), "女性の職員");
     assert.ok((await T.pg.locator(".sh-title").innerText()).includes("女性職員"));
-    assert.strictEqual(api(t, "shift.get", [{ group: "f", ym: "2026-11" }]).data.cfg.value.members.length, 2);
+    assert.strictEqual(api(t, "shift.get", [{ group: "f", ym: "2026-11" }]).data.cfg.value.members.length, 10, "8人＋足した2人");
     assert.deepStrictEqual(real(T.errs), [], "画面エラーなし"); await T.pg.context().close();
     // 表の職員（横田・一般）：スマホで開くと自分の希望だけ入れられる
     const yk = rows().find((r) => r[1] === "横田");

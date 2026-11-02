@@ -25,6 +25,10 @@ button.primary{background:#13795b;border-color:#13795b;color:#fff;font-weight:70
 .line{font-size:11.5px;margin-top:2px;line-height:1.35}.line .dk{border:0;padding:0;background:none;text-align:left;font-size:11.5px;width:100%}
 .line.off .w{color:#ea580c}.line.wish{color:#9a3412}.woff{color:var(--bad);font-weight:700}
 td.wishmode{cursor:pointer}td.wishmode:hover{background:#fff7ed}
+.sh-h2{font-size:15px;margin:16px 0 6px}.sh-h2 small{font-size:12px;font-weight:normal;color:var(--sub);margin-left:8px}
+.sh-base{border-collapse:collapse;background:var(--card);width:100%;table-layout:fixed}.sh-base th,.sh-base td{border:1px solid #c7cdd9;padding:2px 4px;text-align:center}
+.sh-base thead th{background:#e0e7ff}.sh-base thead th.su{color:#be123c}.sh-base thead th.sa{color:#1d4ed8}.sh-base tbody th{background:#f8fafc;text-align:left;white-space:nowrap;width:5.5em}.sh-base tbody th i{font-style:normal;margin-left:4px;color:var(--sub)}
+.sh-base tr.top>*{border-top:2px solid #6b7bbf}.sh-base td.na{background:#f1f5f9}.sh-base td button{border:0;background:none;padding:2px;width:100%;font-weight:700}.sh-base tr.off td{color:#ea580c;font-size:12px}.sh-base td button:hover{background:#eef2ff}
 .sh-pat{border-collapse:collapse;margin-top:12px;background:var(--card);width:100%}
 .sh-pat th,.sh-pat td{border:1px solid #6b7bbf;padding:3px 6px;text-align:center}.sh-pat thead th{background:#e0e7ff}
 .sh-pat td button{border:0;background:none;padding:0 4px;min-width:3em}.sh-pat .p-off{color:#ea580c;font-weight:700}.sh-pat td.sum{text-align:left;font-size:12px}
@@ -40,4 +44,4 @@ label.opt{flex-direction:row;align-items:center;gap:6px;padding:6px;border:1px s
 .sh-toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#18201d;color:#fff;padding:10px 16px;border-radius:8px;z-index:60}
 [hidden]{display:none!important}
 @media (max-width:760px){.sh{padding:6px 4px 60px}.sh-grid{font-size:11px}.slot{font-size:10.5px}.line{font-size:10px}.sh-grid th{font-size:11px}}
-@media print{@page{size:A4 landscape;margin:8mm}body{background:#fff}.sh-tools,.sh-wishbar,.sh-holes,.st,.sh-cal,.sh-month button,.sh-tabs,#sghChip,.sgh-chip{display:none!important}.sh-bar{background:#fff;color:#000;border:1px solid #000}.slot.hole{outline:0;background:none}.sh{padding:0}}
+@media print{@page{size:A4 landscape;margin:8mm}.sh-h2,.sh-base{display:none}body{background:#fff}.sh-tools,.sh-wishbar,.sh-holes,.st,.sh-cal,.sh-month button,.sh-tabs,#sghChip,.sgh-chip{display:none!important}.sh-bar{background:#fff;color:#000;border:1px solid #000}.slot.hole{outline:0;background:none}.sh{padding:0}}

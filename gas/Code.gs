@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.02d',
+  VERSION: '2026.11.02e',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -721,8 +721,14 @@ function linkSheetValue_(ns, date, value, idx) {
    男性・女性の2つ。「職員ID」シートG列（シフト表）に 男性／女性／両方 と書いた人と管理者が組める（作る・直す）。
    表に名前がある職員は、自分の希望（休・AM休・PM休・早・遅・日）だけ入れられる。
    保存は送迎表と同じく、ロックの中で3者マージ（ほかの人の変更を消さない）＋変更履歴 */
+/* シフト表を組める人（2026-11-02 依頼者）：男性・女性の表の職員に加えて、この人たちは男性・女性の両方を組める。ほかの人は「職員ID」G列 */
+var SHIFT_EDITORS_ = ['八壁', '井川', '久保田'];
+function shiftNameIs_(name, short) { var a = String(name || '').replace(/[\s　]/g, ''), b = String(short || '').replace(/[\s　]/g, ''); return !!b && a.indexOf(b) === 0; }
+/* ログインした人の名前（例「橋本 太郎」）→ シフト表の名前（「橋本」）。表の名前で希望を持つ */
+function shiftMemberName_(cfg, name) { var x = (cfg.members || []).filter(function (m) { return shiftNameIs_(name, m.name); }).sort(function (a, b) { return b.name.length - a.name.length; })[0]; return x ? x.name : ''; }
 function shiftGroups_(me) {
   if (me.role === '管理者') return ['m', 'f'];
+  if (SHIFT_EDITORS_.some(function (n) { return shiftNameIs_(me.name, n); })) return ['m', 'f'];
   var v = String(me.shift || '');
   if (/両方|全|◯|○|〇/.test(v)) return ['m', 'f'];
   var out = []; if (/男/.test(v)) out.push('m'); if (/女/.test(v)) out.push('f'); return out;
@@ -730,7 +736,7 @@ function shiftGroups_(me) {
 /* シフト表（男性・女性のどちらか）に名前がある職員か。カレンダーに「シフト表」のボタンを出すかどうかに使う */
 function isShiftMember_(name) {
   if (!name) return false;
-  try { var idx = docIndex_(); return ['m', 'f'].some(function (g) { var c = docGet_('shift/' + g + '/cfg', idx); return (SGShift.cfgOf(g, c ? c.value : null).members || []).some(function (x) { return x.name === name; }); }); } catch (e) { return false; }
+  try { var idx = docIndex_(); return ['m', 'f'].some(function (g) { var c = docGet_('shift/' + g + '/cfg', idx); return (SGShift.cfgOf(g, c ? c.value : null).members || []).some(function (x) { return shiftNameIs_(name, x.name); }); }); } catch (e) { return false; }
 }
 function shiftArgs_(a) {
   var group = a && a.group === 'f' ? 'f' : a && a.group === 'm' ? 'm' : '';
@@ -742,25 +748,27 @@ function shiftGet_(me, a) {
   var q = shiftArgs_(a), idx = docIndex_();
   var c = docGet_(q.cfgPath, idx), m = docGet_(q.monthPath, idx);
   var cfg = SGShift.cfgOf(q.group, c ? c.value : null), canEdit = shiftGroups_(me).indexOf(q.group) >= 0;
-  var member = (cfg.members || []).some(function (x) { return x.name === me.name; });
+  var mine = shiftMemberName_(cfg, me.name), member = !!mine;
   if (!canEdit && !member) throw { code: 'invalid_argument', message: 'このシフト表を見る権限がありません（「職員ID」シートG列か、表の職員に入っている人だけ）' };
-  return { cfg: { rev: c ? c.rev : 0, value: c ? c.value : null }, month: { rev: m ? m.rev : 0, value: m ? m.value : null }, canEdit: canEdit, member: member };
+  // その月がまだ保存されていなければ、紙から写した最初の中身（SGShift.monthOf。2026年11月・男性）
+  return { cfg: { rev: c ? c.rev : 0, value: c ? c.value : null }, month: { rev: m ? m.rev : 0, value: SGShift.monthOf(q.group, q.ym, m ? m.value : null) }, canEdit: canEdit, member: member, myName: mine || me.name };
 }
 function shiftSave_(me, a) {
   var q = shiftArgs_(a), kind = a.kind === 'cfg' ? 'cfg' : 'month', canEdit = shiftGroups_(me).indexOf(q.group) >= 0;
   if (kind === 'cfg' && !canEdit) throw { code: 'invalid_argument', message: 'シフト表の設定を変える権限がありません' };
   return withLock_(function () {
     var idx = docIndex_(), path = kind === 'cfg' ? q.cfgPath : q.monthPath, cur = docGet_(path, idx);
-    var theirs = cur ? cur.value : null, rev = cur ? cur.rev : 0, merged;
+    var theirs = cur ? cur.value : (kind === 'month' ? SGShift.monthOf(q.group, q.ym, null) : null), rev = cur ? cur.rev : 0, merged;
     if (!canEdit) {
       // 組む権限のない職員：自分の希望だけ（ほかの欄は送ってきても使わない）
       var c = docGet_(q.cfgPath, idx), cfg = SGShift.cfgOf(q.group, c ? c.value : null);
-      if (!(cfg.members || []).some(function (x) { return x.name === me.name; })) throw { code: 'invalid_argument', message: 'このシフト表に入れる権限がありません' };
-      var pick = function (v, k) { return v && v[k] ? v[k][me.name] : undefined; };
+      var who = shiftMemberName_(cfg, me.name);
+      if (!who) throw { code: 'invalid_argument', message: 'このシフト表に入れる権限がありません' };
+      var pick = function (v, k) { return v && v[k] ? v[k][who] : undefined; };
       merged = JSON.parse(JSON.stringify(theirs || {}));
       ['wish', 'wishNote'].forEach(function (k) {
         var r = SGKV.merge3(pick(a.base, k), pick(a.mine, k), pick(theirs, k)).value;
-        merged[k] = merged[k] || {}; if (r === undefined || r === null) delete merged[k][me.name]; else merged[k][me.name] = r;
+        merged[k] = merged[k] || {}; if (r === undefined || r === null) delete merged[k][who]; else merged[k][who] = r;
       });
     } else merged = a.baseKnown && SGKV.eq(a.base, theirs) ? a.mine : SGKV.merge3(a.baseKnown ? a.base : null, a.mine, theirs).value;
     if (!SGKV.eq(merged, theirs)) {

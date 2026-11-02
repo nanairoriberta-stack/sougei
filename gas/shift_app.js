@@ -22,13 +22,13 @@
     if (!quiet) { S.loaded = false; S.err = ""; render(); }
     try {
       const r = await H.call("shift.get", { group: S.group, ym: S.ym });
-      S.canEdit = r.canEdit; S.member = r.member;
+      S.canEdit = r.canEdit; S.member = r.member; S.myName = r.myName || me().name;
       S.cfgBase = r.cfg.value; S.monthBase = r.month.value;
       // まだ送れていない変更が端末に残っていれば、それを重ねて送り直す（通信が切れても消えない）
       const pc = store.get(pendKey("cfg")), pm = store.get(pendKey("month"));
       S.cfg = pc ? JSON.parse(pc).mine : clone(r.cfg.value);
       S.month = pm ? JSON.parse(pm).mine : clone(r.month.value) || {};
-      if (!S.wishWho || !cfg().members.some((m) => m.name === S.wishWho)) S.wishWho = cfg().members.some((m) => m.name === me().name) ? me().name : ((cfg().members[0] || {}).name || "");
+      if (!S.wishWho || !cfg().members.some((m) => m.name === S.wishWho)) S.wishWho = cfg().members.some((m) => m.name === S.myName) ? S.myName : ((cfg().members[0] || {}).name || "");
       if (!S.canEdit) S.mode = "wish";
       S.loaded = true;
       if (pc) save("cfg", JSON.parse(pc).base); if (pm) save("month", JSON.parse(pm).base);
@@ -64,6 +64,8 @@
     if (name) d[k][i] = t ? { n: name, t } : { n: name }; else delete d[k][i];
     changed("month");
   }
+  // 基本シフトを変える（設定に保存。曜日ごと）
+  function setBase(wd, fn) { const c = clone(cfg()); c.base = Object.assign({}, c.base); const b = Object.assign({ e: [], l: [], d: [] }, c.base[wd]); fn(b); c.base[wd] = b; S.cfg = c; changed("cfg"); }
   function setDayWorkers(date, names) { dayObj(date).d = names; changed("month"); }
   const WISH_CYCLE = ["休", "PM休", "AM休", "早", "遅", "日", ""];
   function cycleWish(date) {
@@ -117,8 +119,19 @@
       }).join("") + "</tr>";
     }
     html += `</tbody></table>`;
-    // 下の表：職員ごとの曜日のパターン（早番・遅番・日勤・固定休）と今月の希望
-    html += `<table class="sh-pat"><thead><tr><th>職員</th>${X.WD.map((w) => `<th>${w}</th>`).join("")}<th>今月の希望休・希望勤務</th></tr></thead><tbody>${c.members.map((x, mi) => `<tr><th>${esc(x.name)}</th>${X.WD.map((w, wd) => { const v = (x.pat || {})[wd] || ""; return `<td class="${/休/.test(v) ? "p-off" : ""}">${S.canEdit ? `<button data-pat="${mi}|${wd}">${esc(v) || "－"}</button>` : esc(v)}</td>`; }).join("")}<td class="sum">${esc(X.wishSummary(S.month, x.name))}</td></tr>`).join("") || `<tr><td colspan="9" class="none">職員がまだいません。「設定」から入れてください。</td></tr>`}</tbody></table>`;
+    // 基本シフト（曜日ごとに 早①②③・遅①②③・日勤 がだれか。依頼者の表と同じ並び：月〜日）。下書きはこの番号どおりに入る
+    const WEEK = [1, 2, 3, 4, 5, 6, 0], B = c.base || {};
+    const needWd = (wd, k) => Number(((c.need || X.DEFAULT_NEED)[wd] || {})[k]) || 0;
+    const rowsOf = (k) => Math.max(1, ...WEEK.map((wd) => Math.max(needWd(wd, k), ((B[wd] || {})[k] || []).length)));
+    const bCell = (wd, k, i) => { const n = ((B[wd] || {})[k] || [])[i - 1] || "", on = i <= needWd(wd, k) || n;
+      return `<td class="${on ? "" : "na"}">${on ? (S.canEdit ? `<button data-bslot="${wd}|${k}|${i}">${esc(n) || "－"}</button>` : esc(n)) : ""}</td>`; };
+    html += `<h2 class="sh-h2">基本シフト（曜日ごと）<small>下書きはこの番号どおりに入ります${c.rotate && c.rotateFrom ? `。①〜③は1週ごとに1つずつずれます（この表は ${Number(c.rotateFrom.slice(5, 7))}/${Number(c.rotateFrom.slice(8))} の週の並び）` : ""}${S.canEdit ? "。マスを押すと変えられます" : ""}</small></h2>
+      <table class="sh-base"><thead><tr><th></th>${WEEK.map((wd) => `<th class="${wd === 0 ? "su" : wd === 6 ? "sa" : ""}">${X.WD[wd]}</th>`).join("")}</tr></thead><tbody>
+      ${["e", "l"].map((k) => Array.from({ length: rowsOf(k) }, (_, j) => `<tr class="${j === 0 ? "top" : ""}"><th>${j === 0 ? X.KIND[k] + "番" : ""}<i>${X.MARK[j + 1]}</i></th>${WEEK.map((wd) => bCell(wd, k, j + 1)).join("")}</tr>`).join("")).join("")}
+      <tr class="top"><th>日勤</th>${WEEK.map((wd) => `<td>${S.canEdit ? `<button data-bd="${wd}">${esc(((B[wd] || {}).d || []).join("、")) || "－"}</button>` : esc(((B[wd] || {}).d || []).join("、"))}</td>`).join("")}</tr>
+      <tr class="top off"><th>休み</th>${WEEK.map((wd) => `<td>${esc(c.members.filter((x) => X.patOf(c, x, wd) === "休").map((x) => x.name).join("、"))}</td>`).join("")}</tr></tbody></table>`;
+    // 下の表：職員ごとの曜日のパターン（基本シフトから。早番・遅番・日勤・休み）と今月の希望
+    html += `<table class="sh-pat"><thead><tr><th>職員</th>${X.WD.map((w) => `<th>${w}</th>`).join("")}<th>今月の希望休・希望勤務</th></tr></thead><tbody>${c.members.map((x, mi) => `<tr><th>${esc(x.name)}</th>${X.WD.map((w, wd) => { const v = X.patOf(c, x, wd); return `<td class="${/休/.test(v) ? "p-off" : ""}">${S.canEdit && !B[wd] ? `<button data-pat="${mi}|${wd}">${esc(v) || "－"}</button>` : esc(v)}</td>`; }).join("")}<td class="sum">${esc(X.wishSummary(S.month, x.name))}</td></tr>`).join("") || `<tr><td colspan="9" class="none">職員がまだいません。「設定」から入れてください。</td></tr>`}</tbody></table>`;
     if (S.canEdit) html += `<section class="sh-holes" id="shHoles"><h2>空き ${hs.length}枠${conf.length ? `・希望とちがう ${conf.length}件` : ""}</h2>
       ${conf.length ? `<ul class="conf">${conf.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは「${esc(x.wish)}」の希望ですが入っています</li>`).join("")}</ul>` : ""}
       <label class="chk"><input type="checkbox" id="shNames" ${S.withNames ? "checked" : ""}>入れそうな人の名前も書く</label>
@@ -130,10 +143,25 @@
   function drawPick() {
     const p = S.pick, el = $("shPick"); if (!el) return;
     if (!p) { el.innerHTML = ""; return; }
+    if (p.wd != null) {   // 基本シフトのマス
+      const c = cfg(), b = (c.base || {})[p.wd] || {};
+      if (p.k === "d") {
+        const cur = new Set((b.d || []).map((x) => X.splitName(x).n));
+        el.innerHTML = `<div class="ov" data-close-pick><div class="pk"><h3>基本シフト ${X.WD[p.wd]}曜日 日勤</h3>${c.members.map((x) => `<label class="opt"><input type="checkbox" data-bdn="${esc(x.name)}" ${cur.has(x.name) ? "checked" : ""}>${esc(x.name)}</label>`).join("")}
+          <div class="acts"><button data-close-pick>閉じる</button><button class="primary" data-bd-save>決定</button></div></div></div>`;
+        return;
+      }
+      const cur = X.splitName((b[p.k] || [])[p.i - 1] || "");
+      el.innerHTML = `<div class="ov" data-close-pick><div class="pk"><h3>基本シフト ${X.WD[p.wd]}曜日 ${X.KIND[p.k]}${X.MARK[p.i] || p.i}</h3>
+        <div class="opts">${c.members.map((x) => `<button class="opt${x.name === cur.n ? " on" : ""}" data-bpick="${esc(x.name)}">${esc(x.name)}<em>${esc(X.patOf(c, x, p.wd))}</em></button>`).join("")}</div>
+        <label class="tm">時間（いつもの時間なら空欄。例：17~22）<input id="shBTime" maxlength="12" value="${esc(cur.t)}"></label>
+        <div class="acts"><button data-bpick-clear>空きにする</button><button data-close-pick>閉じる</button></div></div></div>`;
+      return;
+    }
     const c = cfg(), d = (S.month && S.month.days || {})[p.date] || {};
     const busy = X.workers(S.month, p.date);
     if (p.k === "d") {
-      const cur = new Set(d.d || []);
+      const cur = new Set((d.d || []).map((x) => X.splitName(x).n));
       el.innerHTML = `<div class="ov" data-close-pick><div class="pk"><h3>${X.label(p.date)} 日勤</h3>${c.members.map((x) => { const w = X.wishOf(S.month, x.name, p.date); return `<label class="opt"><input type="checkbox" data-dkn="${esc(x.name)}" ${cur.has(x.name) ? "checked" : ""}>${esc(x.name)}${w ? `<em class="${/休/.test(w) ? "woff" : ""}">希望：${esc(w)}</em>` : ""}${!cur.has(x.name) && busy.has(x.name) ? `<em>ほかの枠に入っています</em>` : ""}</label>`; }).join("")}
         <div class="acts"><button data-close-pick>閉じる</button><button class="primary" data-dk-save>決定</button></div></div></div>`;
       return;
@@ -152,6 +180,8 @@
       <label class="tm">表の題<input id="stTitle" value="${esc(st.title)}" maxlength="60"></label>
       <h4>曜日ごとに要る枠の数（①〜）</h4><table class="need"><tr><th></th>${X.WD.map((w) => `<th>${w}</th>`).join("")}</tr>
       ${["e", "l"].map((k) => `<tr><th>${X.KIND[k]}番</th>${X.WD.map((w, wd) => `<td><select data-need="${k}|${wd}">${[0, 1, 2, 3, 4, 5].map((n) => `<option ${Number((st.need[wd] || {})[k]) === n ? "selected" : ""}>${n}</option>`).join("")}</select></td>`).join("")}</tr>`).join("")}</table>
+      <label class="chk"><input type="checkbox" id="stRot" ${st.rotate ? "checked" : ""}>早番・遅番の①〜③を1週ごとに1つずつずらす（①→②→③→①）</label>
+      <label class="tm">基本シフトの表が、どの週の並びか（その週の月曜日）<input type="date" id="stRotFrom" value="${esc(st.rotateFrom || "")}"></label>
       <h4>職員（上から順に下書きで入ります）</h4><div class="mem">${st.members.map((x, i) => `<div class="mrow"><input data-mname="${i}" value="${esc(x.name)}" maxlength="20"><button data-mup="${i}" aria-label="上へ">↑</button><button data-mdel="${i}" aria-label="外す">外す</button></div>`).join("")}</div>
       <button data-madd>＋ 職員を足す</button>
       <div class="acts"><button data-set-close>やめる</button><button class="primary" data-set-save>保存</button></div></div></div>`;
@@ -164,12 +194,20 @@
     if (at("[data-mon]")) { const [y, m] = S.ym.split("-").map(Number), d = new Date(y, m - 1 + Number(at("[data-mon]").dataset.mon), 1); S.ym = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; load(); return; }
     if (at("[data-mode]")) { S.mode = at("[data-mode]").dataset.mode; render(); return; }
     if (!S.loaded) return;
-    if (S.mode === "wish" && at("td.day")) { if (!S.canEdit && S.wishWho !== me().name) return; cycleWish(at("td.day").dataset.day); return; }
+    if (S.mode === "wish" && at("td.day")) { if (!S.canEdit && S.wishWho !== S.myName) return; cycleWish(at("td.day").dataset.day); return; }
     if (at("[data-slot]") && S.canEdit) { const [date, k, i] = at("[data-slot]").dataset.slot.split("|"); S.pick = { date, k, i: Number(i) }; drawPick(); return; }
     if (at("[data-dk]") && S.canEdit) { S.pick = { date: at("[data-dk]").dataset.dk, k: "d" }; drawPick(); return; }
     if (at("[data-pick]")) { const p = S.pick; setSlot(p.date, p.k, p.i, at("[data-pick]").dataset.pick, ($("shTime") || {}).value ? $("shTime").value.trim() : ""); S.pick = null; drawPick(); return; }
     if (at("[data-pick-clear]")) { const p = S.pick; setSlot(p.date, p.k, p.i, "", ""); S.pick = null; drawPick(); return; }
-    if (at("[data-dk-save]")) { const names = [...document.querySelectorAll("[data-dkn]")].filter((x) => x.checked).map((x) => x.dataset.dkn); setDayWorkers(S.pick.date, names); S.pick = null; drawPick(); return; }
+    if (at("[data-dk-save]")) {   // 「近藤(~13)」のように時間を添えた日勤は、そのまま残す
+      const was = ((S.month && S.month.days || {})[S.pick.date] || {}).d || [];
+      const names = [...document.querySelectorAll("[data-dkn]")].filter((x) => x.checked).map((x) => x.dataset.dkn).map((n) => was.find((w) => X.splitName(w).n === n) || n);
+      setDayWorkers(S.pick.date, names); S.pick = null; drawPick(); return; }
+    if (at("[data-bslot]") && S.canEdit) { const [wd, k, i] = at("[data-bslot]").dataset.bslot.split("|"); S.pick = { wd: Number(wd), k, i: Number(i) }; drawPick(); return; }
+    if (at("[data-bd]") && S.canEdit) { S.pick = { wd: Number(at("[data-bd]").dataset.bd), k: "d" }; drawPick(); return; }
+    if (at("[data-bpick]") || at("[data-bpick-clear]")) { const p = S.pick, tm = (($("shBTime") || {}).value || "").trim(), name = at("[data-bpick]") ? at("[data-bpick]").dataset.bpick + (tm ? `(${tm})` : "") : "";
+      setBase(p.wd, (b) => { const a = (b[p.k] || []).slice(); while (a.length < p.i) a.push(""); a[p.i - 1] = name; while (a.length && !a[a.length - 1]) a.pop(); b[p.k] = a; }); S.pick = null; drawPick(); return; }
+    if (at("[data-bd-save]")) { const was = ((cfg().base || {})[S.pick.wd] || {}).d || []; const names = [...document.querySelectorAll("[data-bdn]")].filter((x) => x.checked).map((x) => x.dataset.bdn).map((n) => was.find((w) => X.splitName(w).n === n) || n); const p = S.pick; setBase(p.wd, (b) => { b.d = names; }); S.pick = null; drawPick(); return; }
     if (at("[data-close-pick]") && (t.hasAttribute("data-close-pick") || t.tagName === "BUTTON")) { S.pick = null; drawPick(); return; }
     if (at("[data-pat]")) { const [mi, wd] = at("[data-pat]").dataset.pat.split("|").map(Number); const c = clone(cfg()); const cur = (c.members[mi].pat || {})[wd] || "";
       const next = X.PAT[(X.PAT.indexOf(cur) + 1) % X.PAT.length];   // 休→早→遅→日→早・遅→休
@@ -180,17 +218,18 @@
     if (act === "calendar") { const u = H.url("?page=calendar"); if (u) { const l = document.createElement("a"); l.href = u; l.target = "_top"; document.body.appendChild(l); l.click(); l.remove(); } return; }
     if (act === "line") { const h = $("shHoles"); if (h) h.scrollIntoView({ behavior: "smooth" }); return; }
     if (act === "copy") { const ta = $("shLine"); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (x) {} if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => toast("コピーしました。LINEに貼り付けてください"), () => toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください")); else toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください"); return; }
-    if (act === "settings") { const c = cfg(); S.settings = { title: c.title, need: clone(c.need), members: clone(c.members) }; drawSettings(); return; }
+    if (act === "settings") { const c = cfg(); S.settings = { title: c.title, need: clone(c.need), members: clone(c.members), rotate: !!c.rotate, rotateFrom: c.rotateFrom || "" }; drawSettings(); return; }
     if (at("[data-set-close]")) { S.settings = null; drawSettings(); return; }
     if (at("[data-madd]")) { readSettings(); S.settings.members.push({ name: "", pat: {} }); drawSettings(); return; }
     if (at("[data-mdel]")) { readSettings(); S.settings.members.splice(Number(at("[data-mdel]").dataset.mdel), 1); drawSettings(); return; }
     if (at("[data-mup]")) { readSettings(); const i = Number(at("[data-mup]").dataset.mup); if (i > 0) { const a = S.settings.members; [a[i - 1], a[i]] = [a[i], a[i - 1]]; } drawSettings(); return; }
     if (at("[data-set-save]")) { readSettings(); const st = S.settings; st.members = st.members.filter((x) => x.name.trim()).map((x) => Object.assign(x, { name: x.name.trim() }));
-      S.cfg = Object.assign(clone(cfg()), { title: st.title.trim() || cfg().title, need: st.need, members: st.members }); S.settings = null; changed("cfg"); drawSettings(); toast("設定を保存しました"); return; }
+      S.cfg = Object.assign(clone(cfg()), { title: st.title.trim() || cfg().title, need: st.need, members: st.members, rotate: !!st.rotate && !!st.rotateFrom, rotateFrom: st.rotateFrom }); S.settings = null; changed("cfg"); drawSettings(); toast("設定を保存しました"); return; }
   });
   function readSettings() {
     const st = S.settings; if (!st) return;
     const ti = $("stTitle"); if (ti) st.title = ti.value;
+    if ($("stRot")) st.rotate = $("stRot").checked; if ($("stRotFrom")) st.rotateFrom = $("stRotFrom").value;
     document.querySelectorAll("[data-mname]").forEach((x) => { st.members[Number(x.dataset.mname)].name = x.value; });
     document.querySelectorAll("[data-need]").forEach((x) => { const [k, wd] = x.dataset.need.split("|"); st.need[wd] = Object.assign({}, st.need[wd], { [k]: Number(x.value) }); });
   }
