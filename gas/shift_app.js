@@ -95,6 +95,7 @@
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
     const hs = X.holes(S.month, c, S.ym), holeSet = new Set(hs.map((h) => `${h.date}|${h.kind}|${h.idx}`));
     const conf = X.conflicts(S.month, c, S.ym), confSet = new Set(conf.map((x) => `${x.date}|${x.name}`));
+    const le = X.lateEarly(S.month, c, S.ym), leSet = new Set(le.map((x) => `${x.date}|e|${x.slot}`)), leFix = le.length ? X.fixLateEarly(S.month, c, S.ym) : { fixed: [], left: [] };
     const ri = X.ruleIssues(S.month, c, S.ym), riSet = new Set(ri.map((x) => `${x.date}|${x.kind}|${x.now}`));
     const days = X.daysOfMonth(S.ym), lead = X.wdOf(days[0]);
     html += `<table class="sh-grid"><thead><tr>${X.WD.map((w, i) => `<th class="${i === 0 ? "su" : i === 6 ? "sa" : ""}">${w}曜日</th>`).join("")}</tr></thead><tbody>`;
@@ -105,7 +106,7 @@
         if (!date) return `<td class="empty"></td>`;
         const d = X.daysOfMonth ? (S.month && S.month.days || {})[date] || {} : {}, need = X.needOf(c, date);
         const slot = (k, i) => { const s = (d[k] || {})[i], n = X.slotName(s), hole = holeSet.has(`${date}|${k}|${i}`), bad = n && confSet.has(`${date}|${n}`);
-          return `<button class="slot ${k}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i>${X.KIND[k]}${X.MARK[i] || i}</i>${n ? esc(n) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
+          return `<button class="slot ${k}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i>${X.KIND[k]}${X.MARK[i] || i}</i>${n ? esc(n) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
         const maxE = Math.max(need.e, ...Object.keys(d.e || {}).map(Number), 0), maxL = Math.max(need.l, ...Object.keys(d.l || {}).map(Number), 0);
         const rows = Math.max(maxE, maxL);
         let grid = "";
@@ -133,9 +134,10 @@
       <tr class="top off"><th>休み</th>${WEEK.map((wd) => `<td>${esc(c.members.filter((x) => X.patOf(c, x, wd) === "休").map((x) => x.name).join("、"))}</td>`).join("")}</tr></tbody></table>`;
     // 下の表：職員ごとの曜日のパターン（基本シフトから。早番・遅番・日勤・休み）と今月の希望
     html += `<table class="sh-pat"><thead><tr><th>職員</th>${X.WD.map((w) => `<th>${w}</th>`).join("")}<th>今月の希望休・希望勤務</th></tr></thead><tbody>${c.members.map((x, mi) => `<tr><th>${esc(x.name)}</th>${X.WD.map((w, wd) => { const v = X.patOf(c, x, wd); return `<td class="${/休/.test(v) ? "p-off" : ""}">${S.canEdit && !B[wd] ? `<button data-pat="${mi}|${wd}">${esc(v) || "－"}</button>` : esc(v)}</td>`; }).join("")}<td class="sum">${esc(X.wishSummary(S.month, x.name))}</td></tr>`).join("") || `<tr><td colspan="9" class="none">職員がまだいません。「設定」から入れてください。</td></tr>`}</tbody></table>`;
-    if (S.canEdit) html += `<section class="sh-holes" id="shHoles"><h2>空き ${hs.length}枠${conf.length ? `・希望とちがう ${conf.length}件` : ""}${ri.length ? `・決まりとちがう ${ri.length}件` : ""}</h2>
+    if (S.canEdit) html += `<section class="sh-holes" id="shHoles"><h2>空き ${hs.length}枠${conf.length ? `・希望とちがう ${conf.length}件` : ""}${ri.length ? `・決まりとちがう ${ri.length}件` : ""}${le.length ? `・遅番の次の日に早番 ${le.length}件` : ""}</h2>
+      ${le.length ? `<ul class="conf turnx" data-turn-list>${le.map((x) => `<li>${X.label(x.date)} 早${X.MARK[x.slot]} ${esc(x.name)}さんは前の日が遅番です</li>`).join("")}</ul>${leFix.fixed.length ? `<div class="acts"><button data-act="fixturn">替われる人に替える（${leFix.fixed.length}件）</button><span class="note">その日の日勤の人や早番の人に替えます。だめなら前の日の遅番を替えます${leFix.left.length ? `。残りの${leFix.left.length}件は替われる人がいないので、LINE文に入れています` : ""}</span></div>` : `<p class="note">替われる人が見つからないので、LINE文に入れています</p>`}` : ""}
       ${ri.length ? `<ul class="conf rulex" data-rule-list>${ri.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは${X.KIND[x.kind]}${X.MARK[x.slot]}の決まりですが${X.KIND[x.kind]}${X.MARK[x.now]}に入っています</li>`).join("")}</ul><div class="acts"><button data-act="fixrules">決まりどおりに並べ替える</button><span class="note">決まりの番号の人と入れ替えます</span></div>` : ""}
-      ${conf.length ? `<ul class="conf">${conf.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは「${esc(x.wish)}」の希望ですが入っています</li>`).join("")}</ul>` : ""}
+      ${conf.length ? `<ul class="conf" data-conf-list>${conf.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは「${esc(x.wish)}」の希望ですが入っています</li>`).join("")}</ul>` : ""}
       <label class="chk"><input type="checkbox" id="shNames" ${S.withNames ? "checked" : ""}>入れそうな人の名前も書く</label>
       <textarea id="shLine" readonly rows="${Math.min(16, 7 + hs.length)}">${esc(X.lineText(S.month, c, S.ym, { groupName: X.GROUPS[S.group], withNames: S.withNames }))}</textarea>
       <div class="acts"><button class="primary" data-act="copy">LINE文をコピー</button><span class="note">コピーしてLINEに貼り付けてください</span></div></section>`;
@@ -220,6 +222,8 @@
       const next = X.PAT[(X.PAT.indexOf(cur) + 1) % X.PAT.length];   // 休→早→遅→日→早・遅→休
       c.members[mi].pat = Object.assign({}, c.members[mi].pat, { [wd]: next }); S.cfg = c; changed("cfg"); return; }
     const act = at("[data-act]") && at("[data-act]").dataset.act;
+    if (act === "fixturn") { const r = X.fixLateEarly(S.month, cfg(), S.ym); S.month = r.month; changed("month");
+      toast(`遅番の次の日の早番を替えました：${r.fixed.map((x) => x.late ? `${X.label(x.late.date)} 遅${X.MARK[x.late.slot]}→${x.late.to}` : `${X.label(x.date)} 早${X.MARK[x.slot]}→${x.to}`).join("、")}`); return; }
     if (act === "fixrules") { const n = X.ruleIssues(S.month, cfg(), S.ym).length; S.month = X.fixRules(S.month, cfg(), S.ym); changed("month"); toast(`決まりどおりに並べ替えました（${n}件）`); return; }
     if (act === "draft") { const before = X.holes(S.month, cfg(), S.ym).length; S.month = X.draft(S.month, cfg(), S.ym); changed("month"); toast(`空いている枠を基本パターンで埋めました（空き ${before} → ${X.holes(S.month, cfg(), S.ym).length}）`); return; }
     if (act === "excel") { exportExcel(); return; }

@@ -21,7 +21,7 @@ button.primary{background:#13795b;border-color:#13795b;color:#fff;font-weight:70
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:1px}
 .slot{display:block;width:100%;text-align:left;border:0;border-radius:4px;padding:1px 3px;background:transparent;font-size:12px;min-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .slot i{font-style:normal;font-weight:700;margin-right:2px}.slot.e i{color:var(--early)}.slot.l i{color:var(--late)}.slot small{font-size:10px;color:var(--sub)}
-.slot:hover{background:#eef2ff}.slot.hole{background:var(--hole);outline:1px dashed var(--holeb);color:#92400e;font-weight:700}.slot.bad{background:#ffe4e6;outline:1px solid var(--bad)}.slot.rule{background:#ffedd5;outline:1px dashed #c2410c}
+.slot:hover{background:#eef2ff}.slot.hole{background:var(--hole);outline:1px dashed var(--holeb);color:#92400e;font-weight:700}.slot.bad{background:#ffe4e6;outline:1px solid var(--bad)}.slot.rule{background:#ffedd5;outline:1px dashed #c2410c}.slot.turn{background:#ede9fe;outline:1px dashed #6d28d9}
 .line{font-size:11.5px;margin-top:2px;line-height:1.35}.line .dk{border:0;padding:0;background:none;text-align:left;font-size:11.5px;width:100%}
 .line.off .w{color:#ea580c}.line.wish{color:#9a3412}.woff{color:var(--bad);font-weight:700}
 td.wishmode{cursor:pointer}td.wishmode:hover{background:#fff7ed}
@@ -47,3 +47,4 @@ label.opt{flex-direction:row;align-items:center;gap:6px;padding:6px;border:1px s
 @media print{@page{size:A4 landscape;margin:8mm}.sh-h2,.sh-base{display:none}body{background:#fff}.sh-tools,.sh-wishbar,.sh-holes,.st,.sh-cal,.sh-month button,.sh-tabs,#sghChip,.sgh-chip{display:none!important}.sh-bar{background:#fff;color:#000;border:1px solid #000}.slot.hole{outline:0;background:none}.sh{padding:0}}
 
 .conf.rulex{color:#c2410c}.rrow{flex-wrap:wrap;gap:4px;align-items:center}.rrow select{padding:4px}
+.conf.turnx{color:#6d28d9}

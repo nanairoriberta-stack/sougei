@@ -145,3 +145,23 @@ console.log("shift OK", S.holes(dr, cfg, ym).length, "の穴が下書きのあ�
   assert.strictEqual(S2.fileName("2026-11", "男性"), "シフト表_男性_2026年11月.xlsx");
   console.log("shift excel OK");
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// 遅番の次の日は早番にしない（2026-11-03 依頼者）
+{
+  const ym2 = "2026-11", cm = S.cfgOf("m", null), cf = S.cfgOf("f", null);
+  for (const c of [cm, cf]) { const d = S.draft({}, c, ym2); assert.deepStrictEqual(S.lateEarly(d, c, ym2), [], "下書きは遅番の次の日に早番を入れない"); assert.strictEqual(S.holes(d, c, ym2).length, 0); }
+  // 基本シフトで早・遅の両方の曜日（橋本さん）の次の日は数えない
+  assert.ok(!S.lateEarly({ days: { "2026-11-02": { e: { 1: { n: "橋本" } }, l: { 1: { n: "橋本" } } }, "2026-11-03": { e: { 1: { n: "橋本" } } } } }, cm, ym2).length);
+  const one = { days: { "2026-11-04": { l: { 1: { n: "長島" } } }, "2026-11-05": { e: { 1: { n: "長島" } }, d: ["近藤"] } } };
+  assert.deepStrictEqual(S.lateEarly(one, cm, ym2), [{ date: "2026-11-05", name: "長島", slot: 1 }]);
+  const f1 = S.fixLateEarly(one, cm, ym2);
+  assert.deepStrictEqual(f1.month.days["2026-11-05"].e[1], { n: "近藤" }, "その日の日勤の人に替える"); assert.deepStrictEqual(f1.month.days["2026-11-05"].d, []);
+  assert.ok(!S.candidates(one, cm, "2026-11-05", "e").includes("長島"), "候補に前の日が遅番の人は出さない");
+  // 11月の紙の表は直してある：11/17 遅③(16~22) 余村慎 → 近藤（日勤から）。替われる人がいない2件はLINE文で聞く
+  const nov = S.monthOf("m", ym2, null);
+  assert.deepStrictEqual(nov.days["2026-11-17"].l[3], { n: "近藤", t: "16~22" });
+  assert.deepStrictEqual(S.lateEarly(nov, cm, ym2).map((x) => x.date + x.name), ["2026-11-17秋山", "2026-11-26宮永"]);
+  const lt = S.lineText(nov, cm, ym2, { withNames: true, groupName: "男性" });
+  assert.ok(lt.includes("・11/17(火) 早②(6~9)　秋山さんが前の日遅番のため（入れそうな人：宮永さん）"), lt);
+  console.log("late→early OK");
+}
