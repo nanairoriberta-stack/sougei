@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.03b";
+const APP_VERSION="2026.11.03c";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -619,6 +619,7 @@ function openSync(){
     return`<div class="op"><h4>${kindName[op.kind]||"操作"}（${fmtAt(op.at)}）</h4><p class="by" style="font-size:12px;margin:0">${conflict?reason[op.info?.reason]||"他の人の変更と重なりました。":code[op.info?.code]||"送信できませんでした。"}</p>${body}
     <div class="acts">${conflict?`<button class="primary sm" data-force="${esc(op.opId)}">自分の内容で上書き</button><button class="ghost sm" data-discard-ask="${esc(op.opId)}">現在の内容を残す（自分の操作を取り消す）</button>`:`<button class="primary sm" data-retry="${esc(op.opId)}">もう一度送る</button><button class="ghost sm" data-copy="${esc(op.opId)}">内容をコピー</button><button class="ghost sm" data-discard-ask="${esc(op.opId)}">破棄</button>`}</div><div data-confirm-slot="${esc(op.opId)}"></div></div>`};
   const issues=st?st.conflicts.concat(st.failed):[];
+  const bkKeep=$("sy-t")&&$("bkSlot")?$("bkSlot").innerHTML:"";   // 読み直しで開き直しても、バックアップ・復元の欄（「復元する」ボタン）は消さない
   $("sheetRoot").innerHTML=`<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sy-t">
   <div class="sheet-head"><h2 id="sy-t">保存と同期の状況</h2><button class="icon-btn" data-close aria-label="閉じる">×</button></div>
   <div class="sheet-body">
@@ -631,6 +632,7 @@ function openSync(){
     ${issues.length?`<h3 style="margin:6px 0 0;font-size:14px">確認が必要な操作 ${issues.length}件</h3>${issues.map(opHtml).join("")}`:`<p class="by" style="font-size:13px;margin:0">確認が必要な操作はありません。</p>`}
     ${S.isAdmin?`<div class="op"><h4>バックアップ（編集者のみ）</h4><p class="by" style="font-size:12px;margin:0">全期間の予定とコメントを端末に保存します。月末に1回保存しておくと、万一のときに戻せます。復元は「サーバーにない予定」と「削除された予定」だけを戻し、今ある予定は上書きしません。</p><div class="acts"><button class="primary sm" data-export="json">バックアップを保存（JSON）</button><button class="ghost sm" data-export="csv">一覧をCSVで保存</button><button class="ghost sm" data-restore-file>バックアップから復元</button></div><div id="bkSlot"></div></div>`:""}
   </div></div></div>`;
+  if(bkKeep&&$("bkSlot"))$("bkSlot").innerHTML=bkKeep;
 }
 
 /* ---------- バックアップ・復元（編集者のみ） ---------- */
