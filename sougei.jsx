@@ -6508,7 +6508,7 @@ function StaffOvModal({ master, staff, ov, itemCount, fixedOffToday, onSave, onM
 /* ============================================================
    タイムグリッド(時間 × 職員 + 保留列)
    ============================================================ */
-function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, searchQ, activeSearchId, onCell, onItem, onStaff, onToggleOff, onMoveItem, onDeleteItem, onSetOrder, onRemoveRider, onDropUserOnRun, onDropUserOnCell, onDropVehicleOnRun, onDropVehicleOnCell, onHoverTime }) {
+function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, searchQ, activeSearchId, searchSeq, onCell, onItem, onStaff, onToggleOff, onMoveItem, onDeleteItem, onSetOrder, onRemoveRider, onDropUserOnRun, onDropUserOnCell, onDropVehicleOnRun, onDropVehicleOnCell, onHoverTime }) {
   const gridScrollRef = useRef(null);
   const topScrollRef = useRef(null);
   const [gridScrollW, setGridScrollW] = useState(2000);
@@ -6521,11 +6521,23 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
   });  // 自宅迎え/自宅送りの補足付き氏名(Excelと共通のルール)
   const libNameHome = useMemo(() => (weekday != null ? makeLibNameHelpers(data, weekday).nameHome : null), [data, weekday]);
   // 検索ジャンプ: 現在のヒットへ自動スクロール
+  // 2026-11-03 依頼者「検索してもその場所に画面が移動しない」：なめらかに動かす scrollIntoView を、表の上の横スクロールバー（本体と同期）が
+  // 途中で引き戻していた（右の方の職員の列へ行けない）。表の中の位置を計算して、表と上のスクロールバーを一度に動かす。ヒットが1件でも Enter・▶ で戻る
   useEffect(() => {
     if (!activeSearchId) return;
-    const el = document.querySelector(`[data-item-id="${activeSearchId}"]`);
-    if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
-  }, [activeSearchId]);
+    const tm = setTimeout(() => {
+      const g = gridScrollRef.current, el = (g && g.querySelector(`[data-item-id="${activeSearchId}"]`)) || document.querySelector(`[data-item-id="${activeSearchId}"]`);
+      if (!el) return;
+      if (!g || !g.contains(el)) { if (el.scrollIntoView) el.scrollIntoView({ block: "center", inline: "center" }); return; }
+      const gr = g.getBoundingClientRect(), er = el.getBoundingClientRect();
+      g.scrollLeft = Math.max(0, g.scrollLeft + (er.left - gr.left) - (g.clientWidth - er.width) / 2);
+      g.scrollTop = Math.max(0, g.scrollTop + (er.top - gr.top) - (g.clientHeight - er.height) / 2);
+      if (topScrollRef.current) topScrollRef.current.scrollLeft = g.scrollLeft;
+      const r2 = g.getBoundingClientRect();   // 表そのものが画面の外にあれば、画面も表のところへ
+      if (r2.top < 0 || r2.top > window.innerHeight - 120) g.scrollIntoView({ block: "start" });
+    }, 30);
+    return () => clearTimeout(tm);
+  }, [activeSearchId, searchSeq]);
   // ページ内検索(Ctrl+F): 利用者・職員・車・メモに一致するチップを強調
   const sq = (searchQ || "").trim();
   const hitRun = (item) => {
@@ -10611,7 +10623,7 @@ function AppInner() {
                 </div>
                 <TimeGrid
                   searchQ={searchQ}
-                  activeSearchId={activeSearchId}
+                  activeSearchId={activeSearchId} searchSeq={searchIdx}
                   onHoverTime={setGridHoverTime}
                   master={sheetMaster}
                   data={dataForGrid}
@@ -11084,7 +11096,7 @@ function AppInner() {
                 </div>
               <TimeGrid
                 searchQ={searchQ}
-                activeSearchId={activeSearchId}
+                activeSearchId={activeSearchId} searchSeq={searchIdx}
                 master={patternMaster}
                 data={dataForGrid}
                 deptFilter={deptFilter}

@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.03f',
+  VERSION: '2026.11.03g',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,

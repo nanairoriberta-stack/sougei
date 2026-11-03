@@ -285,6 +285,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - AI調整の重複除去が移動便（`mode:"move"`、例：成相 あいのて→嫁島）を消した → move は対象外
 - 画面が真っ白：esbuild で react の解決ずれ → `--alias` で shims に固定
 - `collectSheetChecks` の引数名衝突（TDZ）→ `patDayArg`
+- 送迎表の🔍検索でヒットの場所へ表が動かない（2026-11-03 依頼者）：なめらかな `scrollIntoView` を、表の上の横スクロールバー（本体と同期する `topScrollRef`）が引き戻していた → `TimeGrid` で表の中の位置を計算して表と上のバーを一度に動かす。ヒット1件でも Enter で戻る（`searchSeq`）。テスト `pw/master_add_ui.js`
 - **スマホでメニューの送迎表が開けない（「ファイルを開くことができません」）**（2026-10-28 実機）：`ScriptApp.getService().getUrl()` がテスト用の `…/dev`
   （作った人しか開けない）を返し、メニューのリンク・Claude接続URLがそれになっていた → `appUrl_()`：「設定」シートB2の公開URL（`…/exec`）を優先。
   画面側（gashost）も `…/dev` のときは開いたときのURL（referrer）が `…/exec` ならそれを使う。確認画面に「画面どうしのつながり」

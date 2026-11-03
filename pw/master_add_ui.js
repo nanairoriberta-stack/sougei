@@ -65,8 +65,22 @@ const D = path.join(__dirname, "../gas/out");
     const w = await where(); assert.ok(w.at === w.n - 1 && w.val === "", "しぼっていても見える " + JSON.stringify(w));
     const nu = api(t, "kv.get", ["v2:master"]).data.value.users.slice(-1)[0]; assert.strictEqual(nu.deptId, d2.id, "しぼっている部署で足す");
     console.log("部署でしぼっていても：" + d2.name + "の利用者として足す OK"); }
+  { // 検索：ヒットの場所へ表が動く（右の方の職員の列でも。2026-11-03 依頼者「検索してもその場所に画面が移動しない」）
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
+    const shv = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value, mv = api(t, "kv.get", ["v2:master"]).data.value;
+    const cnt = {}; shv.runs.forEach((r) => (r.userIds || []).forEach((id) => (cnt[id] = (cnt[id] || 0) + 1)));
+    const uid2 = Object.keys(cnt).find((id) => cnt[id] >= 2) || shv.runs.find((r) => (r.userIds || []).length).userIds[0];
+    const nm = mv.users.find((u) => u.id === uid2).name;
+    const inView = () => P.pg.evaluate(() => { const el = document.querySelector(".ring-rose-500"), g = el && el.closest(".always-scrollbar"); if (!el || !g) return null;
+      const a = el.getBoundingClientRect(), r = g.getBoundingClientRect(); return { ok: a.left >= r.left && a.right <= r.right && a.top >= r.top && a.bottom <= r.bottom && a.top >= 0 && a.bottom <= innerHeight, x: Math.round(a.left), gl: g.scrollLeft }; });
+    await P.pg.fill('input[placeholder="🔍 検索(Ctrl+F)"]', nm); await P.pg.waitForTimeout(800);
+    const seen = [];
+    for (let i = 0; i < 3; i++) { const v = await inView(); assert.ok(v && v.ok, `検索「${nm}」${i + 1}件目が見える所に ` + JSON.stringify(v)); seen.push(v.gl); await P.pg.keyboard.press("Enter"); await P.pg.waitForTimeout(600); }
+    await P.pg.evaluate(() => { const g = document.querySelector(".always-scrollbar[style*='62vh'], .always-scrollbar.border"); if (g) g.scrollLeft = 0; });
+    await P.pg.fill('input[placeholder="🔍 検索(Ctrl+F)"]', ""); await P.pg.waitForTimeout(300);
+    console.log(`検索「${nm}」：ヒットの場所へ表が動く（横の位置 ${seen.join("→")}）`); }
   { // 特記事項：利用者の予定は利用者、職員の休みは職員、どちらでもないものは連絡事項（カレンダーから自動）
-    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(2500);
+    await P.pg.waitForTimeout(1000);
     await P.pg.click('button:has-text("特記事項・男性カバー・配車を表示")'); await P.pg.waitForTimeout(500);
     const tx = async (sel) => (await P.pg.locator(sel).count()) ? await P.pg.locator(sel).innerText() : "";
     const au = await tx("[data-auto-user]"), as = await tx("[data-auto-staff]"), ab = await tx("[data-auto-biz]");
