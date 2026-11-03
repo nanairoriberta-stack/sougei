@@ -174,3 +174,42 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  const r2=E8.upgradeLinkSeed(real); assert.deepStrictEqual(r2.staff,real.staff,'ふつうのデータは触らない'); assert.ok(r2.linkSeed2);
  console.log('link seed OK', u.staff.map(s=>s.name).join('・'));
 }
+
+// カレンダーのその日の予定 → 特記事項（利用者・職員）・連絡事項。パート職員のPM休・中抜けもパート欄に（2026-11-03 依頼者）
+(async () => {
+  // 上のテストと同時に動くので、window や読み込みはそのまま使う
+  const E9 = require("./eng.cjs"), C9 = require("./calsync.js");
+  const m = E9.mergeSeedMaster(null, E9.seedMaster()), date = "2026-11-02";
+  const p = E9.resolveSeedPattern(m, E9.SEED_PATTERNS.mon);
+  const ev = (id, title, o) => Object.assign({ id, rev: 1, date, endDate: date, allDay: true, title, biz: "seikatsu" }, o || {});
+  const evs = [
+    ev("e1", "中村 受診後来所", { sg: { type: "user_time", users: ["中村"], meet: "10:30", noMeet: "受診後送り" } }),
+    ev("e2", "松浦通院", { allDay: false, start: "10:00", end: "12:00" }),               // TimeTreeから写した予定（利用者の名前）
+    ev("e10", "松養生高２女性 現場実習"),                                                   // どちらの名前も無い → 連絡事項
+    ev("e3", "中村 歯科", { allDay: false, start: "15:30", end: "16:30" }),             // 利用者の名前が入った予定
+    ev("e4", "三島 PM休み", { sg: { type: "staff_off", staff: ["三島"], half: "pm" } }),
+    ev("e5", "鳥屋尾 中抜け", { allDay: false, start: "13:00", end: "15:00", sg: { type: "staff_off", staff: ["鳥屋尾"], reason: "中抜け" } }),
+    ev("e6", "八壁 研修"),                                                                 // 職員の名前が入った予定
+    ev("e7", "森 欠席", { sg: { type: "user_absent", users: ["森"] } }),                  // 欠席は欠席の欄にあるので出さない
+    ev("e8", "放デイ 遠足", { biz: "houkago" }),                                          // ほかの事業の予定は出さない
+    ev("e9", "消した予定 中村", { deleted: true }),
+  ];
+  const cn = E9.calNoteLines(m, evs, date, "v1");
+  assert.deepStrictEqual(cn.user, ["中村 受診後来所", "松浦通院 10:00〜12:00", "中村 歯科 15:30〜16:30"], JSON.stringify(cn));
+  assert.deepStrictEqual(cn.staff, ["三島 PM休み", "八壁 研修", "鳥屋尾 中抜け 13:00〜15:00"], JSON.stringify(cn));
+  assert.deepStrictEqual(cn.biz, ["松養生高２女性 現場実習"], "名前の無い予定は連絡事項");
+  const sh = C9.reconcile(m, Object.assign(E9.emptySheet(), { runs: p.runs, blocks: p.blocks }), evs, date);
+  const an = E9.buildAutoNotes(m, sh.blocks);
+  assert.ok(an.staffNotes.some((l) => l.startsWith("不在（鳥屋尾 中抜け）")), "カレンダーから入った不在のコマは職員へ " + JSON.stringify(an.staffNotes));
+  assert.ok(!an.bizNotes.some((l) => l.includes("鳥屋尾")), "連絡事項には出さない");
+  const wb = E9.buildWorkbook(ExcelJS, m, Object.assign({}, sh, { calNotes: cn }), date);
+  const back = new ExcelJS.Workbook(); await back.xlsx.load(await wb.xlsx.writeBuffer());
+  const txt = []; back.getWorksheet("送迎表").eachRow((r) => r.eachCell((c) => txt.push(String(c.value && c.value.richText ? c.value.richText.map((x) => x.text).join("") : c.value || ""))));
+  const all = txt.join("\n"), has = (s) => assert.ok(all.includes(s), "Excelに「" + s + "」");
+  ["中村 受診後来所", "中村 歯科 15:30〜16:30", "三島 PM休み", "八壁 研修", "松浦通院 10:00〜12:00", "松養生高２女性 現場実習"].forEach(has);
+  const ms = m.staff.find((s) => s.name === "三島"), mt = m.staff.find((s) => s.name === "鳥屋尾");
+  has(`三島 ${ms.start}〜${sh.staffOv[ms.id].end}`);   // PM休はパート欄の退勤が早くなる
+  assert.ok(!all.includes("森 欠席"), "欠席は特記事項に出さない");
+  if (!(mt.offDays || []).includes(1)) has("鳥屋尾"), assert.ok(/鳥屋尾 [^\n]*\(13:00〜15:00不在\)/.test(all), "中抜けはパート欄に（不在）");
+  console.log("cal notes OK", cn.user.length, cn.staff.length, cn.biz.length, "/ パート:", (all.match(/三島 [^\n]*/) || [""])[0]);
+})().catch((e) => { console.error(e); process.exit(1); });

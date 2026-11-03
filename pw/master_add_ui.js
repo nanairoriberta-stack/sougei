@@ -34,6 +34,12 @@ const D = path.join(__dirname, "../gas/out");
   }
   // 職員・車両・利用者の「＋ ○○を追加」：足した行はいちばん下（ボタンのすぐ上）に出て、名前の欄に入れる（2026-11-03 依頼者「利用者を追加ボタンが効かない」）
   const boot = 'window.__SG_EDITION="v2";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-02";';
+  // カレンダーの予定（特記事項の自動の欄を見るため。2026-11-03 依頼者）
+  const mv2 = api(t, "kv.get", ["v2:master"]).data.value, uN = mv2.users[0].name, pS = mv2.staff.find((x) => x.emp === "パート" && !x.hideInPartList) || mv2.staff[0];
+  const putEv = (id, ev) => { const r = api(t, "cal.apply", [{ kind: "upsert", opId: "op_" + id, id, baseRev: null, ev: Object.assign({ date: "2026-11-02", endDate: "2026-11-02", allDay: true, start: "", end: "", label: "other", place: "", memo: "", members: [] }, ev) }]); assert.ok(r && r.ok !== false && !r.error, "予定を入れる " + JSON.stringify(r).slice(0, 200)); };
+  putEv("ev_note0001", { title: uN + " 通院", allDay: false, start: "10:00", end: "12:00" });
+  putEv("ev_note0002", { title: pS.name + " PM休み", label: "leave", sg: { type: "staff_off", staff: [pS.name], half: "pm" } });
+  putEv("ev_note0003", { title: "松養生高２女性 現場実習" });
   const P = await open("sougei.html", { width: 1400, height: 900 }, boot, "master_add.html");
   await P.pg.waitForTimeout(500); await P.pg.fill("#sghNo", "000"); await P.pg.fill("#sghPin", "5829"); await P.pg.click("#sghGo"); await P.pg.waitForTimeout(5000);
   const where = () => P.pg.evaluate(() => { const rs = [...document.querySelectorAll("[data-row-id]")], a = document.activeElement, r = a && a.closest("[data-row-id]"), b = r && r.getBoundingClientRect();
@@ -59,6 +65,16 @@ const D = path.join(__dirname, "../gas/out");
     const w = await where(); assert.ok(w.at === w.n - 1 && w.val === "", "しぼっていても見える " + JSON.stringify(w));
     const nu = api(t, "kv.get", ["v2:master"]).data.value.users.slice(-1)[0]; assert.strictEqual(nu.deptId, d2.id, "しぼっている部署で足す");
     console.log("部署でしぼっていても：" + d2.name + "の利用者として足す OK"); }
+  { // 特記事項：利用者の予定は利用者、職員の休みは職員、どちらでもないものは連絡事項（カレンダーから自動）
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(2500);
+    await P.pg.click('button:has-text("特記事項・男性カバー・配車を表示")'); await P.pg.waitForTimeout(500);
+    const tx = async (sel) => (await P.pg.locator(sel).count()) ? await P.pg.locator(sel).innerText() : "";
+    const au = await tx("[data-auto-user]"), as = await tx("[data-auto-staff]"), ab = await tx("[data-auto-biz]");
+    assert.ok(au.includes(uN + " 通院 10:00〜12:00") && !au.includes(pS.name), "利用者の欄 " + au);
+    assert.ok(as.includes(pS.name + " PM休み") && !as.includes(uN + " 通院"), "職員の欄 " + as);
+    assert.ok(ab.includes("松養生高２女性 現場実習"), "連絡事項 " + ab);
+    const pt = await tx(`[data-part="${pS.id}"]`); if (pS.emp === "パート") assert.ok(pt && !pt.includes(pS.end), "パート職員の出欠にPM休の退勤 " + pt + " / いつも " + pS.end);
+    console.log("特記事項（カレンダーから）：利用者「" + au.split("\n")[1] + "」 職員「" + as.split("\n")[1] + "」 連絡事項「" + ab.split("\n").slice(-1)[0] + "」 パート「" + pt + "」"); }
   assert.deepStrictEqual(P.errs.filter((e) => !/net::ERR_FAILED|favicon/.test(e)), [], "画面エラーなし");
   console.log("画面エラー: []");
   await b.close();

@@ -105,6 +105,14 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 その他予定・ヘルプの `noteOnly:true` は表（画面の `TimeGrid`・Excel `buildWorkbook`・`buildExcelHtml`）にコマを出さず、`buildAutoNotes`（特記事項・連絡事項の自動欄）にだけ出る（例：黒田給食利用）。
 編集画面のチェック／「コマだけ消す(特記事項に残す)」ボタン（`data-note-only`）。保留の数・重なりの警告にも数えない。下の「特記事項…を表示」の中に一覧（`data-noteonly-list`）と「表に戻す」
 
+## 特記事項にカレンダーの予定（2026-11-03 依頼者）
+「特記事項の利用者の所には利用者の予定・送迎を、職員の所には職員の予定を」：`calNoteLines(master, events, date)`（画面の `calNotesToday`。表示とExcelだけ、保存しない。出力のとき `sheet.calNotes` で `buildWorkbook` へ）。
+- 特記事項(利用者)：送迎の変更・利用日外利用・利用者の名前が入った予定（職員にも同じ名前がいる人＝八壁・森などは職員として見る）
+- 特記事項(職員)：職員休み・休日出勤・職員時間変更・職員の名前（担当）が入った予定、カレンダーから入った職員の予定・不在のコマ（`buildAutoNotes` の `staffNotes`＝`cal_` で始まるヘルプ以外。以前は連絡事項）
+- 連絡事項：どちらの名前も無い、この版の事業の予定。欠席（欠席の欄にある）・ヘルプ・予定（コマから入る）は二重に出さない
+- 画面：特記事項の下の自動の欄（`data-auto-user`・`data-auto-staff`・`data-auto-biz`）。テスト `test-excel.js`・`pw/master_add_ui.js`
+- パート職員（2026-11-03 依頼者「パート職員の休みも反映」）：1日休みは以前から（`staffOv.off`）。PM休・AM休・時間変更は Excel のパート欄・画面のパートの出欠にその日の時刻（`staffOv.start/end`）、中抜け・時間休みは「(13:00〜15:00不在)」
+
 ## Excel出力のあとのカレンダーの変更のお知らせ（2026-10-29）
 - Excelを出力すると、その日の送迎表に `exportedAt` と `exportSnap`（そのとき反映していたカレンダーの予定 ID→{rev,title}、`SGCal.exportSnapOf`）を残す（`markExported`）
 - 今の `calApplied` と比べた追加・変更・取り消し＝`SGCal.exportChanges`。サーバーの `docSet_` が送迎表の文書の meta に `expChg`（数）と `date` を付け、`sg.exportAlerts`（版ごと、昨日以降）が一覧だけで探す

@@ -1269,17 +1269,48 @@ function applyDayDept(master, wd, staffOv, userDept, userExtra, dateStr) {
 function buildAutoNotes(master, blocks) {
   const userNameSet = master.users.map((u) => u.name).filter(Boolean);
   const startsWithUser = (label) => userNameSet.some((n) => label.startsWith(n) || label.includes(n));
-  const userNotes = [], bizNotes = [];
+  const userNotes = [], bizNotes = [], staffNotes = [];
   [...(blocks || [])]
     .filter((b) => (b.label || "").trim())
     .sort((a, b) => (toMin(a.time) || 0) - (toMin(b.time) || 0))
     .forEach((b) => {
       const line = `${(b.label || "").trim()} ${b.time}〜`;
       if (startsWithUser((b.label || "").trim())) userNotes.push(line);
+      // カレンダーから入った職員の予定・不在（cal_…）は特記事項(職員)へ（2026-11-03 依頼者「職員の所には職員の予定」）
+      else if (String(b.id || "").startsWith("cal_") && b.kind !== "help") staffNotes.push(line);
       else bizNotes.push(line);
     });
   // 同じ内容+同じ時刻は1つに統合(例:2名体制のヘルプが2件登録されていても表記は1つ)
-  return { userNotes: [...new Set(userNotes)], bizNotes: [...new Set(bizNotes)] };
+  return { userNotes: [...new Set(userNotes)], bizNotes: [...new Set(bizNotes)], staffNotes: [...new Set(staffNotes)] };
+}
+/* カレンダーのその日の予定 → 特記事項（2026-11-03 依頼者「特記事項の利用者の所には利用者の予定・送迎を、職員の所には職員の予定を」）
+   利用者：送迎の変更・利用日外利用・利用者の名前が入った予定。職員：休み・休日出勤・時間変更・職員の名前（担当）が入った予定。
+   どちらの名前も無い予定は、この版の事業の予定だけ連絡事項へ。ヘルプ・職員の予定（モニタリングなど）は送迎表のコマから入る（buildAutoNotes）ので、欠席は欠席の欄にあるので出さない。
+   表示とExcelだけで、送迎表のデータには入れない（カレンダーを直せば次の出力で変わる） */
+function calNoteLines(master, events, date, edition) {
+  const out = { user: [], staff: [], biz: [] };
+  if (!master || !Array.isArray(events)) return out;
+  const users = (master.users || []).map((u) => u.name).filter(Boolean);
+  const staff = (master.staff || []).filter((x) => !(x.retireDate && x.retireDate <= date)).map((x) => x.name).filter(Boolean);
+  const inText = (list, t) => list.some((n) => t.includes(n));
+  const userOnly = users.filter((n) => !staff.includes(n));   // 職員にも同じ名前がいる人（八壁・森など）は職員として見る
+  const hm = (t) => String(t || "").replace(/^0(\d:)/, "$1");
+  const myBiz = (edition || EDITION) === "v3" ? "houkago" : "seikatsu";
+  const evs = events.filter((e) => e && !e.deleted && e.date <= date && (e.endDate || e.date) >= date)
+    .sort((a, b) => (a.allDay ? 0 : 1) - (b.allDay ? 0 : 1) || String(a.start || "").localeCompare(String(b.start || "")) || String(a.title || "").localeCompare(String(b.title || "")));
+  for (const e of evs) {
+    const sg = e.sg || {}, t = sg.type || "", title = String(e.title || "").trim();
+    if (!title || t === "help" || t === "staff_plan" || t === "user_absent") continue;
+    const line = title + (e.allDay || !e.start ? "" : ` ${hm(e.date === date ? e.start : "0:00")}〜${hm((e.endDate || e.date) === date ? e.end : "24:00")}`);
+    if (t === "user_time" || t === "user_extra") { if ((sg.users || []).some((n) => users.includes(n))) out.user.push(line); continue; }
+    if (t === "staff_off" || t === "hwork" || t === "shift") { if ((sg.staff || []).some((n) => staff.includes(n))) out.staff.push(line); continue; }
+    if (t) continue;
+    // 送迎表に反映しない予定（その他予定・TimeTreeから写した予定など）：名前で分ける
+    if (inText(userOnly, title)) out.user.push(line);
+    else if (inText(staff, title) || (e.tanto || []).some((n) => staff.includes(n))) out.staff.push(line);
+    else if ((e.biz === "houkago" ? "houkago" : "seikatsu") === myBiz) out.biz.push(line);
+  }
+  return { user: [...new Set(out.user)], staff: [...new Set(out.staff)], biz: [...new Set(out.biz)] };
 }
 
 // seedのパターン(名前ベース)を現在のマスタのIDに解決してpattern形式へ
@@ -3766,15 +3797,17 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
 
   // ---- 下部まとめ:部署が横並び+右に特記エリア ----
   const YELLOW = "FFFEF08A";
-  const { userNotes, bizNotes } = buildAutoNotes(master, sheet.blocks);
+  const { userNotes, bizNotes, staffNotes } = buildAutoNotes(master, sheet.blocks);
+  const calN = sheet.calNotes || { user: [], staff: [], biz: [] };   // カレンダーのその日の予定（出力のときに画面が付ける。保存はしない）
   const manualNoteLines = [];
   if ((sheet.notes || "").trim()) sheet.notes.trim().split("\n").forEach((l) => l && manualNoteLines.push(l));
-  const autoNoteLines = [...userNotes];
+  const autoNoteLines = [...userNotes, ...calN.user];
   const contactLines = [];
   if ((sheet.contact || "").trim()) sheet.contact.trim().split("\n").forEach((l) => l && contactLines.push(l));
   // 連絡事項には施錠・開錠・透析・退勤・受入・車両交換・薬セットは載せない(グリッドの予定枠に出ているため)
   const CONTACT_SKIP = /(施錠|開錠|解錠|透析|退勤|受入|交換|薬)/;
   bizNotes.forEach((l) => { if (!CONTACT_SKIP.test(String(l))) contactLines.push(l); });
+  calN.biz.forEach((l) => contactLines.push(l));
   // AI調整の記録(反映後・未確認のもの)。画面の「確認済み」ボタンで消すとここにも出なくなる
   if ((sheet.aiLog || "").trim()) {
     contactLines.push("【AI調整の記録】");
@@ -4079,13 +4112,16 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       ].filter(Boolean).join("\n");
     },
     staffCountOf,
-    [{ header: "連絡事項", lines: contactLines }, { header: "特記事項(職員)", lines: String(sheet.notesStaff || "").split("\n").filter(Boolean) }, { header: "訓練", lines: trainingLines }]
+    [{ header: "連絡事項", lines: contactLines }, { header: "特記事項(職員)", lines: [...String(sheet.notesStaff || "").split("\n").filter(Boolean), ...staffNotes, ...calN.staff] }, { header: "訓練", lines: trainingLines }]
   );
 
   // ---- 配車 / パート職員 ----
   // 当日休み(パート出欠パネルで休みにした人)は載せない
+  // カレンダーのPM休・AM休・時間変更（staffOv の出勤・退勤）と中抜け・時間休み（「不在（…）」のコマ）も出す（2026-11-03 依頼者「パート職員の休みも反映」）
+  const partAway = (s) => (sheet.blocks || []).filter((b) => b.staffId === s.id && String(b.id || "").startsWith("cal_") && /^不在（/.test(b.label || ""))
+    .map((b) => { const f = toMin(b.time); return f == null ? "" : `(${b.time}〜${toStr(f + (Number(b.durMin) || 60))}不在)`; }).filter(Boolean).join("");
   const partList = master.staff.filter((s) => s.emp === "パート" && !s.hideInPartList && (!fxOff(s) || wToday(s)) && !((ov[s.id] || {}).off))
-    .map((s) => `${s.name} ${s.start}〜${s.end}`);
+    .map((s) => `${s.name} ${(ov[s.id] || {}).start || s.start}〜${(ov[s.id] || {}).end || s.end}${partAway(s)}`);
   sectionRows(
     "配車",
     "パート職員",
@@ -9780,6 +9816,8 @@ function AppInner() {
     },
     [master, date, sheet && sheet.staffOv, sheet && sheet.userDept, sheet && sheet.userExtra]
   );
+  // カレンダーのその日の予定 → 特記事項（利用者・職員）・連絡事項（表示とExcelだけ。保存はしない）
+  const calNotesToday = useMemo(() => (calEvents.date === date ? calNoteLines(sheetMaster, calEvents.list, date) : { user: [], staff: [], biz: [] }), [calEvents, date, sheetMaster]);
 
   // 検索ヒット(時刻順)と現在位置
   const searchHits = useMemo(() => {
@@ -10247,7 +10285,7 @@ function AppInner() {
 
     if (!groups.length) {
       notify("✓ チェックOK(エラーなし)。Excelを出力します");
-      exportExcel(sheetMaster, sheetData, date); markExported();
+      exportExcel(sheetMaster, { ...sheetData, calNotes: calNotesToday }, date); markExported();
       return;
     }
     setModal({ type: "exportCheck", groups, idx: 0 });
@@ -10327,7 +10365,7 @@ function AppInner() {
     if (!sheet) return;
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
-    exportExcel(sheetMaster, sheetData, date); markExported();
+    exportExcel(sheetMaster, { ...sheetData, calNotes: calNotesToday }, date); markExported();
   };
 
   const countStaffItems = (staffId) =>
@@ -10622,7 +10660,8 @@ function AppInner() {
                 </div>
 
                 {panelsOpen && (() => {
-                  const { userNotes, bizNotes } = buildAutoNotes(sheetMaster, sheet.blocks || []);
+                  const an = buildAutoNotes(sheetMaster, sheet.blocks || []);
+                  const userNotes = [...an.userNotes, ...calNotesToday.user], bizNotes = [...an.bizNotes, ...calNotesToday.biz], staffNotes = [...an.staffNotes, ...calNotesToday.staff];
                   const noteOnlyList = (sheet.blocks || []).filter((b) => b.noteOnly);
                   return (
                   <div className="bg-white border border-stone-300 rounded-lg p-3 mt-3">
@@ -10646,9 +10685,17 @@ function AppInner() {
                     <textarea className={`${inputCls} h-14`} value={sheet.notesStaff || ""}
                       onChange={(e) => updateSheet((prev) => ({ ...prev, notesStaff: e.target.value }))}
                       placeholder="職員に関する手入力の特記事項(例:研修・面談・会議)。Excelの職員段「特記事項(職員)」欄に印字されます。" />
+                    {staffNotes.length > 0 && (
+                      <div className="mt-1.5 bg-emerald-50 border border-emerald-200 rounded p-2" data-auto-staff>
+                        <div className="text-[11px] font-bold text-emerald-800 mb-0.5">📋 カレンダー・送迎表から自動(職員の予定・休み)</div>
+                        <div className="text-xs text-stone-700 space-y-0.5">
+                          {staffNotes.map((n, i) => <div key={i}>{n}</div>)}
+                        </div>
+                      </div>
+                    )}
                     {userNotes.length > 0 && (
-                      <div className="mt-1.5 bg-yellow-50 border border-yellow-200 rounded p-2">
-                        <div className="text-[11px] font-bold text-yellow-800 mb-0.5">📋 送迎表から自動(利用者に関する予定)</div>
+                      <div className="mt-1.5 bg-yellow-50 border border-yellow-200 rounded p-2" data-auto-user>
+                        <div className="text-[11px] font-bold text-yellow-800 mb-0.5">📋 カレンダー・送迎表から自動(利用者の予定・送迎)</div>
                         <div className="text-xs text-stone-700 space-y-0.5">
                           {userNotes.map((n, i) => <div key={i}>{n}</div>)}
                         </div>
@@ -10663,15 +10710,15 @@ function AppInner() {
                       onChange={(e) => updateSheet((prev) => ({ ...prev, training: e.target.value }))}
                       placeholder="訓練の予定を1行ずつ(例:早川 10:30〜(東部))。Excelでは連絡事項の隣の「訓練」枠に出ます。" />
                     {bizNotes.length > 0 && (
-                      <div className="mt-1.5 bg-sky-50 border border-sky-200 rounded p-2">
-                        <div className="text-[11px] font-bold text-sky-800 mb-0.5">📋 送迎表から自動(業務・その他の予定)</div>
+                      <div className="mt-1.5 bg-sky-50 border border-sky-200 rounded p-2" data-auto-biz>
+                        <div className="text-[11px] font-bold text-sky-800 mb-0.5">📋 カレンダー・送迎表から自動(業務・その他の予定)</div>
                         <div className="text-xs text-stone-700 space-y-0.5">
                           {bizNotes.map((n, i) => <div key={i}>{n}</div>)}
                         </div>
                       </div>
                     )}
                     <div className="text-[11px] text-stone-400 mt-2">
-                      ※ 自動部分は送迎表に入れた「ヘルプ・その他予定」から自動でまとまります(利用者名で始まるものは特記事項、それ以外は連絡事項)。手入力欄と合わせてExcelに出力されます。
+                      ※ 自動部分は送迎表に入れた「ヘルプ・その他予定」とカレンダーのその日の予定から自動でまとまります(利用者の予定・送迎の変更は特記事項(利用者)、職員の予定・休み・時間変更は特記事項(職員)、どちらでもないものは連絡事項)。手入力欄と合わせてExcelに出力されます。
                     </div>
                   </div>
                   );
@@ -10701,7 +10748,7 @@ function AppInner() {
                                 ov2[s.id] = cur;
                                 return { ...prev, staffOv: ov2 };
                               })}>
-                              {s.name} {s.start}-{s.end}{isOff ? "(休)" : ""}
+                              <span data-part={s.id}>{s.name} {o.start || s.start}-{o.end || s.end}{isOff ? "(休)" : ""}{!isOff && (sheet.blocks || []).some((b) => b.staffId === s.id && String(b.id || "").startsWith("cal_") && /^不在（/.test(b.label || "")) ? "(中抜けあり)" : ""}</span>
                             </button>
                           );
                         })}
