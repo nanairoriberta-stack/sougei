@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.03c";
+const APP_VERSION="2026.11.03d";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -636,10 +636,13 @@ function openSync(){
 }
 
 /* ---------- バックアップ・復元（編集者のみ） ---------- */
-async function fetchAll(){
+/* range：復元のときはファイルの予定がある期間だけ読む（2026-11-03 実機：全期間を読むと16回の往復で数十秒かかり、件数が出なかった）。noCm：コメントは読まない */
+async function fetchAll(range,noCm){
   const days=[],cms=[];const y0=2026,y1=new Date().getFullYear()+3;
   for(let y=y0;y<=y1;y++)for(const[a,b]of[["01-01","06-30"],["07-01","12-31"]]){
+    if(range&&(`${y}-${b}`<range[0]||`${y}-${a}`>range[1]))continue;
     const s1=await db.collection("days").where("date",">=",`${y}-${a}`).where("date","<=",`${y}-${b}`).limit(1000).get();days.push(...s1.docs.map(d=>d.data()));
+    if(noCm)continue;
     const s2=await db.collection("cm").where("date",">=",`${y}-${a}`).where("date","<=",`${y}-${b}`).limit(1000).get();cms.push(...s2.docs.map(d=>d.data()));
   }
   return{days,cms};
@@ -664,7 +667,10 @@ async function planRestore(file){
   try{
     const j=JSON.parse(await file.text());if(!j||j.app!=="team-calendar"||!Array.isArray(j.events))throw new Error("format");
     if(Number(j.schema)>C.SCHEMA){slot.innerHTML=`<p class="err">新しい版で作られたバックアップです。最新版を読み込んでから復元してください。</p>`;return}
-    const{days}=await fetchAll();const cur=C.mergeDays(days);
+    const ds=j.events.map(e=>e&&e.date).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d||"")).sort(),des=j.events.map(e=>e&&(e.endDate||e.date)).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d||"")).sort();
+    slot.innerHTML=`<p class="by">ファイルの予定 ${j.events.length}件。サーバーの予定と見比べています…（少しかかります）</p>`;
+    let days;try{({days}=await fetchAll(ds.length?[ds[0],des[des.length-1]]:null,true))}catch(e){slot.innerHTML=`<p class="err">サーバーの予定を読めませんでした。通信状況を確認して、もう一度ファイルを選んでください。</p>`;return}
+    const cur=C.mergeDays(days);
     const add=[],undel=[];
     for(const raw of j.events){const e=C.normEvent(raw,raw&&raw.id,0);if(!e||e.deleted)continue;const c=cur[e.id];if(!c)add.push(e);else if(c.deleted)undel.push(c)}
     restorePlan={add,undel};

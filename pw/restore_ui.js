@@ -49,7 +49,9 @@ const D = path.join(__dirname, "../gas/out");
     if (await A.pg.locator("[data-restore-go]:not([disabled])").count()) { await A.pg.click("[data-restore-go]"); await A.pg.waitForTimeout(6000);
       assert.ok((await A.pg.locator("#bkSlot").innerText()).includes("復元を始めました"), "読み直しても欄が消えない"); }
     return msg; };
+  const api0 = g.ctx.api; let nq = 0; g.ctx.api = (tk, m, a) => { if (m === "docs.query") nq++; return api0(tk, m, a); };
   const m1 = await restore(); assert.ok(m1.includes("サーバーにない予定 3件"), m1);
+  assert.ok(nq <= 6, "ファイルの予定がある期間だけ読む（以前は4年分で32回） " + nq); console.log("復元の読み込み回数:", nq);
   const r = api(t, "cal.search", [{ q: "松浦通院" }]).data.items; assert.ok(r.length === 1 && r[0].start === "10:00" && r[0].label === "other", JSON.stringify(r));
   assert.strictEqual(api(t, "cal.search", [{ q: "更生センター" }]).data.items.length, 1);
   const m2 = await restore(); assert.ok(m2.includes("サーバーにない予定 0件"), "2回目は0件（二重にならない） " + m2);
