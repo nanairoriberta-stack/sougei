@@ -72,7 +72,22 @@ assert.strictEqual(dr.days["2026-11-03"].e[1].n, "横田", "入っている枠�
 assert.ok(!S.workers(dr, "2026-11-03").has("余村慎"), "希望休の日は入れない");
 const wed = dr.days["2026-11-04"];   // 水曜の基本シフト（依頼者の表）：早①余村慎・②橋本・③横田、遅①橋本・②宮永・③長島
 assert.deepStrictEqual(Object.values(wed.e).map((s) => s.n), ["余村慎", "橋本", "横田"], "基本シフトの番号どおり");
-assert.deepStrictEqual(Object.values(wed.l).map((s) => s.n), ["橋本", "宮永", "長島"], "早・遅の橋本は両方に入る");
+assert.deepStrictEqual([1, 2, 3].map((i) => wed.l[i].n), ["宮永", "橋本", "長島"], "早・遅の橋本は両方に入る。遅番3人の日の橋本さんは②（決まり）");
+assert.strictEqual(wed.e[2].n, "橋本", "早番は決まりなし＝基本シフトどおり");
+// 職員ごとの決まり（橋本さんは遅番3人の日は②）
+assert.strictEqual(S.ruleSlot(cfg, "橋本", "l", "2026-11-04"), 2);
+assert.strictEqual(S.ruleSlot(cfg, "橋本", "l", "2026-11-06"), 0, "金曜は遅番2人＝決まりの外");
+assert.strictEqual(S.ruleSlot(cfg, "橋本", "e", "2026-11-04"), 0);
+assert.strictEqual(S.ruleText(cfg.rules[0]), "橋本さんは遅番3人の日は②");
+{ const nov = S.monthOf("m", ym, null), ri = S.ruleIssues(nov, cfg, ym);
+  assert.ok(ri.length > 0 && ri.every((x) => x.name === "橋本" && x.kind === "l" && x.slot === 2 && x.now !== 2), JSON.stringify(ri));
+  assert.ok(ri.some((x) => x.date === "2026-11-04" && x.now === 1), "紙の11/4は遅①橋本");
+  const fx = S.fixRules(nov, cfg, ym);
+  assert.deepStrictEqual(S.ruleIssues(fx, cfg, ym), [], "並べ替えたら決まりどおり");
+  assert.deepStrictEqual([1, 2, 3].map((i) => fx.days["2026-11-04"].l[i].n), ["宮永", "橋本", "長島"], "入れ替えるだけ（ほかの人はそのまま）");
+  assert.strictEqual(S.holes(fx, cfg, ym).length, S.holes(nov, cfg, ym).length, "空きは増えない");
+  const man = { days: { "2026-11-04": { l: { 1: { n: "橋本" } } } } }, dm = S.draft(man, cfg, ym);
+  assert.strictEqual(dm.days["2026-11-04"].l[1].n, "橋本", "手で入れた枠は下書きで動かさない"); }
 assert.strictEqual(S.patOf(cfg, cfg.members.find((m) => m.name === "橋本"), 3), "早・遅", "パターンは基本シフトから");
 assert.strictEqual(S.patOf(cfg, cfg.members.find((m) => m.name === "近藤"), 3), "休");
 // 基本の人が希望休 → その番号の枠は、その曜日のパターンが合う別の人（いなければ空き）

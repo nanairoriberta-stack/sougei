@@ -283,7 +283,7 @@ const D = path.join(__dirname, "../gas/out");
     const d6 = await T.pg.locator('td[data-day="2026-11-06"]').innerText();
     assert.ok(d6.includes("早②余村慎(6~9)") && d6.includes("日勤：近藤(~13)、宮永") && d6.includes("希望：近藤 PM休"), d6);
     assert.ok((await T.pg.locator('td[data-day="2026-11-03"]').innerText()).includes("開所日"));
-    assert.ok((await T.pg.locator(".conf").innerText()).includes("11/3(火) 余村慎さんは「休」の希望ですが入っています"), "紙でも希望休の日に入っている");
+    assert.ok((await T.pg.locator(".conf:not(.rulex)").innerText()).includes("11/3(火) 余村慎さんは「休」の希望ですが入っています"), "紙でも希望休の日に入っている");
     await T.pg.click('[data-act="draft"]'); await T.pg.waitForTimeout(1500);
     assert.strictEqual(await T.pg.locator(".slot.hole").count(), 0, "下書きしても変わらない（入っている枠は変えない）");
     const wed = await T.pg.locator('td[data-day="2026-11-04"]').innerText();
@@ -297,6 +297,17 @@ const D = path.join(__dirname, "../gas/out");
     await T.pg.click('[data-bslot="6|l|2"]'); await T.pg.waitForTimeout(200); await T.pg.click('[data-bpick="長島"]'); await T.pg.waitForTimeout(2500);
     assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.cfg.value.base[6].l[1], "長島", "基本シフトを変えると保存");
     await T.pg.click('[data-bslot="6|l|2"]'); await T.pg.waitForTimeout(200); await T.pg.click('[data-bpick="宮永"]'); await T.pg.waitForTimeout(1500);   // 元に戻す
+    // 職員ごとの決まり（橋本さんは遅番3人の日は②。2026-11-03 依頼者）：紙の表の遅①橋本は「決まりとちがう」→ 並べ替え
+    assert.ok((await T.pg.locator(".sh-h2").innerText()).includes("橋本さんは遅番3人の日は②"), "基本シフトの見出しに決まり");
+    assert.ok((await T.pg.locator("[data-rule-list]").innerText()).includes("11/4(水) 橋本さんは遅②の決まりですが遅①に入っています"));
+    assert.ok(await T.pg.locator('[data-slot="2026-11-04|l|1"].rule').count() === 1, "枠に印");
+    await T.pg.click('[data-act="fixrules"]'); await T.pg.waitForTimeout(2500);
+    assert.strictEqual(await T.pg.locator("[data-rule-list]").count(), 0, "並べ替えたら消える");
+    { const fv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.days["2026-11-04"].l;
+      assert.deepStrictEqual([fv[1].n, fv[2].n, fv[3].n], ["宮永", "橋本", "長島"], "サーバーに保存"); }
+    await T.pg.click('[data-act="settings"]'); await T.pg.waitForTimeout(200);
+    assert.strictEqual(await T.pg.locator('[data-rn="0"]').inputValue(), "橋本"); assert.strictEqual(await T.pg.locator('[data-rc="0"]').inputValue(), "3"); assert.strictEqual(await T.pg.locator('[data-rs="0"]').inputValue(), "2");
+    await T.pg.locator(".pk.wide").screenshot({ path: "g_shiftpage_rules.png" }); await T.pg.click("[data-set-close]"); await T.pg.waitForTimeout(200);
     // 11/11(水)の遅③を空ける → 穴になり、LINE文に出る
     await T.pg.click('[data-slot="2026-11-11|l|3"]'); await T.pg.waitForTimeout(200); await T.pg.click("[data-pick-clear]"); await T.pg.waitForTimeout(300);
     assert.ok(await T.pg.locator('[data-slot="2026-11-11|l|3"].hole').count() === 1, "空けた枠は穴");
@@ -320,7 +331,7 @@ const D = path.join(__dirname, "../gas/out");
     await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", "秋山");
     await T.pg.click('td[data-day="2026-11-12"] .dnum'); await T.pg.waitForTimeout(300);
     assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("12(木)：休"), "今月の希望の列");
-    assert.ok((await T.pg.locator(".conf").innerText()).includes("11/12(木) 秋山さんは「休」の希望ですが入っています"));
+    assert.ok((await T.pg.locator(".conf:not(.rulex)").innerText()).includes("11/12(木) 秋山さんは「休」の希望ですが入っています"));
     await T.pg.waitForTimeout(2500);
     const sv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value;
     assert.deepStrictEqual(sv.days["2026-11-03"].e[3], { n: "余村慎", t: "6~9" }, "サーバーに保存");

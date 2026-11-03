@@ -95,6 +95,7 @@
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
     const hs = X.holes(S.month, c, S.ym), holeSet = new Set(hs.map((h) => `${h.date}|${h.kind}|${h.idx}`));
     const conf = X.conflicts(S.month, c, S.ym), confSet = new Set(conf.map((x) => `${x.date}|${x.name}`));
+    const ri = X.ruleIssues(S.month, c, S.ym), riSet = new Set(ri.map((x) => `${x.date}|${x.kind}|${x.now}`));
     const days = X.daysOfMonth(S.ym), lead = X.wdOf(days[0]);
     html += `<table class="sh-grid"><thead><tr>${X.WD.map((w, i) => `<th class="${i === 0 ? "su" : i === 6 ? "sa" : ""}">${w}曜日</th>`).join("")}</tr></thead><tbody>`;
     const cells = Array(lead).fill(null).concat(days);
@@ -104,7 +105,7 @@
         if (!date) return `<td class="empty"></td>`;
         const d = X.daysOfMonth ? (S.month && S.month.days || {})[date] || {} : {}, need = X.needOf(c, date);
         const slot = (k, i) => { const s = (d[k] || {})[i], n = X.slotName(s), hole = holeSet.has(`${date}|${k}|${i}`), bad = n && confSet.has(`${date}|${n}`);
-          return `<button class="slot ${k}${hole ? " hole" : ""}${bad ? " bad" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i>${X.KIND[k]}${X.MARK[i] || i}</i>${n ? esc(n) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
+          return `<button class="slot ${k}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i>${X.KIND[k]}${X.MARK[i] || i}</i>${n ? esc(n) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
         const maxE = Math.max(need.e, ...Object.keys(d.e || {}).map(Number), 0), maxL = Math.max(need.l, ...Object.keys(d.l || {}).map(Number), 0);
         const rows = Math.max(maxE, maxL);
         let grid = "";
@@ -125,14 +126,15 @@
     const rowsOf = (k) => Math.max(1, ...WEEK.map((wd) => Math.max(needWd(wd, k), ((B[wd] || {})[k] || []).length)));
     const bCell = (wd, k, i) => { const n = ((B[wd] || {})[k] || [])[i - 1] || "", on = i <= needWd(wd, k) || n;
       return `<td class="${on ? "" : "na"}">${on ? (S.canEdit ? `<button data-bslot="${wd}|${k}|${i}">${esc(n) || "－"}</button>` : esc(n)) : ""}</td>`; };
-    html += `<h2 class="sh-h2">基本シフト（曜日ごと）<small>下書きはこの番号どおりに入ります${c.rotate && c.rotateFrom ? `。①〜③は1週ごとに1つずつずれます（この表は ${Number(c.rotateFrom.slice(5, 7))}/${Number(c.rotateFrom.slice(8))} の週の並び）` : ""}${S.canEdit ? "。マスを押すと変えられます" : ""}</small></h2>
+    html += `<h2 class="sh-h2">基本シフト（曜日ごと）<small>下書きはこの番号どおりに入ります${c.rotate && c.rotateFrom ? `。①〜③は1週ごとに1つずつずれます（この表は ${Number(c.rotateFrom.slice(5, 7))}/${Number(c.rotateFrom.slice(8))} の週の並び）` : ""}${S.canEdit ? "。マスを押すと変えられます" : ""}${(c.rules || []).length ? `<br>職員ごとの決まり：${(c.rules || []).map((r) => esc(X.ruleText(r))).join("、")}（下書きはこの番号に入れます）` : ""}</small></h2>
       <table class="sh-base"><thead><tr><th></th>${WEEK.map((wd) => `<th class="${wd === 0 ? "su" : wd === 6 ? "sa" : ""}">${X.WD[wd]}</th>`).join("")}</tr></thead><tbody>
       ${["e", "l"].map((k) => Array.from({ length: rowsOf(k) }, (_, j) => `<tr class="${j === 0 ? "top" : ""}"><th>${j === 0 ? X.KIND[k] + "番" : ""}<i>${X.MARK[j + 1]}</i></th>${WEEK.map((wd) => bCell(wd, k, j + 1)).join("")}</tr>`).join("")).join("")}
       <tr class="top"><th>日勤</th>${WEEK.map((wd) => `<td>${S.canEdit ? `<button data-bd="${wd}">${esc(((B[wd] || {}).d || []).join("、")) || "－"}</button>` : esc(((B[wd] || {}).d || []).join("、"))}</td>`).join("")}</tr>
       <tr class="top off"><th>休み</th>${WEEK.map((wd) => `<td>${esc(c.members.filter((x) => X.patOf(c, x, wd) === "休").map((x) => x.name).join("、"))}</td>`).join("")}</tr></tbody></table>`;
     // 下の表：職員ごとの曜日のパターン（基本シフトから。早番・遅番・日勤・休み）と今月の希望
     html += `<table class="sh-pat"><thead><tr><th>職員</th>${X.WD.map((w) => `<th>${w}</th>`).join("")}<th>今月の希望休・希望勤務</th></tr></thead><tbody>${c.members.map((x, mi) => `<tr><th>${esc(x.name)}</th>${X.WD.map((w, wd) => { const v = X.patOf(c, x, wd); return `<td class="${/休/.test(v) ? "p-off" : ""}">${S.canEdit && !B[wd] ? `<button data-pat="${mi}|${wd}">${esc(v) || "－"}</button>` : esc(v)}</td>`; }).join("")}<td class="sum">${esc(X.wishSummary(S.month, x.name))}</td></tr>`).join("") || `<tr><td colspan="9" class="none">職員がまだいません。「設定」から入れてください。</td></tr>`}</tbody></table>`;
-    if (S.canEdit) html += `<section class="sh-holes" id="shHoles"><h2>空き ${hs.length}枠${conf.length ? `・希望とちがう ${conf.length}件` : ""}</h2>
+    if (S.canEdit) html += `<section class="sh-holes" id="shHoles"><h2>空き ${hs.length}枠${conf.length ? `・希望とちがう ${conf.length}件` : ""}${ri.length ? `・決まりとちがう ${ri.length}件` : ""}</h2>
+      ${ri.length ? `<ul class="conf rulex" data-rule-list>${ri.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは${X.KIND[x.kind]}${X.MARK[x.slot]}の決まりですが${X.KIND[x.kind]}${X.MARK[x.now]}に入っています</li>`).join("")}</ul><div class="acts"><button data-act="fixrules">決まりどおりに並べ替える</button><span class="note">決まりの番号の人と入れ替えます</span></div>` : ""}
       ${conf.length ? `<ul class="conf">${conf.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは「${esc(x.wish)}」の希望ですが入っています</li>`).join("")}</ul>` : ""}
       <label class="chk"><input type="checkbox" id="shNames" ${S.withNames ? "checked" : ""}>入れそうな人の名前も書く</label>
       <textarea id="shLine" readonly rows="${Math.min(16, 7 + hs.length)}">${esc(X.lineText(S.month, c, S.ym, { groupName: X.GROUPS[S.group], withNames: S.withNames }))}</textarea>
@@ -182,6 +184,11 @@
       ${["e", "l"].map((k) => `<tr><th>${X.KIND[k]}番</th>${X.WD.map((w, wd) => `<td><select data-need="${k}|${wd}">${[0, 1, 2, 3, 4, 5].map((n) => `<option ${Number((st.need[wd] || {})[k]) === n ? "selected" : ""}>${n}</option>`).join("")}</select></td>`).join("")}</tr>`).join("")}</table>
       <label class="chk"><input type="checkbox" id="stRot" ${st.rotate ? "checked" : ""}>早番・遅番の①〜③を1週ごとに1つずつずらす（①→②→③→①）</label>
       <label class="tm">基本シフトの表が、どの週の並びか（その週の月曜日）<input type="date" id="stRotFrom" value="${esc(st.rotateFrom || "")}"></label>
+      <h4>職員ごとの決まり（例：橋本さんは遅番3人の日は②）</h4><div class="mem">${(st.rules || []).map((r, i) => `<div class="mrow rrow"><select data-rn="${i}">${st.members.map((x) => `<option ${x.name === r.n ? "selected" : ""}>${esc(x.name)}</option>`).join("")}${st.members.some((x) => x.name === r.n) ? "" : `<option selected>${esc(r.n)}</option>`}</select>は
+        <select data-rk="${i}">${["e", "l"].map((k) => `<option value="${k}" ${r.k === k ? "selected" : ""}>${X.KIND[k]}番</option>`).join("")}</select>が
+        <select data-rc="${i}"><option value="0">何人でも</option>${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${Number(r.cnt) === n ? "selected" : ""}>${n}人の日</option>`).join("")}</select>は
+        <select data-rs="${i}">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${Number(r.slot) === n ? "selected" : ""}>${X.MARK[n]}</option>`).join("")}</select><button data-rdel="${i}">外す</button></div>`).join("")}</div>
+      <button data-radd>＋ 決まりを足す</button>
       <h4>職員（上から順に下書きで入ります）</h4><div class="mem">${st.members.map((x, i) => `<div class="mrow"><input data-mname="${i}" value="${esc(x.name)}" maxlength="20"><button data-mup="${i}" aria-label="上へ">↑</button><button data-mdel="${i}" aria-label="外す">外す</button></div>`).join("")}</div>
       <button data-madd>＋ 職員を足す</button>
       <div class="acts"><button data-set-close>やめる</button><button class="primary" data-set-save>保存</button></div></div></div>`;
@@ -213,23 +220,28 @@
       const next = X.PAT[(X.PAT.indexOf(cur) + 1) % X.PAT.length];   // 休→早→遅→日→早・遅→休
       c.members[mi].pat = Object.assign({}, c.members[mi].pat, { [wd]: next }); S.cfg = c; changed("cfg"); return; }
     const act = at("[data-act]") && at("[data-act]").dataset.act;
+    if (act === "fixrules") { const n = X.ruleIssues(S.month, cfg(), S.ym).length; S.month = X.fixRules(S.month, cfg(), S.ym); changed("month"); toast(`決まりどおりに並べ替えました（${n}件）`); return; }
     if (act === "draft") { const before = X.holes(S.month, cfg(), S.ym).length; S.month = X.draft(S.month, cfg(), S.ym); changed("month"); toast(`空いている枠を基本パターンで埋めました（空き ${before} → ${X.holes(S.month, cfg(), S.ym).length}）`); return; }
     if (act === "excel") { exportExcel(); return; }
     if (act === "calendar") { const u = H.url("?page=calendar"); if (u) { const l = document.createElement("a"); l.href = u; l.target = "_top"; document.body.appendChild(l); l.click(); l.remove(); } return; }
     if (act === "line") { const h = $("shHoles"); if (h) h.scrollIntoView({ behavior: "smooth" }); return; }
     if (act === "copy") { const ta = $("shLine"); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (x) {} if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => toast("コピーしました。LINEに貼り付けてください"), () => toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください")); else toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください"); return; }
-    if (act === "settings") { const c = cfg(); S.settings = { title: c.title, need: clone(c.need), members: clone(c.members), rotate: !!c.rotate, rotateFrom: c.rotateFrom || "" }; drawSettings(); return; }
+    if (act === "settings") { const c = cfg(); S.settings = { title: c.title, need: clone(c.need), members: clone(c.members), rotate: !!c.rotate, rotateFrom: c.rotateFrom || "", rules: clone(c.rules || []) }; drawSettings(); return; }
+    if (at("[data-radd]")) { readSettings(); S.settings.rules.push({ n: (S.settings.members[0] || {}).name || "", k: "l", cnt: 0, slot: 2 }); drawSettings(); return; }
+    if (at("[data-rdel]")) { readSettings(); S.settings.rules.splice(Number(at("[data-rdel]").dataset.rdel), 1); drawSettings(); return; }
     if (at("[data-set-close]")) { S.settings = null; drawSettings(); return; }
     if (at("[data-madd]")) { readSettings(); S.settings.members.push({ name: "", pat: {} }); drawSettings(); return; }
     if (at("[data-mdel]")) { readSettings(); S.settings.members.splice(Number(at("[data-mdel]").dataset.mdel), 1); drawSettings(); return; }
     if (at("[data-mup]")) { readSettings(); const i = Number(at("[data-mup]").dataset.mup); if (i > 0) { const a = S.settings.members; [a[i - 1], a[i]] = [a[i], a[i - 1]]; } drawSettings(); return; }
     if (at("[data-set-save]")) { readSettings(); const st = S.settings; st.members = st.members.filter((x) => x.name.trim()).map((x) => Object.assign(x, { name: x.name.trim() }));
-      S.cfg = Object.assign(clone(cfg()), { title: st.title.trim() || cfg().title, need: st.need, members: st.members, rotate: !!st.rotate && !!st.rotateFrom, rotateFrom: st.rotateFrom }); S.settings = null; changed("cfg"); drawSettings(); toast("設定を保存しました"); return; }
+      S.cfg = Object.assign(clone(cfg()), { title: st.title.trim() || cfg().title, need: st.need, members: st.members, rotate: !!st.rotate && !!st.rotateFrom, rotateFrom: st.rotateFrom, rules: (st.rules || []).filter((r) => r.n) }); S.settings = null; changed("cfg"); drawSettings(); toast("設定を保存しました"); return; }
   });
   function readSettings() {
     const st = S.settings; if (!st) return;
     const ti = $("stTitle"); if (ti) st.title = ti.value;
     if ($("stRot")) st.rotate = $("stRot").checked; if ($("stRotFrom")) st.rotateFrom = $("stRotFrom").value;
+    const rv = (a, i) => { const x = document.querySelector(`[data-${a}="${i}"]`); return x ? x.value : ""; };
+    (st.rules || []).forEach((r, i) => { if (!document.querySelector(`[data-rn="${i}"]`)) return; r.n = rv("rn", i); r.k = rv("rk", i); r.cnt = Number(rv("rc", i)); r.slot = Number(rv("rs", i)); });
     document.querySelectorAll("[data-mname]").forEach((x) => { st.members[Number(x.dataset.mname)].name = x.value; });
     document.querySelectorAll("[data-need]").forEach((x) => { const [k, wd] = x.dataset.need.split("|"); st.need[wd] = Object.assign({}, st.need[wd], { [k]: Number(x.value) }); });
   }
