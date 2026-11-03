@@ -8208,6 +8208,15 @@ function deptRankOf(master, deptId) {
 // 職員はパートを各部署の下にまとめる(sub: 同じ部署の中で先に来る順。小さいほど上)
 const byBaseDept = (master, list, sub) => list.map((x, i) => [x, i]).sort((a, b) => deptRankOf(master, a[0].deptId) - deptRankOf(master, b[0].deptId) || (sub ? sub(a[0]) - sub(b[0]) : 0) || a[1] - b[1]).map((p) => p[0]);
 const partLast = (s) => (s && s.emp === "パート" ? 1 : 0);
+// 「＋ ○○を追加」で足した行は、そのタブを開いている間は一覧のいちばん下（ボタンのすぐ上）に置き、名前の欄へ移る
+// （2026-11-03 依頼者「利用者を追加ボタンが効かない」：部署の順に並べるので、足した行が上の嫁島のところに入って見えなかった）
+const freshLast = (list, fresh) => fresh.length ? list.filter((x) => !fresh.includes(x.id)).concat(fresh.map((id) => list.find((x) => x.id === id)).filter(Boolean)) : list;
+function useFreshRows() {
+  const [fresh, setFresh] = useState([]);
+  const last = fresh[fresh.length - 1];
+  useEffect(() => { if (!last) return; const t = setTimeout(() => { const r = document.querySelector(`[data-row-id="${last}"]`); if (!r) return; r.scrollIntoView({ block: "center" }); const i = r.querySelector("input"); if (i) i.focus(); }, 50); return () => clearTimeout(t); }, [last]);
+  return [fresh, (id) => setFresh((f) => [...f, id])];
+}
 // 部署ごとに行の背景を少し変え、部署が変わる行の上に太い線（区切りが分かるように）
 const deptRowStyle = (master, list, i) => {
   const x = list[i], di = (master.departments || []).findIndex((d) => d.id === x.deptId);
@@ -8250,13 +8259,14 @@ function StaffTab({ master, update }) {
     if (!(await ask("この職員を削除しますか?\n(担当していた予定は自動的に「保留」列に移り、あとから別の職員に割り当て直せます)"))) return;
     update((m) => markDeleted({ ...m, staff: m.staff.filter((s) => s.id !== id) }, "staff", m.staff.find((s) => s.id === id)));
   };
-  const add = () =>
+  const [fresh, addFresh] = useFreshRows();
+  const add = () => { const id = uid(); addFresh(id); setQ("");
     update((m) => ({
       ...m,
-      staff: [...m.staff, { id: uid(), name: "", deptId: m.departments[0].id, position: "", emp: "常勤", start: "8:30", end: "17:30", canDrive: true, memo: "" }],
+      staff: [...m.staff, { id, name: "", deptId: dept !== "all" && m.departments.some((d) => d.id === dept) ? dept : m.departments[0].id, position: "", emp: "常勤", start: "8:30", end: "17:30", canDrive: true, memo: "" }],
       _deleted: m._deleted,
-    }));
-  const list = byBaseDept(master, master.staff.filter((s) => (dept === "all" || s.deptId === dept) && (!q || s.name.includes(q))), partLast);
+    })); };
+  const list = freshLast(byBaseDept(master, master.staff.filter((s) => fresh.includes(s.id) || ((dept === "all" || s.deptId === dept) && (!q || s.name.includes(q)))), partLast), fresh);
   const canReorder = dept === "all" && !q; // 全件表示のときだけ並べ替え可
   return (
     <div className="bg-white border border-stone-300 rounded-lg p-3 overflow-x-auto">
@@ -8272,7 +8282,7 @@ function StaffTab({ master, update }) {
         </thead>
         <tbody>
           {list.map((s, ri) => (
-            <tr key={s.id} style={deptRowStyle(master, list, ri)} data-dept-row={s.deptId}
+            <tr key={s.id} style={deptRowStyle(master, list, ri)} data-dept-row={s.deptId} data-row-id={s.id}
               onDragOver={canReorder ? (e) => { e.preventDefault(); if (overId !== s.id) setOverId(s.id); } : undefined}
               onDrop={canReorder ? () => onDropRow(s.id) : undefined}
               className={`border-t border-stone-100 ${ri % 2 ? "bg-stone-100" : "bg-white"} hover:bg-amber-100 ${overId === s.id && dragId ? "outline outline-2 outline-sky-400" : ""}`}>
@@ -8375,11 +8385,12 @@ function VehicleTab({ master, update }) {
     if (!(await ask("この車両を削除しますか?"))) return;
     update((m) => markDeleted({ ...m, vehicles: m.vehicles.filter((v) => v.id !== id) }, "vehicles", m.vehicles.find((v) => v.id === id)));
   };
-  const add = () =>
+  const [fresh, addFresh] = useFreshRows();
+  const add = () => { const id = uid(); addFresh(id);
     update((m) => ({
       ...m,
-      vehicles: [...m.vehicles, { id: uid(), name: "", deptId: m.departments[0].id, capNormal: 6, capWc: 3, wheelchairOK: true, memo: "" }],
-    }));
+      vehicles: [...m.vehicles, { id, name: "", deptId: m.departments[0].id, capNormal: 6, capWc: 3, wheelchairOK: true, memo: "" }],
+    })); };
   return (
     <div className="bg-white border border-stone-300 rounded-lg p-3 overflow-x-auto">
       <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
@@ -8394,8 +8405,8 @@ function VehicleTab({ master, update }) {
           </tr>
         </thead>
         <tbody>
-          {byBaseDept(master, master.vehicles).map((v, vi, vl) => (
-            <tr key={v.id} style={deptRowStyle(master, vl, vi)}
+          {freshLast(byBaseDept(master, master.vehicles), fresh).map((v, vi, vl) => (
+            <tr key={v.id} style={deptRowStyle(master, vl, vi)} data-row-id={v.id}
               onDragOver={(e) => { e.preventDefault(); if (overId !== v.id) setOverId(v.id); }}
               onDrop={() => onDropRow(v.id)}
               className={`border-t border-stone-100 ${overId === v.id && dragId ? "outline outline-2 outline-sky-400" : ""}`}>
@@ -8493,12 +8504,13 @@ function UserTab({ master, update }) {
     if (!(await ask("この利用者を削除しますか?"))) return;
     update((m) => markDeleted({ ...m, users: m.users.filter((u) => u.id !== id) }, "users", m.users.find((u) => u.id === id)));
   };
-  const add = () =>
+  const [fresh, addFresh] = useFreshRows();
+  const add = () => { const id = uid(); addFresh(id); setQ("");
     update((m) => ({
       ...m,
-      users: [...m.users, { id: uid(), name: "", deptId: m.departments[0].id, meetTime: "", sendTime: "", wheelchair: false, hasHelp: true, helpNote: "", days: [] }],
-    }));
-  const list = byBaseDept(master, master.users.filter((u) => (dept === "all" || u.deptId === dept) && (!q || u.name.includes(q))));
+      users: [...m.users, { id, name: "", deptId: dept !== "all" && m.departments.some((d) => d.id === dept) ? dept : m.departments[0].id, meetTime: "", sendTime: "", wheelchair: false, hasHelp: true, helpNote: "", days: [] }],
+    })); };
+  const list = freshLast(byBaseDept(master, master.users.filter((u) => fresh.includes(u.id) || ((dept === "all" || u.deptId === dept) && (!q || u.name.includes(q))))), fresh);
   const canReorder = dept === "all" && !q;
   const exportXlsx = async () => {
     try {
@@ -8541,7 +8553,7 @@ function UserTab({ master, update }) {
         <tbody>
           {list.map((u, ri) => (
             <React.Fragment key={u.id}>
-            <tr style={deptRowStyle(master, list, ri)}
+            <tr style={deptRowStyle(master, list, ri)} data-row-id={u.id}
               onDragOver={canReorder ? (e) => { e.preventDefault(); if (overId !== u.id) setOverId(u.id); } : undefined}
               onDrop={canReorder ? () => onDropRow(u.id) : undefined}
               className={`border-t border-stone-100 ${overId === u.id && dragId ? "outline outline-2 outline-sky-400" : ""}`}>
