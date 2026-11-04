@@ -4303,7 +4303,7 @@ function extraStaffOf(master, blocks, h) {
     .map((b) => sName(b.staffId)).join("・");
 }
 
-function ExtraHelpPanel({ master, sheet, wd, patternForDay, onChange }) {
+function ExtraHelpPanel({ master, sheet, wd, patternForDay, onChange, onRemoveBlocks }) {
   const list = sheet.extraHelps || [];
   const chk = extraHelpCheck(master, sheet, wd, patternForDay);
   const staffOf = (h) => extraStaffOf(master, sheet.blocks, h);
@@ -4380,6 +4380,16 @@ function ExtraHelpPanel({ master, sheet, wd, patternForDay, onChange }) {
                 <span className="text-[10px] px-1 rounded bg-amber-200 text-amber-900">{EXTRA_KIND_JP[h.kind]}</span>
                 <span className="text-stone-700">{h.time} {h.label}(担当: {staffOf(h)})</span>
                 <button className="px-2 py-0.5 rounded border border-amber-400 text-amber-800 hover:bg-amber-100" onClick={() => addFromItem(h)}>この欄に追加</button>
+                {onRemoveBlocks && (() => {
+                  // 送迎表から消す（2026-11-04 依頼者「Excelから取り込んだあと消したコマがあるのに、これが消えない」）。同じ予定・同じ時刻が何件あってもまとめて消す
+                  const same = (sheet.blocks || []).filter((b) => b.kind === h.kind && extraKeyOf(b.label, b.time) === extraKeyOf(h.label, h.time));
+                  return (
+                    <button className="px-2 py-0.5 rounded border border-rose-300 text-rose-700 hover:bg-rose-50" data-unlisted-del={h.id}
+                      onClick={async () => { if (await ask(`送迎表から「${h.time} ${h.label}」${same.length > 1 ? `（${same.length}件）` : ""}を消しますか？`)) onRemoveBlocks(same.map((b) => b.id)); }}>
+                      送迎表から消す{same.length > 1 ? `(${same.length}件)` : ""}
+                    </button>
+                  );
+                })()}
               </div>
             ))}
           </div>
@@ -10660,7 +10670,8 @@ function AppInner() {
 
                 {sheet && !isPattern && sheetMaster && (
                   <ExtraHelpPanel master={sheetMaster} sheet={sheet} wd={weekdayOf(date)} patternForDay={dayPattern}
-                    onChange={(list) => updateSheet((prev) => ({ ...prev, extraHelps: list }))} />
+                    onChange={(list) => updateSheet((prev) => ({ ...prev, extraHelps: list }))}
+                    onRemoveBlocks={(ids) => updateSheet((prev) => ({ ...prev, blocks: (prev.blocks || []).filter((b) => !ids.includes(b.id)) }))} />
                 )}
 
                 <div className="mt-2">

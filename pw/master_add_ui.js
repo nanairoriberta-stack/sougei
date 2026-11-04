@@ -40,6 +40,12 @@ const D = path.join(__dirname, "../gas/out");
   putEv("ev_note0001", { title: uN + " 通院", allDay: false, start: "10:00", end: "12:00" });
   putEv("ev_note0002", { title: pS.name + " PM休み", label: "leave", sg: { type: "staff_off", staff: [pS.name], half: "pm" } });
   putEv("ev_note0003", { title: "松養生高２女性 現場実習" });
+  { // Excelから取り込んだような通常外のヘルプ（同じものが2件、保留・18:00）。「送迎表にある通常外の予定で、この欄に無いもの」から消せる（2026-11-04 依頼者）
+    const s0 = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value;
+    const add = [{ id: "imp_x1", kind: "help", time: "18:00", staffId: "__hold__", label: "増野(いきいき)ヘルプ", vehicleId: "" }, { id: "imp_x2", kind: "help", time: "18:00", staffId: "__hold__", label: "増野(いきいき)ヘルプ", vehicleId: "" }];
+    api(t, "kv.merge", [{ key: "v2:sheet:2026-11-02", base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, ...add] } }]);
+    const E2 = engFor("v2"), mm = api(t, "kv.get", ["v2:master"]).data.value;   // 月曜の週間パターン（「通常」が分かるように）
+    api(t, "kv.cas", [{ key: "v2:pattern:1", rev: 0, value: E2.resolveSeedPattern(mm, E2.SEED_PATTERNS.mon) }]); }
   const P = await open("sougei.html", { width: 1400, height: 900 }, boot, "master_add.html");
   await P.pg.waitForTimeout(500); await P.pg.fill("#sghNo", "000"); await P.pg.fill("#sghPin", "5829"); await P.pg.click("#sghGo"); await P.pg.waitForTimeout(5000);
   const where = () => P.pg.evaluate(() => { const rs = [...document.querySelectorAll("[data-row-id]")], a = document.activeElement, r = a && a.closest("[data-row-id]"), b = r && r.getBoundingClientRect();
@@ -65,6 +71,17 @@ const D = path.join(__dirname, "../gas/out");
     const w = await where(); assert.ok(w.at === w.n - 1 && w.val === "", "しぼっていても見える " + JSON.stringify(w));
     const nu = api(t, "kv.get", ["v2:master"]).data.value.users.slice(-1)[0]; assert.strictEqual(nu.deptId, d2.id, "しぼっている部署で足す");
     console.log("部署でしぼっていても：" + d2.name + "の利用者として足す OK"); }
+  { // 通常外の予定の欄から送迎表のコマを消す（同じ予定が2件あっても両方）
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
+    const btn = P.pg.locator('[data-unlisted-del]').filter({ hasText: "2件" });
+    assert.strictEqual(await btn.count(), 1, "「送迎表から消す(2件)」のボタン");
+    await btn.click(); await P.pg.waitForTimeout(300);
+    await P.pg.click('button:text-is("OK"), button:text-is("はい")').catch(async () => { await P.pg.keyboard.press("Enter"); });
+    await P.pg.waitForTimeout(3000);
+    const left = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value.blocks.filter((b) => /増野/.test(b.label || ""));
+    assert.strictEqual(left.length, 0, "サーバーからも消えた " + JSON.stringify(left));
+    assert.strictEqual(await P.pg.locator('[data-unlisted-del]').filter({ hasText: "増野" }).count(), 0);
+    console.log("通常外の予定の欄から「増野(いきいき)ヘルプ」2件を送迎表から消した OK"); }
   { // 検索：ヒットの場所へ表が動く（右の方の職員の列でも。2026-11-03 依頼者「検索してもその場所に画面が移動しない」）
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
     const shv = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value, mv = api(t, "kv.get", ["v2:master"]).data.value;
