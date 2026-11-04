@@ -70,6 +70,12 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.fill("#f-sgq-staff", "八壁"); await A.pg.waitForTimeout(400);
     assert.strictEqual(await A.pg.locator("#sghits-staff [data-sgpick]").first().getAttribute("data-name"), "八壁", "入力すると合う人が先頭");
     console.log("名前の選択：部署ごと", heads.slice(0, 5).join("／"), "… 嫁島：", (under["嫁島"] || []).slice(0, 3).join("・"));
+    // 利用者の名前も部署ごと
+    await A.pg.locator("label:has(#f-label-user)").click(); await A.pg.waitForTimeout(300);
+    await A.pg.focus("#f-sgq-users"); await A.pg.waitForTimeout(800);
+    const uh = await A.pg.$$eval("#sghits-users .sghd", (x) => x.map((e) => e.textContent));
+    assert.ok(uh.length >= 3 && uh[0] === "嫁島", "利用者も部署の見出し " + JSON.stringify(uh));
+    console.log("利用者の選択：部署ごと", uh.slice(0, 5).join("／"));
     await A.pg.keyboard.press("Escape"); }
   assert.deepStrictEqual(A.errs.filter((e) => !/net::ERR_FAILED|favicon/.test(e)), [], "画面エラーなし");
   console.log("バックアップから復元：3件 → 2回目は0件 / 画面エラー: []");
