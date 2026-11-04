@@ -233,3 +233,22 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.ok(/ﾊﾞｽ|バス/.test(cell), "Excelのヘルプにバス " + JSON.stringify(cell));
   console.log("help car OK", JSON.stringify(cell));
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// 利用者の休み：別の行・セルではなく、利用者の枠の中に段落を分けて「休み：〇〇」（2026-11-04 依頼者）
+(async () => {
+  const E11 = require("./eng.cjs"), m = E11.mergeSeedMaster(null, E11.seedMaster()), date = "2026-11-02";
+  const p = E11.resolveSeedPattern(m, E11.SEED_PATTERNS.mon);
+  const wd = 1, us = m.users.filter((u) => (u.days || []).includes(wd));
+  const a = us[0], b = us.find((u) => u.deptId === a.deptId && u.id !== a.id);
+  const sh = Object.assign(E11.emptySheet(), { runs: p.runs, blocks: p.blocks, userAbsent: { [a.id]: true, [b.id]: true } });
+  const wb = E11.buildWorkbook(ExcelJS, m, sh, date);
+  const back = new ExcelJS.Workbook(); await back.xlsx.load(await wb.xlsx.writeBuffer());
+  const ws = back.getWorksheet("送迎表"), cells = [];
+  ws.eachRow((r, ri) => r.eachCell((c, ci) => cells.push({ ri, ci, v: String(c.value && c.value.richText ? c.value.richText.map((x) => x.text).join("") : c.value || "") })));
+  const kana = (s) => E11.toHankakuKana ? E11.toHankakuKana(s) : s;
+  const cell = cells.find((x) => x.v.includes("\n\n休み：") && x.v.includes(kana(a.name)) && x.v.includes(kana(b.name)));
+  assert.ok(cell, "利用者の枠の中に「休み：」 " + JSON.stringify(cells.filter((x) => x.v.includes("休み")).map((x) => x.v).slice(0, 4)));
+  assert.ok(!cell.v.split("休み：")[0].includes(kana(a.name)), "休みの人は来る人の並びに入れない");
+  assert.ok(!cells.some((x) => x.ci === 1 && x.v === "休み"), "「休み」の行は無くなった");
+  console.log("absent in user cell OK", JSON.stringify(cell.v.slice(-40)));
+})().catch((e) => { console.error(e); process.exit(1); });

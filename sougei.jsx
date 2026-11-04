@@ -4017,7 +4017,9 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     segs.forEach(({ d, from, to }) => {
       const list = master.users.filter((u) => u.deptId === d.id && !absent[u.id] && (u.days || []).includes(wd));
       mergeSet(uHr, from, to, `${d.name}(${list.length}名)`, { bold: true, fill: argbOf(d.id), hAlign: "center", vAlign: "middle" });
-      const txt = list.map((u) => u.name + (u.wheelchair ? "(車)" : "")).join("・");
+      // 休み（欠席）は同じ枠の下に段落を分けて「休み：〇〇・〇〇」（2026-11-04 依頼者。以前は下に別の行・セル）
+      const offList = master.users.filter((u) => u.deptId === d.id && absent[u.id] && (u.days || []).includes(wd));
+      const txt = list.map((u) => u.name + (u.wheelchair ? "(車)" : "")).join("・") + (offList.length ? "\n\n休み：" + offList.map((u) => u.name).join("・") : "");
       maxLu = Math.max(maxLu, calcLines(toHankakuKana(txt), segChars(from, to)));
       mergeSet(uCr, from, to, txt, {});
     });
@@ -4027,21 +4029,8 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   }
   r = uCr + 1;
 
-  // ---- 休み(欠席の利用者): 利用者行の直下・部署ごとに表示 ----
-  const absRow = r;
-  {
-    setCell(absRow, 1, "休み", { bold: true, size: 11, fill: GRAY, hAlign: "center", vAlign: "middle" });
-    ws.getCell(absRow, 1).border = BORDER;
-    let maxLa = 1;
-    segs.forEach(({ d, from, to }) => {
-      const list = master.users.filter((u) => u.deptId === d.id && absent[u.id] && (u.days || []).includes(wd));
-      const txt = list.map((u) => u.name).join("・");
-      maxLa = Math.max(maxLa, calcLines(toHankakuKana(txt), segChars(from, to)));
-      mergeSet(absRow, from, to, txt, { fill: GRAY });
-    });
-    ws.getRow(absRow).height = Math.max(15, maxLa * LINE_H + 2);
-  }
-  r = absRow + 1;
+  // 休み（欠席の利用者）は利用者の枠の中（上）。特記事項の縦長枠は利用者の行まで
+  const absRow = uCr;
 
   // ---- 特記事項の内容: 右端の縦長枠(送迎内容行〜利用者内容行を縦マージ・2カラム) ----
   if (hasNote) {
