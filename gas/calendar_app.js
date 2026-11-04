@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.04b";
+const APP_VERSION="2026.11.04c";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -433,6 +433,7 @@ function drawSg(){
 /* 1つの予定に1人だけ（2026-10-29 依頼者）。その他予定の担当と、モニタリング・支援会議の対応者だけは何人でも */
 const oneOnly=(L,kind)=>!(PLAN_LABELS.includes(L)&&kind==="staff");   // 1つの予定に1人（その他予定の担当も1人＝2026-10-31 依頼者）。モニタリング・支援会議の対応者だけ何人でも
 function kanaNorm(s){return String(s||"").normalize("NFKC").replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/\s+/g,"").toLowerCase()}
+const DEPT_ORDER=["嫁島","津田","川津","あいのて","リベ","ぷれいす"];
 function sgHits(kind,q){
   const h=$("sghits-"+kind);if(!h||!ed)return;const sel=new Set(ed.d.w[kind]||[]);
   // 利用者の候補：放課後デイの予定は送迎表のりんく・ぷれいす版の利用者、生活介護は現体制版・新体制版の利用者
@@ -443,8 +444,13 @@ function sgHits(kind,q){
   const scored=src.filter(x=>!sel.has(x.name)).map(x=>{const n=kanaNorm(x.name),y=kanaNorm(Y[x.name]||"");
     const s=!qn?2:(n.startsWith(qn)||(y&&y.startsWith(qn)))?0:(n.includes(qn)||(y&&y.includes(qn)))?1:String(x.dept).includes(qq)?2:9;return{x,s,k:y||n}}).filter(o=>o.s<9);
   scored.sort((a,b)=>a.s-b.s||a.k.localeCompare(b.k,"ja"));
-  const list=scored.slice(0,qn?12:40).map(o=>o.x);
-  h.innerHTML=list.length?list.map(x=>`<button type="button" data-sgpick="${kind}" data-name="${esc(x.name)}"><span>${esc(x.name)}${Y[x.name]?` <small>${esc(Y[x.name])}</small>`:""}</span><small>${esc(x.dept)}</small></button>`).join(""):`<div class="by" style="padding:6px 10px">${!SGN.loaded?"読み込み中…":kidsMode&&!(SGN.kids||[]).length?"放課後デイ（りんく・ぷれいす）の利用者がまだいません。送迎表の「りんく・ぷれいす版」の利用者タブで登録すると、ここに出ます。":"見つかりません"}</div>`;h.hidden=false;
+  // 部署ごとにまとめて出す（2026-11-04 依頼者「名前選択のときに 嫁島／いがわ／久保田 のように」）。部署は基本の順（嫁島・津田・川津・あいのて・リベ…）
+  const list=scored.slice(0,qn?20:400).map(o=>o.x);
+  const dOf=x=>(kind==="staff"?usualDept(x.name,ed.d.date,bizOf(ed.d)):x.dept)||"そのほか";
+  const groups=[];for(const x of list){const d=dOf(x);let g=groups.find(g=>g.d===d);if(!g)groups.push(g={d,xs:[]});g.xs.push(x)}
+  const rank=d=>{const i=DEPT_ORDER.findIndex(n=>String(d).includes(n));return i<0?(d==="そのほか"?99:50):i};
+  if(!qn)groups.sort((a,b)=>rank(a.d)-rank(b.d)||String(a.d).localeCompare(String(b.d),"ja"));   // 入力中は合うものが多い部署から（並びは予測の順）
+  h.innerHTML=list.length?groups.map(g=>`<div class="sghd" data-sghd="${esc(g.d)}">${esc(g.d)}</div>`+g.xs.map(x=>`<button type="button" class="sgin" data-sgpick="${kind}" data-name="${esc(x.name)}"><span>${esc(x.name)}${Y[x.name]?` <small>${esc(Y[x.name])}</small>`:""}</span></button>`).join("")).join(""):`<div class="by" style="padding:6px 10px">${!SGN.loaded?"読み込み中…":kidsMode&&!(SGN.kids||[]).length?"放課後デイ（りんく・ぷれいす）の利用者がまだいません。送迎表の「りんく・ぷれいす版」の利用者タブで登録すると、ここに出ます。":"見つかりません"}</div>`;h.hidden=false;
 }
 function readSg(){
   if(!ed||!$("sgArea"))return;const w=ed.d.w;

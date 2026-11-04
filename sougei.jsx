@@ -1355,8 +1355,12 @@ function resolveSeedPattern(master, sp) {
   return { runs, blocks, training: (sp.training || []).join("\n") };
 }
 
+// ヘルプの「車」で選べる、公用車ではないもの（2026-11-04 依頼者「ヘルプの車の欄にバスを」）。車の動き・重なりの計算には入れない
+const BUS_ID = "__bus__", WALK_ID = "__walk__";
+const NOT_CAR = { [BUS_ID]: "バス", [WALK_ID]: "徒歩" };
 function resolveVehicle(master, vehicleId) {
   if (!vehicleId) return null;
+  if (NOT_CAR[vehicleId]) return { id: vehicleId, name: NOT_CAR[vehicleId], deptId: "", capNormal: 0, capWc: 0, wheelchairOK: false, own: true, notCar: true };
   if (String(vehicleId).startsWith("own:")) {
     const s = master.staff.find((x) => x.id === String(vehicleId).slice(4));
     if (!s) return null;
@@ -2780,7 +2784,7 @@ function buildVehicleTrips(sheetData) {
   const trips = {};
   const add = (x, kind) => {
     const t = toMin(x.time);
-    if (!x.vehicleId || String(x.vehicleId).startsWith("own:") || t == null) return;
+    if (!x.vehicleId || String(x.vehicleId).startsWith("own:") || NOT_CAR[x.vehicleId] || t == null) return;
     (trips[x.vehicleId] = trips[x.vehicleId] || []).push({
       id: x.id, t, end: t + helpDurMin(x), kind, dest: x.destDeptId || "", time: x.time, staffId: x.staffId,
       train: x.mode === "train" || (x.trainUserIds || []).length > 0 || (x.trainBothIds || []).length > 0 || (x.trainDropIds || []).length > 0,
@@ -3020,6 +3024,7 @@ function buildMasterWorkbook(ExcelJS, master, patterns) {
   const vName = (id) => {
     if (!id) return "";
     if (String(id).startsWith("own:")) return "自車";
+    if (NOT_CAR[id]) return NOT_CAR[id];
     return (master.vehicles.find((x) => x.id === id) || {}).name || "";
   };
   DAY_ORDER.forEach((wd) => {
@@ -4663,11 +4668,13 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
         ) : canPickVehicle ? (
           <Field label={isHelp ? "車両(公用車・自車で行く場合に選択)" : "車両"}>
             <select className={inputCls} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
-              <option value="">{isHelp ? "車なし(徒歩・その他)" : "選択してください"}</option>
+              <option value="">{isHelp ? "選択してください(車が無いと出力前の確認でエラー)" : "選択してください"}</option>
               {!isHelp && <option value="__walk__">🚶 徒歩(車を使わない・徒歩迎え/徒歩送りになります)</option>}
               {isHelp && effStaffId && effStaffId !== HOLD_ID && (
                 <option value={"own:" + effStaffId}>担当職員の自車で行く</option>
               )}
+              {isHelp && <option value={BUS_ID}>🚌 バス</option>}
+              {isHelp && <option value={WALK_ID}>🚶 徒歩(車を使わない)</option>}
               {master.departments.map((dpt) => {
                 const vs = master.vehicles.filter((v) => v.deptId === dpt.id);
                 if (!vs.length) return null;
@@ -4884,7 +4891,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
           </Field>
         </div>
       )}
-      {!isOwn && vehicleId && vehicleId !== "__walk__" && !String(vehicleId).startsWith("own:") && (
+      {!isOwn && vehicleId && !NOT_CAR[vehicleId] && !String(vehicleId).startsWith("own:") && (
         <div className="grid grid-cols-2 gap-3 mt-2">
           {!isHelp && <Field label="所要時間(車が戻るまで・アプリ内のみ)">
             <select className={inputCls} value={durMin} onChange={(e) => setDurMin(e.target.value)}>
@@ -10259,6 +10266,8 @@ function AppInner() {
       });
     });
     offTimeBlockWarn(sheetMaster, sheetData, wd).forEach((x) => timeErr.push(x));   // 灰色の時間のヘルプ・予定
+    // ヘルプに車が入っていない（2026-11-04 依頼者「ヘルプに車がついていない時は最後エラーに」）。担当が決まっていない保留は「保留」で出るので除く
+    helpNoCarWarn(sheetMaster, sheetData).forEach((x) => vehErr.push(x));
     if (holdCount) critical.push(`保留(担当未定)の予定が ${holdCount} 件残っています`);
     [...requiredHelpWarn(sheetMaster, sheetData, wd), ...fixedBlockWarn(sheetMaster, sheetData, wd), ...blockOverlapWarn(sheetMaster, sheetData), ...helpTwoShortages(sheetMaster, sheetData, wd), ...kubotaPlacementWarn(sheetMaster, sheetData, wd), ...maleOnlyHelpWarn(sheetMaster, sheetData), ...pikaStaffWarn(sheetMaster, sheetData, wd)].forEach((w) => critical.push(w));
 
@@ -12170,6 +12179,11 @@ function aiApplyPure(sheetMaster, prev, changes, idMap, logInfo) {
   return { next, applied, dedupCount, capFixed, emptyRemoved };
 }
 // 出力前チェックの結果(groups)を返す。Excel出力の前に出るチェックと同じ内容
+function helpNoCarWarn(master, sheetData) {
+  return (sheetData.blocks || []).filter((b) => b.kind === "help" && !b.noteOnly && !b.vehicleId && b.staffId && b.staffId !== HOLD_ID && !b.linkCancelled)
+    .sort((a, b) => (toMin(a.time) || 0) - (toMin(b.time) || 0))
+    .map((b) => { const stf = master.staff.find((s) => s.id === b.staffId); return `${stf ? stf.name : "保留"} ${b.time}【ヘルプ】${canonHelpLabel(b.label || "")}: 車が入っていません(公用車・自車・バス・徒歩から選んでください)`; });
+}
 function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
@@ -12270,6 +12284,8 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
       });
     });
     offTimeBlockWarn(sheetMaster, sheetData, wd).forEach((x) => timeErr.push(x));   // 灰色の時間のヘルプ・予定
+    // ヘルプに車が入っていない（2026-11-04 依頼者「ヘルプに車がついていない時は最後エラーに」）。担当が決まっていない保留は「保留」で出るので除く
+    helpNoCarWarn(sheetMaster, sheetData).forEach((x) => vehErr.push(x));
     if (holdCount) critical.push(`保留(担当未定)の予定が ${holdCount} 件残っています`);
     [...requiredHelpWarn(sheetMaster, sheetData, wd), ...fixedBlockWarn(sheetMaster, sheetData, wd), ...blockOverlapWarn(sheetMaster, sheetData), ...helpTwoShortages(sheetMaster, sheetData, wd), ...kubotaPlacementWarn(sheetMaster, sheetData, wd), ...maleOnlyHelpWarn(sheetMaster, sheetData), ...pikaStaffWarn(sheetMaster, sheetData, wd)].forEach((w) => critical.push(w));
 

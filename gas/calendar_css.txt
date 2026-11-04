@@ -203,6 +203,9 @@ textarea.input{height:auto;min-height:72px;padding:8px 10px;resize:vertical}
 .sghits button{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;background:none;padding:8px 10px;text-align:left;font-size:14px}
 .sghits button:hover,.sghits button:focus-visible{background:var(--sunken)}
 .sghits small{color:var(--muted)}
+.sghits .sghd{position:sticky;top:0;background:var(--sunken);font-weight:700;font-size:12px;padding:4px 10px;color:var(--muted);border-top:1px solid var(--line)}
+.sghits .sghd:first-child{border-top:0}
+.sghits button.sgin{padding-left:24px}
 .tag-sg{font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 8px}
 @media (max-width:560px){.bar-in .seg{order:5}.bar-in #addBtn{order:6}}
 /* スマホ：上の帯は流れるように（固定すると画面の3分の1を取る）、ラベルの絞り込みは横に流す、入力欄は16px（iPhoneで拡大されない） */

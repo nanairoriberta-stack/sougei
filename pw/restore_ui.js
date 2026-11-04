@@ -56,6 +56,21 @@ const D = path.join(__dirname, "../gas/out");
   assert.strictEqual(api(t, "cal.search", [{ q: "更生センター" }]).data.items.length, 1);
   const m2 = await restore(); assert.ok(m2.includes("サーバーにない予定 0件"), "2回目は0件（二重にならない） " + m2);
   assert.strictEqual(api(t, "cal.search", [{ q: "松浦通院" }]).data.items.length, 1, "二重に入らない");
+  { // 名前を選ぶとき、部署ごとにまとめて出す（嫁島／ 八壁・井川…。2026-11-04 依頼者）
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+    await A.pg.click("#addBtn"); await A.pg.waitForTimeout(400);
+    await A.pg.locator("label:has(#f-label-leave)").click(); await A.pg.waitForTimeout(300);
+    await A.pg.focus("#f-sgq-staff"); await A.pg.waitForTimeout(1500);
+    const heads = await A.pg.$$eval("#sghits-staff .sghd", (x) => x.map((e) => e.textContent));
+    assert.ok(heads.length >= 3 && heads[0] === "嫁島", "部署の見出し（嫁島から） " + JSON.stringify(heads));
+    const under = await A.pg.evaluate(() => { const out = {}; let cur = ""; for (const el of document.querySelectorAll("#sghits-staff > *")) { if (el.classList.contains("sghd")) cur = el.textContent; else (out[cur] = out[cur] || []).push(el.dataset.name); } return out; });
+    const mv = api(t, "kv.get", ["v2:master"]).data.value, yome = mv.departments.find((d) => d.name === "嫁島");
+    const y1 = mv.staff.find((s) => s.deptId === yome.id && (under["嫁島"] || []).includes(s.name));
+    assert.ok(y1, "嫁島の見出しの下に嫁島の職員 " + JSON.stringify((under["嫁島"] || []).slice(0, 5)));
+    await A.pg.fill("#f-sgq-staff", "八壁"); await A.pg.waitForTimeout(400);
+    assert.strictEqual(await A.pg.locator("#sghits-staff [data-sgpick]").first().getAttribute("data-name"), "八壁", "入力すると合う人が先頭");
+    console.log("名前の選択：部署ごと", heads.slice(0, 5).join("／"), "… 嫁島：", (under["嫁島"] || []).slice(0, 3).join("・"));
+    await A.pg.keyboard.press("Escape"); }
   assert.deepStrictEqual(A.errs.filter((e) => !/net::ERR_FAILED|favicon/.test(e)), [], "画面エラーなし");
   console.log("バックアップから復元：3件 → 2回目は0件 / 画面エラー: []");
   await b.close();

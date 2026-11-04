@@ -71,7 +71,7 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  // 木曜（井上入浴・黒田入浴）のパターンで、2名体制の警告が出ず、Excelにも「井上ヘルプ」で出る
  const p=E2.resolveSeedPattern(m0,E2.SEED_PATTERNS.thu); const sh=Object.assign(E2.emptySheet(),{runs:p.runs,blocks:p.blocks});
  const date='2026-11-05'; const chk=E2.collectSheetChecks(E2.applyDayDept(m0,4,null,null,null,date),sh,date,p);
- assert.ok(!JSON.stringify(chk).includes('入浴'),'チェックの文に「井上入浴」「黒田入浴」が出ない');
+ assert.ok(!/井上入浴|黒田入浴/.test(JSON.stringify(chk)),'チェックの文に「井上入浴」「黒田入浴」が出ない（藤井入浴などほかの入浴はそのままの名前＝2026-11-04 から車なしのエラーに名前が出る）');
  console.log('help merge OK');
 }
 // ===== 職員・車両・利用者の一覧は基本の部署の順（嫁島・津田・川津・あいのて・リベ）。同じ部署の中は今までの並び（2026-10-29） =====
@@ -212,4 +212,24 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.ok(!all.includes("森 欠席"), "欠席は特記事項に出さない");
   if (!(mt.offDays || []).includes(1)) has("鳥屋尾"), assert.ok(/鳥屋尾 [^\n]*\(13:00〜15:00不在\)/.test(all), "中抜けはパート欄に（不在）");
   console.log("cal notes OK", cn.user.length, cn.staff.length, cn.biz.length, "/ パート:", (all.match(/三島 [^\n]*/) || [""])[0]);
+})().catch((e) => { console.error(e); process.exit(1); });
+
+// ヘルプに車が無いときは出力前の確認でエラー・ヘルプの車にバス（2026-11-04 依頼者）
+(async () => {
+  const E10 = require("./eng.cjs"), m = E10.mergeSeedMaster(null, E10.seedMaster()), date = "2026-11-02";
+  const p = E10.resolveSeedPattern(m, E10.SEED_PATTERNS.mon);
+  const st = m.staff.find((s) => s.name === "八壁");
+  const blocks = [...p.blocks.map((b) => (b.kind === "help" && !b.vehicleId ? { ...b, vehicleId: "__walk__" } : b)),
+    { id: "hb1", kind: "help", time: "14:00", staffId: st.id, label: "中村ヘルプ", vehicleId: "__bus__" },
+    { id: "hb2", kind: "help", time: "15:00", staffId: st.id, label: "森ヘルプ", vehicleId: "" },
+    { id: "hb3", kind: "help", time: "15:30", staffId: "__hold__", label: "保留のヘルプ", vehicleId: "" },
+    { id: "hb4", kind: "help", time: "16:00", staffId: st.id, label: "コマだけ消したヘルプ", vehicleId: "", noteOnly: true }];
+  assert.deepStrictEqual(E10.helpNoCarWarn(m, { blocks }), ["八壁 15:00【ヘルプ】森ヘルプ: 車が入っていません(公用車・自車・バス・徒歩から選んでください)"], "車なしのヘルプだけ（保留・コマだけ消したものは除く）");
+  const sh = Object.assign(E10.emptySheet(), { runs: p.runs, blocks });
+  const wb = E10.buildWorkbook(ExcelJS, m, sh, date);
+  const back = new ExcelJS.Workbook(); await back.xlsx.load(await wb.xlsx.writeBuffer());
+  const txt = []; back.getWorksheet("送迎表").eachRow((r) => r.eachCell((c) => txt.push(String(c.value && c.value.richText ? c.value.richText.map((x) => x.text).join("") : c.value || ""))));
+  const cell = txt.find((x) => x.includes("[ﾍﾙﾌﾟ]") && x.includes("中村")) || "";   // Excelは半角（[ﾍﾙﾌﾟ] ﾊﾞｽ 中村）
+  assert.ok(/ﾊﾞｽ|バス/.test(cell), "Excelのヘルプにバス " + JSON.stringify(cell));
+  console.log("help car OK", JSON.stringify(cell));
 })().catch((e) => { console.error(e); process.exit(1); });
