@@ -4378,7 +4378,7 @@ function ExtraHelpPanel({ master, sheet, wd, patternForDay, onChange, onRemoveBl
             {chk.unlisted.map((h) => (
               <div key={h.id} className="flex items-center gap-2 text-xs">
                 <span className="text-[10px] px-1 rounded bg-amber-200 text-amber-900">{EXTRA_KIND_JP[h.kind]}</span>
-                <span className="text-stone-700">{h.time} {h.label}(担当: {staffOf(h)})</span>
+                <span className="text-stone-700">{h.time} {h.label}(担当: {staffOf(h)}){h.noteOnly ? <b className="text-stone-500">　※表には出していません（コマだけ消した予定）</b> : null}</span>
                 <button className="px-2 py-0.5 rounded border border-amber-400 text-amber-800 hover:bg-amber-100" onClick={() => addFromItem(h)}>この欄に追加</button>
                 {onRemoveBlocks && (() => {
                   // 送迎表から消す（2026-11-04 依頼者「Excelから取り込んだあと消したコマがあるのに、これが消えない」）。同じ予定・同じ時刻が何件あってもまとめて消す
@@ -9858,6 +9858,14 @@ function AppInner() {
   }, [searchQ, dataForGrid, sheetMaster]);
   const activeSearchId = searchHits.length ? searchHits[((searchIdx % searchHits.length) + searchHits.length) % searchHits.length] : null;
   const searchJump = (dir) => { if (searchHits.length) setSearchIdx((i) => i + dir); };
+  // 「コマだけ消す」にした予定は表に出ていないので、下の特記事項の欄を開いて、その一覧の行へ移る（2026-11-04 依頼者「1/1と出るけど画面が移動しない」）
+  const activeNoteOnly = !!(activeSearchId && dataForGrid && (dataForGrid.blocks || []).some((b) => b.id === activeSearchId && b.noteOnly));
+  useEffect(() => {
+    if (!activeNoteOnly) return;
+    setPanelsOpen(true);
+    const tm = setTimeout(() => { const el = document.querySelector(`[data-noteonly-id="${activeSearchId}"]`); if (el && el.scrollIntoView) el.scrollIntoView({ block: "center" }); }, 200);
+    return () => clearTimeout(tm);
+  }, [activeSearchId, activeNoteOnly, searchIdx]);
   const patternMaster = useMemo(
     () => (master ? applyDayDept(master, weekday, null, null) : null),
     [master, weekday]
@@ -10594,7 +10602,7 @@ function AppInner() {
                 </div>
                 {searchQ && (
                   <>
-                    <span className="text-xs text-stone-500 whitespace-nowrap">{searchHits.length ? `${((searchIdx % searchHits.length) + searchHits.length) % searchHits.length + 1}/${searchHits.length}` : "0件"}</span>
+                    <span className="text-xs text-stone-500 whitespace-nowrap">{searchHits.length ? `${((searchIdx % searchHits.length) + searchHits.length) % searchHits.length + 1}/${searchHits.length}` : "0件"}{activeNoteOnly ? "（表に出していない予定・下の特記事項の欄）" : ""}</span>
                     <button className="px-1.5 py-1 rounded border border-stone-300 text-sm hover:bg-stone-100" onClick={() => searchJump(-1)} title="前へ(Shift+Enter / ↑)">◀</button>
                     <button className="px-1.5 py-1 rounded border border-stone-300 text-sm hover:bg-stone-100" onClick={() => searchJump(1)} title="次へ(Enter / ↓)">▶</button>
                   </>
@@ -10692,7 +10700,7 @@ function AppInner() {
                       <div className="mb-3 bg-stone-50 border border-stone-300 rounded p-2" data-noteonly-list>
                         <div className="text-[11px] font-bold text-stone-700 mb-1">📝 表にはコマを出していない予定(特記事項・連絡事項にだけ出ます)</div>
                         {noteOnlyList.map((b) => (
-                          <div key={b.id} className="flex items-center gap-2 text-xs py-0.5">
+                          <div key={b.id} data-noteonly-id={b.id} className={`flex items-center gap-2 text-xs py-0.5 ${activeSearchId === b.id ? "ring-4 ring-rose-500 rounded" : ""}`}>
                             <button className="text-left underline decoration-dotted text-stone-700 hover:text-sky-700" onClick={() => setModal({ type: "item", initial: { ...b }, editTarget: "blocks" })}>{b.label} {b.time}〜</button>
                             <button className="px-1.5 py-0.5 rounded border border-stone-300 bg-white hover:bg-sky-50" data-note-restore={b.id}
                               onClick={() => updateSheet((prev) => ({ ...prev, blocks: (prev.blocks || []).map((x) => (x.id === b.id ? (({ noteOnly, ...rest }) => rest)(x) : x)) }))}>表に戻す</button>

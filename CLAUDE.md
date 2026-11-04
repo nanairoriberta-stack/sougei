@@ -108,6 +108,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ## 送迎表の「コマだけ消す」（2026-10-29）
 その他予定・ヘルプの `noteOnly:true` は表（画面の `TimeGrid`・Excel `buildWorkbook`・`buildExcelHtml`）にコマを出さず、`buildAutoNotes`（特記事項・連絡事項の自動欄）にだけ出る（例：黒田給食利用）。
 編集画面のチェック／「コマだけ消す(特記事項に残す)」ボタン（`data-note-only`）。保留の数・重なりの警告にも数えない。下の「特記事項…を表示」の中に一覧（`data-noteonly-list`）と「表に戻す」
+🔍検索で「コマだけ消す」にした予定に当たったら、下の特記事項の欄を開いてその行（`data-noteonly-id`）へ移る（`activeNoteOnly`。2026-11-04 依頼者「いきいきで1/1と出るけど画面が移動しない」＝表に出ていない予定だった）。通常外の予定の欄にも「※表には出していません」
 
 ## 特記事項にカレンダーの予定（2026-11-03 依頼者）
 「特記事項の利用者の所には利用者の予定・送迎を、職員の所には職員の予定を」：`calNoteLines(master, events, date)`（画面の `calNotesToday`。表示とExcelだけ、保存しない。出力のとき `sheet.calNotes` で `buildWorkbook` へ）。

@@ -42,7 +42,7 @@ const D = path.join(__dirname, "../gas/out");
   putEv("ev_note0003", { title: "松養生高２女性 現場実習" });
   { // Excelから取り込んだような通常外のヘルプ（同じものが2件、保留・18:00）。「送迎表にある通常外の予定で、この欄に無いもの」から消せる（2026-11-04 依頼者）
     const s0 = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value;
-    const add = [{ id: "imp_x1", kind: "help", time: "18:00", staffId: "__hold__", label: "増野(いきいき)ヘルプ", vehicleId: "" }, { id: "imp_x2", kind: "help", time: "18:00", staffId: "__hold__", label: "増野(いきいき)ヘルプ", vehicleId: "" }];
+    const add = [{ id: "imp_x1", kind: "help", time: "18:00", staffId: "__hold__", label: "増野(いきいき)ヘルプ", vehicleId: "" }, { id: "imp_x2", kind: "help", time: "18:00", staffId: "__hold__", label: "増野(いきいき)ヘルプ", vehicleId: "", noteOnly: true }];
     api(t, "kv.merge", [{ key: "v2:sheet:2026-11-02", base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, ...add] } }]);
     const E2 = engFor("v2"), mm = api(t, "kv.get", ["v2:master"]).data.value;   // 月曜の週間パターン（「通常」が分かるように）
     api(t, "kv.cas", [{ key: "v2:pattern:1", rev: 0, value: E2.resolveSeedPattern(mm, E2.SEED_PATTERNS.mon) }]); }
@@ -73,6 +73,14 @@ const D = path.join(__dirname, "../gas/out");
     console.log("部署でしぼっていても：" + d2.name + "の利用者として足す OK"); }
   { // 通常外の予定の欄から送迎表のコマを消す（同じ予定が2件あっても両方）
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
+    // 検索「いきいき」：表のコマ（1件目）と、「コマだけ消す」にした予定（2件目＝下の特記事項の欄が開いてその行へ）。2026-11-04 依頼者「1/1と出るけど画面が移動しない」
+    await P.pg.fill('input[placeholder="🔍 検索(Ctrl+F)"]', "いきいき"); await P.pg.waitForTimeout(800);
+    const hitAt = () => P.pg.evaluate(() => { const el = document.querySelector(".ring-rose-500"); if (!el) return null; const a = el.getBoundingClientRect(); return { id: el.getAttribute("data-item-id") || el.getAttribute("data-noteonly-id"), inView: a.top >= 0 && a.bottom <= innerHeight }; });
+    const h1 = await hitAt(); await P.pg.keyboard.press("Enter"); await P.pg.waitForTimeout(1000); const h2 = await hitAt();
+    assert.ok(h1 && h1.inView && h2 && h2.inView && new Set([h1.id, h2.id]).size === 2 && [h1.id, h2.id].includes("imp_x2"), "表のコマとコマだけ消した予定の両方へ移る " + JSON.stringify([h1, h2]));
+    assert.ok((await P.pg.locator("text=表に出していない予定・下の特記事項の欄").count()) + (await P.pg.locator("[data-noteonly-list]").count()) >= 1, "特記事項の欄が開く");
+    await P.pg.fill('input[placeholder="🔍 検索(Ctrl+F)"]', ""); await P.pg.waitForTimeout(300);
+    console.log("検索「いきいき」：表のコマと、コマだけ消した予定（特記事項の欄）へ移る OK");
     const btn = P.pg.locator('[data-unlisted-del]').filter({ hasText: "2件" });
     assert.strictEqual(await btn.count(), 1, "「送迎表から消す(2件)」のボタン");
     await btn.click(); await P.pg.waitForTimeout(300);
@@ -98,7 +106,7 @@ const D = path.join(__dirname, "../gas/out");
     console.log(`検索「${nm}」：ヒットの場所へ表が動く（横の位置 ${seen.join("→")}）`); }
   { // 特記事項：利用者の予定は利用者、職員の休みは職員、どちらでもないものは連絡事項（カレンダーから自動）
     await P.pg.waitForTimeout(1000);
-    await P.pg.click('button:has-text("特記事項・男性カバー・配車を表示")'); await P.pg.waitForTimeout(500);
+    if (await P.pg.locator('button:has-text("特記事項・男性カバー・配車を表示")').count()) { await P.pg.click('button:has-text("特記事項・男性カバー・配車を表示")'); await P.pg.waitForTimeout(500); }   // 検索で開いていればそのまま
     const tx = async (sel) => (await P.pg.locator(sel).count()) ? await P.pg.locator(sel).innerText() : "";
     const au = await tx("[data-auto-user]"), as = await tx("[data-auto-staff]"), ab = await tx("[data-auto-biz]");
     assert.ok(au.includes(uN + " 通院 10:00〜12:00") && !au.includes(pS.name), "利用者の欄 " + au);
