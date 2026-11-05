@@ -63,6 +63,21 @@ const D = path.join(__dirname, "../gas/out");
     const m = api(t, "kv.get", ["v2:master"]).data.value[key]; assert.ok(m.length === c0 + 1 && m.some((x) => x.name === "テスト" + tab), tab + "：保存された " + c0 + " " + JSON.stringify(m.slice(-2).map((x) => x.name)));
     console.log(tab + "を追加：いちばん下に出て名前を入力・保存 OK");
   }
+  { // ルール⑪ 家族送り・家族迎えなど：追加・変更・削除 → 保存され、カレンダーの選択肢（names.list）に出る（2026-11-05 依頼者）
+    await P.pg.click('button:text-is("ルール")'); await P.pg.waitForTimeout(500);
+    const sec = P.pg.locator("div.mb-4", { has: P.pg.locator("text=⑪ 家族送り・家族迎えなど") });
+    assert.strictEqual(await sec.locator("[data-nr-text]").count(), 3, "最初は 家族送り・受診後送り・家族迎え");
+    await sec.locator("[data-nr-text]").nth(1).fill("受診後に来所"); await P.pg.waitForTimeout(200);   // 変更
+    await sec.locator('button:text-is("＋ 追加")').click(); await P.pg.waitForTimeout(200);
+    await sec.locator("[data-nr-text]").nth(3).fill("母送り"); await P.pg.waitForTimeout(200);          // 追加（迎え）
+    await sec.locator("tbody tr").nth(2).locator("button").last().click(); await P.pg.waitForTimeout(300);   // 削除（家族迎え）
+    await P.pg.waitForTimeout(3000);
+    const nr = api(t, "kv.get", ["v2:master"]).data.value.rules.noRideReasons;
+    assert.deepStrictEqual(nr.map((x) => x.kind + ":" + x.text), ["meet:家族送り", "meet:受診後に来所", "meet:母送り"], "保存 " + JSON.stringify(nr));
+    for (const k of [...g.cache.keys()]) if (k === "names6") g.cache.delete(k);
+    const nl = api(t, "names.list", []).data.noRide;
+    assert.deepStrictEqual(nl, { meet: ["家族送り", "受診後に来所", "母送り"], send: [] }, "カレンダーの選択肢 " + JSON.stringify(nl));
+    console.log("ルール⑪ 送迎なしの理由：変更・追加・削除 → カレンダーの選択肢", JSON.stringify(nl)); }
   { // 部署でしぼっているときは、その部署の人として足す（しぼりで見えなくならない）
     await P.pg.click('button:text-is("利用者")'); await P.pg.waitForTimeout(500);
     const ms = api(t, "kv.get", ["v2:master"]).data.value, d2 = ms.departments[1];

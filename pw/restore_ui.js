@@ -39,6 +39,10 @@ const D = path.join(__dirname, "../gas/out");
     .map(([id, date, start, end, title]) => C.normEvent({ title, date, start, end, allDay: !start, label: "other", memo: "TimeTreeから写しました", rev: 1 }, id, 0));
   const buf = Buffer.from(JSON.stringify({ app: "team-calendar", schema: C.SCHEMA, events: evs, comments: {} }));
   const boot = 'window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-12";';
+  { // 送迎表のルール⑪（送迎なしの理由）を変えておく → カレンダーの「送迎」の選択肢に出る
+    const m2 = api(t, "kv.get", ["v2:master"]).data.value;
+    api(t, "kv.merge", [{ key: "v2:master", base: m2, baseKnown: true, mine: { ...m2, rules: { ...(m2.rules || {}), noRideReasons: [{ kind: "meet", text: "家族送り" }, { kind: "meet", text: "母送り" }, { kind: "send", text: "家族迎え" }, { kind: "send", text: "ショートへ" }] } } }]);
+    for (const k of [...g.cache.keys()]) if (k === "names6") g.cache.delete(k); }
   const A = await open("calendar.html", { width: 1200, height: 900 }, boot, "restore_cal.html");
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const restore = async () => {
@@ -77,6 +81,21 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(uh.length >= 3 && uh[0] === "嫁島", "利用者も部署の見出し " + JSON.stringify(uh));
     console.log("利用者の選択：部署ごと", uh.slice(0, 5).join("／"));
     await A.pg.keyboard.press("Escape"); }
+  { // カレンダーの「送迎」：迎え・送りの選択肢は送迎表のルール⑪から。選んで保存すると送迎なしの理由に入る
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+    await A.pg.click("#addBtn"); await A.pg.waitForTimeout(400);
+    await A.pg.locator("label:has(#f-label-ride)").click(); await A.pg.waitForTimeout(300);
+    const mo = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
+    const so = await A.pg.$$eval('input[name="w-send"]', (o) => o.map((x) => x.parentElement.innerText));
+    assert.deepStrictEqual(mo, ["いつもどおり", "時間変更", "家族送り", "母送り"], "迎えの選択肢 " + JSON.stringify(mo));
+    assert.deepStrictEqual(so, ["いつもどおり", "時間変更", "家族迎え", "ショートへ"], "送りの選択肢 " + JSON.stringify(so));
+    const u1 = api(t, "kv.get", ["v2:master"]).data.value.users[0].name;
+    await A.pg.fill("#f-sgq-users", u1); await A.pg.click(`[data-sgpick="users"][data-name="${u1}"]`); await A.pg.waitForTimeout(200);
+    await A.pg.check('input[name="w-meet"][value="r:母送り"]'); await A.pg.waitForTimeout(200);
+    await A.pg.click("[data-save]"); await A.pg.waitForTimeout(3000);
+    const hit = api(t, "cal.search", [{ q: u1 }]).data.items.find((e) => e.sg && e.sg.type === "user_time");
+    assert.ok(hit && hit.sg.noMeet === "母送り", "送迎なしの理由に入る " + JSON.stringify(hit && hit.sg));
+    console.log("カレンダーの送迎の選択肢：", mo.slice(2).join("・"), "/", so.slice(2).join("・"), "→ 保存", hit.sg.noMeet); }
   assert.deepStrictEqual(A.errs.filter((e) => !/net::ERR_FAILED|favicon/.test(e)), [], "画面エラーなし");
   console.log("バックアップから復元：3件 → 2回目は0件 / 画面エラー: []");
   await b.close();

@@ -307,3 +307,19 @@ console.log('extra OK');
  assert.ok(!('rulesUntil' in chg(base,'helpTwo',ht,'')),'日付なしの変更で区切りは作らない');
  console.log('rules by date OK', e.rulesUntil.map(v=>v.until).join(','));
 }
+
+// モニタリング・支援会議：対応者が決まっていなければ保留の欄へ（2026-11-05 依頼者）。送迎表で職員の欄へ動かしたら、予定を直してもそのまま
+{
+  const m2 = E.mergeSeedMaster(null, E.seedMaster()), sh2 = Object.assign(E.emptySheet(), { runs: [], blocks: [] });
+  const mon = { id: 'evmonH', rev: 1, date: '2026-11-02', endDate: '2026-11-02', allDay: false, start: '13:30', end: '14:30', title: 'モニタリング（森）', label: 'monitor', sg: { type: 'staff_plan', staff: [], users: ['森'] } };
+  let r2 = C.reconcile(m2, sh2, [mon], '2026-11-02');
+  const hb = r2.blocks.find((b) => b.id === 'cal_evmonH_hold');
+  assert.ok(hb && hb.staffId === '__hold__' && hb.time === '13:30' && hb.durMin === 60 && hb.label === 'モニタリング（森）', '保留にコマ ' + JSON.stringify(r2.blocks));
+  const moved = { ...r2, blocks: r2.blocks.map((b) => (b.id === hb.id ? { ...b, staffId: S('八壁').id } : b)) };
+  const r3 = C.reconcile(m2, moved, [{ ...mon, rev: 2, start: '14:00', end: '15:00' }], '2026-11-02');
+  const hb3 = r3.blocks.find((b) => b.id === 'cal_evmonH_hold');
+  assert.ok(hb3.staffId === S('八壁').id && hb3.time === '14:00', '動かした担当はそのまま・時刻は付いていく ' + JSON.stringify(hb3));
+  assert.ok(!C.reconcile(m2, sh2, [{ ...mon, sg: { type: 'staff_plan', staff: [], users: ['いない子'] } }], '2026-11-02').blocks.length, 'この版の利用者でなければ入れない');
+  const r4 = C.reconcile(m2, r3, [], '2026-11-02'); assert.ok(!r4.blocks.some((b) => b.id === 'cal_evmonH_hold'), '予定を消すとコマも消える');
+  console.log('monitor hold OK');
+}

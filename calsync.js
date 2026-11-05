@@ -64,6 +64,13 @@ function blocksOf(spec) {
   }
   if (spec.type !== "staff_off" && spec.type !== "staff_plan") return [];
   if (spec.type === "staff_off" && (spec.whole || spec.half)) return [];
+  // モニタリング・支援会議などで対応者が決まっていない（利用者だけ）：保留の欄に1つ（2026-11-05 依頼者「職員は誰が入るかわからないので保留に」）。担当は送迎表で決める（同じIDなので職員の欄へ動かしても残る）
+  if (spec.type === "staff_plan" && !spec.staff.length) {
+    if (!spec.users.length) return [];
+    const from = spec.whole ? "9:00" : spec.from;
+    const dur = spec.whole ? 60 : Math.max(15, (toMinX(spec.to) ?? toMinX(from) + 60) - toMinX(from));
+    return [{ id: `cal_${spec.id}_hold`, kind: "block", time: from, durMin: dur, staffId: HOLD_ID, label: spec.title, userIds: spec.users.map((u) => u.id), calId: spec.id }];
+  }
   return spec.staff.map((s) => {
     const from = spec.whole ? (s.start || "8:30") : spec.from;
     const to = spec.whole ? (s.end || "17:30") : spec.to;
@@ -113,7 +120,7 @@ function revert(next, rec) {
   if (ids.size) next.blocks = (next.blocks || []).filter((b) => !ids.has(b.id));
 }
 
-function applySpec(next, spec) {
+function applySpec(next, spec, keepStaff) {
   const rec = { rev: spec.rev, title: spec.title, type: spec.type, staffOv: {}, userAbsent: {}, userTime: {}, noRide: {}, userExtra: {}, blocks: [] };
   const put = (field, id, val) => {
     const map = next[field] || (next[field] = {});
@@ -159,6 +166,8 @@ function applySpec(next, spec) {
     });
   }
   const bl = blocksOf(spec);
+  // 保留に入れたコマ（ヘルプ・対応者の決まっていないモニタリングなど）を送迎表で職員の欄へ動かしていたら、予定を直しても担当はそのまま
+  bl.forEach((x) => { if (x.staffId !== HOLD_ID) return; const old = (next.blocks || []).find((b) => b.id === x.id), k = (old && old.staffId !== HOLD_ID && old.staffId) || (keepStaff || {})[x.id]; if (k) x.staffId = k; });
   next.blocks = (next.blocks || []).filter((b) => !bl.some((x) => x.id === b.id)).concat(bl);
   rec.blocks = bl.map((b) => b.id);
   return rec;
@@ -238,13 +247,18 @@ function reconcile(master, sheet, events, date) {
   const want = new Map(specs.map((s) => [s.id, s]));
   let next = null;
   const work = () => (next || (next = clone(sheet)));
+  const keepStaff = {};
   for (const [id, rec] of Object.entries(applied)) {
     const sp = want.get(id);
-    if (!sp || sp.rev !== rec.rev) { const n = work(); revert(n, rec); delete n.calApplied[id]; }
+    if (!sp || sp.rev !== rec.rev) {
+      // 保留から送迎表で職員の欄へ動かした担当を覚えておく（予定を直して入れ直すときにそのまま使う）
+      ((next || sheet).blocks || []).forEach((b) => { if ((rec.blocks || []).includes(b.id) && b.staffId && b.staffId !== HOLD_ID) keepStaff[b.id] = b.staffId; });
+      const n = work(); revert(n, rec); delete n.calApplied[id];
+    }
   }
   for (const sp of specs) {
     const cur = (next || sheet).calApplied && (next || sheet).calApplied[sp.id];
-    if (!cur) { const n = work(); n.calApplied = n.calApplied || {}; n.calApplied[sp.id] = applySpec(n, sp); continue; }
+    if (!cur) { const n = work(); n.calApplied = n.calApplied || {}; n.calApplied[sp.id] = applySpec(n, sp, keepStaff); continue; }
     // 反映済みの予定は、消えてしまった項目と便・予定の欠けを補う（パターン読込・Excel取込で消えた場合など）
     heal(next || sheet, cur, work);
     healPlaces(() => next || sheet, work, sp.id);

@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.04e',
+  VERSION: '2026.11.05a',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -371,7 +371,7 @@ function exportAlerts_(ns) {
   return out.slice(0, 31);
 }
 function namesList_() {
-  var c = CacheService.getScriptCache(), hit = c.get('names5');
+  var c = CacheService.getScriptCache(), hit = c.get('names6');
   if (hit) return JSON.parse(hit);
   // 利用者の候補：生活介護＝現体制版・新体制版（users）、放課後デイ＝りんく・ぷれいす版（kids）
   // 職員がどちらの事業か（staffBiz：名前→["seikatsu"]/["houkago"]/両方）。カレンダーで最初に開くタブと、事業の取り違えの確認に使う
@@ -392,8 +392,16 @@ function namesList_() {
     (m.users || []).forEach(function (u) { [u && u.meetPlace, u && u.sendPlace].forEach(function (v) { v = String(v || '').trim(); if (/^(リベルタ|リベ|ﾘﾍﾞﾙﾀ|ﾘﾍﾞ)$/.test(v)) v = 'ﾘﾍﾞ'; if (v && !/^(家族|母|父)/.test(v) && !seenP[v]) { seenP[v] = 1; places.push(v); } }); });
     (m.departments || []).forEach(function (d) { if (d && d.name && !seenD[d.name]) { seenD[d.name] = 1; depts.push(d.name); } });
   });
-  var out = { users: users, kids: kids, staffBiz: staffBiz, staffDept: staffDept, depts: depts, places: places, yomi: yomiMap_() };
-  try { c.put('names5', JSON.stringify(out), 300); } catch (e) {}
+  // 送迎の「迎えなし・送りなし」の理由（送迎表のルール「家族送り・家族迎えなど」。どの版も変えていなければ初期の3つ）。2026-11-05 依頼者
+  var noRide = { meet: [], send: [] }, anyNr = false;
+  ['v2', 'v1', 'v3'].forEach(function (ed) {
+    var d = docGet_(kvPath_(APP.EDITIONS[ed] + 'master'), idx), m = d ? d.value.v : null, rs = m && m.rules && m.rules.noRideReasons;
+    if (!Array.isArray(rs)) return; anyNr = true;
+    rs.forEach(function (x) { var t = String((x && x.text) || '').trim(), k = x && x.kind === 'send' ? 'send' : 'meet'; if (t && noRide[k].indexOf(t) < 0) noRide[k].push(t); });
+  });
+  if (!anyNr) noRide = { meet: ['家族送り', '受診後送り'], send: ['家族迎え'] };
+  var out = { users: users, kids: kids, staffBiz: staffBiz, staffDept: staffDept, depts: depts, places: places, noRide: noRide, yomi: yomiMap_() };
+  try { c.put('names6', JSON.stringify(out), 300); } catch (e) {}
   return out;
 }
 /* 送迎表の職員マスタ（3つの版）から職員番号を自動で振る。既にある名前は番号を変えない */
@@ -561,7 +569,7 @@ function kvMerge_(me, a) {
       docSet_(path, { k: key, v: merged, by: me.no }, rev, { k: key }, idx);
       linkAfterSave_(key, merged, idx);
       log_(me, '送迎表', kvLabel_(key), diffSummary_(cur, merged) + (conflicts.length ? '（同じ箇所の同時変更 ' + conflicts.length + 'か所：この変更を優先）' : ''));
-      if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names5'); } catch (e) {} }
+      if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names6'); } catch (e) {} }
     }
     return { rev: rev, value: merged, conflicts: conflicts.length };
   });
@@ -578,7 +586,7 @@ function kvImportMany_(me, items) {
       docSet_(path, { k: key, v: v, by: me.no }, (cur ? cur.rev : 0) + 1, { k: key }, idx); n++; linkAfterSave_(key, v, idx);
     });
     log_(me, '送迎表', 'バックアップから復元', n + '件');
-    syncStaffIds_(); try { CacheService.getScriptCache().remove('names5'); } catch (e) {}
+    syncStaffIds_(); try { CacheService.getScriptCache().remove('names6'); } catch (e) {}
     return { written: n };
   });
 }
@@ -594,7 +602,7 @@ function kvCas_(me, a) {
     docSet_(path, { k: key, v: a.value, by: me.no }, rev + 1, { k: key }, idx);
     linkAfterSave_(key, a.value, idx);
     log_(me, '送迎表', kvLabel_(key), '初期データの取り込み');
-    if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names5'); } catch (e) {} }
+    if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names6'); } catch (e) {} }
     return { conflict: false, rev: rev + 1, value: a.value };
   });
 }

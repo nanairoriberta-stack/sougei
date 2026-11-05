@@ -249,9 +249,12 @@ const SEED_RULES = {
 const EMPTY_RULES = { ngPairs: [], fixedRun: [], fixedVeh: [], fixedBlock: [], requiredHelp: [], helpTwo: [], maleOnly: [], userVeh: [], helpBase: [], otherRules: [], aiNotes: [] };
 const seedRules = () => JSON.parse(JSON.stringify(EDITION === "v3" ? EMPTY_RULES : SEED_RULES));
 // master.rules を安全に取り出す(未設定の項目は空配列)
+// カレンダーの「送迎」で選ぶ迎えなし・送りなしの理由（2026-11-05 依頼者「家族送りなどもルールで追加・変更・削除できるように」）。まだ変えていなければこの3つ
+const DEFAULT_NORIDE_REASONS = [{ kind: "meet", text: "家族送り" }, { kind: "meet", text: "受診後送り" }, { kind: "send", text: "家族迎え" }];
 const rulesOf = (master) => {
   const r = { ...EMPTY_RULES, ...((master && master.rules) || {}) };
-  return { ...r, helpBase: canonHelpBase(r.helpBase) };
+  const nr = master && master.rules && Array.isArray(master.rules.noRideReasons) ? master.rules.noRideReasons : DEFAULT_NORIDE_REASONS.map((x) => ({ ...x }));
+  return { ...r, helpBase: canonHelpBase(r.helpBase), noRideReasons: nr };
 };
 // ---------- ヘルプ名の統合 ----------
 // 「井上入浴」「黒田入浴(ヘルプ)」は、同じ時刻の「井上ヘルプ」「黒田ヘルプ」と同じもの(2026-10-29 依頼者)。
@@ -9151,6 +9154,15 @@ function RulesTab({ master, update }) {
           { key: "text", label: "内容", cell: (x, s) => <input className="w-80 border border-stone-300 rounded px-1 py-1 text-sm" value={x.text || ""} onChange={(e) => s({ text: e.target.value })} placeholder="例:金曜の夕方は嫁島に男性職員を1名残す" /> },
           { key: "days", label: "曜日(空欄=毎日)", cell: (x, s) => <DayPicker days={x.days} onChange={(d) => s({ days: d })} /> },
           { key: "check", label: "出力前に確認", cell: (x, s) => <input type="checkbox" checked={x.check !== false} onChange={(e) => s({ check: e.target.checked })} /> },
+        ]} />
+      <RuleRows title="⑪ 家族送り・家族迎えなど(送迎なしの理由)" note="カレンダーの「送迎」「利用日外利用」で、迎え・送りのところに出る選択肢です(「いつもどおり」「時間変更」のほか)。選ぶと送迎表で「迎えなし・送りなし」になり、ここの名前が理由として入ります。名前を変えても、もう入っている予定の理由はそのまま"
+        rows={r.noRideReasons} onChange={(rows) => setKey("noRideReasons", rows)} onAdd={add("noRideReasons")} blank={{ kind: "meet", text: "" }}
+        cols={[
+          { key: "kind", label: "迎え/送り", cell: (x, s) => (
+            <select className="border border-stone-300 rounded px-1 py-1 text-sm bg-white" value={x.kind === "send" ? "send" : "meet"} onChange={(e) => s({ kind: e.target.value })} data-nr-kind>
+              <option value="meet">迎え(施設へ来るとき)</option><option value="send">送り(帰るとき)</option>
+            </select>) },
+          { key: "text", label: "名前", cell: (x, s) => <input className="w-48 border border-stone-300 rounded px-1 py-1 text-sm" value={x.text || ""} onChange={(e) => s({ text: e.target.value })} placeholder="例:母送り・ショートから" maxLength={20} data-nr-text /> },
         ]} />
       <RuleRows title="⑩ AIへの追加ルール" note="AI調整・AIと相談のときだけAIが読む決まりごとです。「💬 AIと相談」で話して変えることもできます"
         rows={r.aiNotes || []} onChange={(rows) => setKey("aiNotes", rows)} onAdd={add("aiNotes")} blank={{ text: "" }}

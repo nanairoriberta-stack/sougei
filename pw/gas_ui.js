@@ -378,7 +378,7 @@ const D = path.join(__dirname, "../gas/out");
   // よみがな：送迎表の名前は「よみがな」シートに自動で並ぶ。読みを入れると、ひらがなで予測が出る
   const ys = g.sheets.get("よみがな"); assert.ok(ys && ys.data.some((r) => r[0] === "中村" && r[2] === "利用者"), "よみがなシートに利用者が並ぶ");
   ys.data.forEach((r) => { if (r[0] === "中村") r[1] = "なかむら"; if (r[0] === "日野") r[1] = "ひの"; });
-  for (const k of [...g.cache.keys()]) if (k === "names5") g.cache.delete(k);
+  for (const k of [...g.cache.keys()]) if (k === "names6") g.cache.delete(k);
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
@@ -440,7 +440,7 @@ const D = path.join(__dirname, "../gas/out");
   const meetOpts = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
   const sendOpts = await A.pg.$$eval('input[name="w-send"]', (o) => o.map((x) => x.parentElement.innerText));
   assert.deepStrictEqual(meetOpts, ["いつもどおり", "時間変更", "家族送り", "受診後送り"]); assert.deepStrictEqual(sendOpts, ["いつもどおり", "時間変更", "家族迎え"]);
-  await A.pg.check('input[name="w-meet"][value="clinic"]'); await A.pg.waitForTimeout(200);
+  await A.pg.check('input[name="w-meet"][value="r:受診後送り"]'); await A.pg.waitForTimeout(200);
   await A.pg.evaluate(() => { document.querySelector("#sheetRoot .sheet").scrollTop = 400; });
   const before = await A.pg.evaluate(() => document.querySelector("#sheetRoot .sheet").scrollTop);
   await A.pg.check('input[name="w-send"][value="time"]'); await A.pg.waitForTimeout(200);
