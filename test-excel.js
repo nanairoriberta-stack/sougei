@@ -43,6 +43,22 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     assert.strictEqual(fillOf(row13, col2), "FFF5F5F4", "AM休：13:00は灰色"); assert.notStrictEqual(fillOf(row13 + 1, col2), "FFF5F5F4", "AM休：13:30から白");
     console.log("PM休・AM休のExcel OK");
   }
+  { // 中抜け（2026-11-05 依頼者）：カレンダーの中抜けの「不在」はコマを出さず灰色。職員のいつもの中抜け（新見 14:00〜16:00）も灰色
+    const yk = m.staff.find((x) => x.name === "日野"), ni = m.staff.find((x) => x.name === "新見");
+    const dm = E.applyDayDept(m, 1, null, null, null, date);
+    const sh4 = Object.assign({}, sheet, { blocks: [...sheet.blocks.filter((b) => b.staffId !== yk.id), { id: "cal_evnk_" + yk.id, kind: "block", time: "13:00", durMin: 60, staffId: yk.id, label: "不在（日野 中抜け）", calId: "evnk" }] });
+    const wb4 = E.buildWorkbook(ExcelJS, dm, sh4, date); const b4 = new ExcelJS.Workbook(); await b4.xlsx.load(await wb4.xlsx.writeBuffer());
+    const ws = b4.getWorksheet("送迎表"); let cy = 0, cn2 = 0; const rowOf = {};
+    ws.eachRow((row, rn) => row.eachCell((c, cn) => { const v = String(c.value || ""); if (v === yk.name) cy = cn; if (v === ni.name) cn2 = cn; if (cn === 1 && /^\d{1,2}:\d{2}$/.test(v)) rowOf[v] = rn; }));
+    const fillOf = (r, c) => ((ws.getRow(r).getCell(c).fill || {}).fgColor || {}).argb, val = (r, c) => String(ws.getRow(r).getCell(c).value || "");
+    assert.ok(cy && cn2 && rowOf["13:00"] && rowOf["14:00"] && rowOf["15:00"] && rowOf["16:00"], "表の位置 " + JSON.stringify(rowOf));
+    assert.strictEqual(fillOf(rowOf["13:00"], cy), "FFF5F5F4", "中抜け（カレンダー）13:00は灰色"); assert.strictEqual(fillOf(rowOf["13:00"] + 1, cy), "FFF5F5F4");
+    assert.notStrictEqual(fillOf(rowOf["14:00"], cy), "FFF5F5F4", "14:00から白"); assert.ok(!val(rowOf["13:00"], cy).includes("不在"), "コマの文字は出さない");
+    assert.strictEqual(fillOf(rowOf["14:00"], cn2), "FFF5F5F4", "新見さんのいつもの中抜け 14:00は灰色"); assert.strictEqual(fillOf(rowOf["15:00"] + 1, cn2), "FFF5F5F4");
+    assert.notStrictEqual(fillOf(rowOf["16:00"], cn2), "FFF5F5F4", "16:00から白"); assert.notStrictEqual(fillOf(rowOf["13:00"] + 1, cn2), "FFF5F5F4");
+    assert.ok(E.buildAutoNotes(dm, sh4.blocks).staffNotes.some((l) => l.startsWith("不在（日野 中抜け）")), "特記事項(職員)には残る");
+    console.log("中抜けのExcel OK");
+  }
   { // 出力したExcelを取り込む：車つきのその他予定（例：ケロ／会議）は1つのコマのまま戻る（2026-10-30）
     const yk = m.staff.find((x) => x.name === "八壁"), kero = m.vehicles.find((v) => /ケロ/.test(v.name)) || m.vehicles[0];
     const sh3 = Object.assign({}, sheet, { blocks: [...sheet.blocks, { id: "bk1", kind: "block", time: "13:00", staffId: yk.id, label: "会議", vehicleId: kero.id }] });

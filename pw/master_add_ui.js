@@ -40,6 +40,7 @@ const D = path.join(__dirname, "../gas/out");
   putEv("ev_note0001", { title: uN + " 通院", allDay: false, start: "10:00", end: "12:00" });
   putEv("ev_note0002", { title: pS.name + " PM休み", label: "leave", sg: { type: "staff_off", staff: [pS.name], half: "pm" } });
   putEv("ev_note0003", { title: "松養生高２女性 現場実習" });
+  putEv("ev_away0001", { title: "日野 中抜け", label: "leave", allDay: false, start: "13:00", end: "15:00", sg: { type: "staff_off", staff: ["日野"], reason: "中抜け" } });   // 中抜けは灰色（コマにしない。2026-11-05 依頼者）
   { // Excelから取り込んだような通常外のヘルプ（同じものが2件、保留・18:00）。「送迎表にある通常外の予定で、この欄に無いもの」から消せる（2026-11-04 依頼者）
     const s0 = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value;
     const add = [{ id: "imp_x1", kind: "help", time: "18:00", staffId: "__hold__", label: "増野(いきいき)ヘルプ", vehicleId: "" }, { id: "imp_x2", kind: "help", time: "18:00", staffId: "__hold__", label: "増野(いきいき)ヘルプ", vehicleId: "", noteOnly: true }];
@@ -125,6 +126,24 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(ab.includes("松養生高２女性 現場実習"), "連絡事項 " + ab);
     const pt = await tx(`[data-part="${pS.id}"]`); if (pS.emp === "パート") assert.ok(pt && !pt.includes(pS.end), "パート職員の出欠にPM休の退勤 " + pt + " / いつも " + pS.end);
     console.log("特記事項（カレンダーから）：利用者「" + au.split("\n")[1] + "」 職員「" + as.split("\n")[1] + "」 連絡事項「" + ab.split("\n").slice(-1)[0] + "」 パート「" + pt + "」"); }
+  { // 中抜け（2026-11-05 依頼者）：カレンダーの中抜けはコマを出さず灰色・新見さんのいつもの中抜け（14:00〜16:00）も灰色。職員のタブで直せる
+    const mv = api(t, "kv.get", ["v2:master"]).data.value, ni = mv.staff.find((x) => x.name === "新見"), hi = mv.staff.find((x) => x.name === "日野");
+    assert.ok(api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value.blocks.some((b) => b.id === "cal_ev_away0001_" + hi.id), "データには不在のコマがある");
+    const cellOf = (sid, hm) => P.pg.evaluate(([sid, hm]) => { const th = document.querySelector(`[data-away="${sid}"], [data-staff-col="${sid}"]`); const hd = th && th.closest("th"); if (!hd) return null;
+      const tr = hd.closest("tr"), ci = [...tr.children].indexOf(hd), body = hd.closest("table").querySelectorAll("tbody tr");
+      for (const r of body) { const c0 = r.children[0]; if (c0 && c0.textContent.trim() === hm) { const td = r.children[ci]; return td ? { grey: /bg-stone-100/.test(td.className), text: td.innerText } : null; } } return null; }, [sid, hm]);
+    assert.match(await P.pg.locator(`[data-away="${ni.id}"]`).innerText(), /中抜け14:00-16:00/, "新見さんの欄に中抜け");
+    const n14 = await cellOf(ni.id, "14:00"), n13 = await cellOf(ni.id, "13:00"), n16 = await cellOf(ni.id, "16:00");
+    assert.ok(n14 && n14.grey && n13 && !n13.grey && n16 && !n16.grey, "新見さん 14:00は灰色・13:00と16:00は白 " + JSON.stringify([n13, n14, n16]));
+    assert.strictEqual(await P.pg.evaluate((sid) => { const hd = document.querySelector(`[data-away="${sid}"]`) || document.querySelector("th"); return [...document.querySelectorAll("table")].filter((t) => t.querySelector("[data-away]")).map((t) => t.innerText).join("").includes("不在（日野"); }, ni.id), false, "カレンダーの中抜けは表にコマで出さない（特記事項には出る）");
+    await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(500);
+    assert.strictEqual(await P.pg.locator(`[data-away-from="${ni.id}"]`).inputValue(), "14:00", "職員のタブに中抜け");
+    await P.pg.fill(`[data-away-from="${hi.id}"]`, "12:00"); await P.pg.fill(`[data-away-to="${hi.id}"]`, "12:30"); await P.pg.waitForTimeout(3000);
+    const h2 = api(t, "kv.get", ["v2:master"]).data.value.staff.find((x) => x.id === hi.id); assert.ok(h2.awayFrom === "12:00" && h2.awayTo === "12:30", "職員のタブで入れた中抜けが保存される");
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
+    const g13 = await cellOf(hi.id, "13:00"), g12 = await cellOf(hi.id, "12:00");
+    assert.ok(g13 && g13.grey && g12 && g12.grey, "日野さん：カレンダーの中抜け13:00・職員のタブの中抜け12:00も灰色 " + JSON.stringify([g12, g13]));
+    console.log("中抜け：灰色（コマにしない）・職員のタブで入れられる OK"); }
   assert.deepStrictEqual(P.errs.filter((e) => !/net::ERR_FAILED|favicon/.test(e)), [], "画面エラーなし");
   console.log("画面エラー: []");
   await b.close();

@@ -35,7 +35,7 @@ function specsFor(master, events, date) {
     out.push({ id: ev.id, rev: ev.rev, type: ev.sg.type, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(ev.sg.meet), send: appTime(ev.sg.send), noMeet: ev.sg.noMeet || "", noSend: ev.sg.noSend || "", missing,
       reason: ev.sg.reason || "", note: ev.sg.note || "", deptId: dept ? dept.id : "",
-      wstart: appTime(ev.sg.wstart), wend: appTime(ev.sg.wend), meetPlace: ev.sg.meetPlace || "", sendPlace: ev.sg.sendPlace || "", noRide: !!ev.sg.noRide });
+      wstart: appTime(ev.sg.wstart), wend: appTime(ev.sg.wend), meetPlace: ev.sg.meetPlace || "", sendPlace: ev.sg.sendPlace || "", noRide: !!ev.sg.noRide, afrom: appTime(ev.sg.afrom), ato: appTime(ev.sg.ato), noAway: !!ev.sg.noAway });
   }
   return out;
 }
@@ -139,7 +139,8 @@ function applySpec(next, spec, keepStaff) {
     spec.whole ? {} : { start: spec.from, end: spec.to === "24:00" ? "23:59" : spec.to }, spec.deptId ? { deptId: spec.deptId } : {})));
   // 勤務時間変更：その日の出勤・退勤の時刻（送迎表の遅刻・早退・早出・残業と同じ欄）。部署を選んだらその日の部署
   if (spec.type === "shift") spec.staff.forEach((s) => {
-    const patch = Object.assign({}, spec.wstart ? { start: spec.wstart } : {}, spec.wend ? { end: spec.wend } : {}, spec.deptId ? { deptId: spec.deptId } : {}, spec.noRide ? { noRide: true } : {});
+    const patch = Object.assign({}, spec.wstart ? { start: spec.wstart } : {}, spec.wend ? { end: spec.wend } : {}, spec.deptId ? { deptId: spec.deptId } : {}, spec.noRide ? { noRide: true } : {},
+      spec.afrom && spec.ato ? { awayFrom: spec.afrom, awayTo: spec.ato } : {}, spec.noAway ? { noAway: true } : {});   // 中抜け（その日の不在の時間）
     if (Object.keys(patch).length) put("staffOv", s.id, Object.assign({}, (next.staffOv || {})[s.id] || {}, patch));
   });
   // 休み・半休・不在・勤務時間変更で、勤務していない時間にかかるその職員の便・予定（ヘルプなど）は保留へ移す。
@@ -185,10 +186,12 @@ function offItems(sheet, spec, s) {
     : spec.type === "staff_off" && spec.whole && !spec.half ? true
     : spec.type === "staff_off" && !spec.whole ? (f != null && t != null && t0 < t && t0 + dur > f)
     : (st != null && t0 < st) || (en != null && t0 + dur > en);
+  const a0 = spec.type === "shift" ? toMinX(spec.afrom) : null, a1 = spec.type === "shift" ? toMinX(spec.ato) : null;
+  const inAway = (t0, dur) => t0 != null && a0 != null && a1 != null && t0 < a1 && t0 + dur > a0;   // その日の中抜けの時間にかかる
   const out = [];
   for (const t2 of ["runs", "blocks"]) for (const it of sheet[t2] || []) {
     if (it.staffId !== s.id || String(it.id || "").startsWith("cal_")) continue;
-    if ((spec.noRide && t2 === "runs") || off(toMinX(it.time), Number(it.durMin) || 30)) out.push([t2, it]);   // 送迎なしの日は便をすべて保留へ
+    if ((spec.noRide && t2 === "runs") || off(toMinX(it.time), Number(it.durMin) || 30) || inAway(toMinX(it.time), Number(it.durMin) || 30)) out.push([t2, it]);   // 送迎なしの日は便をすべて保留へ
   }
   return out;
 }
@@ -284,7 +287,7 @@ function summary0(master, sheet, events, date) {
     who: [...s.staff.map((x) => x.name), ...s.users.map((x) => x.name)], missing: s.missing, missingStaff: s.missingStaff, biz: s.biz,
     time: s.half ? (s.half === "am" ? "AM休（午後から出勤）" : "PM休（午前で退勤）") :
       s.type === "help" ? `${s.from}〜${s.note ? `・${s.note}` : ""}${s.staff.length ? "" : "・担当は未定（保留欄）"}` :
-      s.type === "shift" ? [s.wstart && `出勤${s.wstart}`, s.wend && `退勤${s.wend}`, s.noRide && "送迎なし"].filter(Boolean).join("・") || "部署の変更" :
+      s.type === "shift" ? [s.wstart && `出勤${s.wstart}`, s.wend && `退勤${s.wend}`, s.afrom && `中抜け${s.afrom}〜${s.ato}`, s.noAway && "中抜けなし", s.noRide && "送迎なし"].filter(Boolean).join("・") || "部署の変更" :
       s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) : s.type === "user_time" || s.type === "user_extra" ? [s.type === "user_extra" ? "今日だけ利用" : "", s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
 }
 

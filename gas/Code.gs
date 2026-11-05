@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.05g',
+  VERSION: '2026.11.05h',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -415,7 +415,12 @@ function namesList_() {
     (m.staff || []).forEach(function (st) { if (!st || !st.name || (st.retireDate && st.retireDate <= today_())) return; var a = staffBiz[st.name] || (staffBiz[st.name] = []); if (a.indexOf(bz) < 0) a.push(bz); });
     // 職員のいつもの部署（版ごと。曜日で違う人は w）。休日出勤・職員時間変更で、最初から「嫁島」などを出すため
     var sd = staffDept[ed] = {};
-    (m.staff || []).forEach(function (st) { if (!st || !st.name) return; var w = {}; for (var k in (st.deptByDay || {})) { var n = dn(st.deptByDay[k]); if (n) w[k] = n; } sd[st.name] = { d: dn(st.baseDeptId || st.deptId), w: w }; });
+    (m.staff || []).forEach(function (st) { if (!st || !st.name) return; var w = {}; for (var k in (st.deptByDay || {})) { var n = dn(st.deptByDay[k]); if (n) w[k] = n; } sd[st.name] = { d: dn(st.baseDeptId || st.deptId), w: w };
+      // いつもの勤務時間（曜日ごとは sb）と中抜け（a）。カレンダーの職員時間変更「中抜け」で最初から時刻を入れるため（2026-11-05）
+      var sb = {}; for (var k2 in (st.shiftByDay || {})) { var x2 = st.shiftByDay[k2]; if (x2 && x2.start && x2.end) sb[k2] = [x2.start, x2.end]; }
+      if (st.start && st.end) sd[st.name].t = [st.start, st.end];
+      if (Object.keys(sb).length) sd[st.name].sb = sb;
+      if (st.awayFrom && st.awayTo) sd[st.name].a = [st.awayFrom, st.awayTo]; });
     if (ed === 'v3') (m.users || []).forEach(function (u) { if (u && u.name && !seenK[u.name]) { seenK[u.name] = 1; kids.push({ name: u.name, dept: dn(u.deptId) }); } });
     else (m.users || []).forEach(function (u) { if (u && u.name && !seen[u.name]) { seen[u.name] = 1; users.push({ name: u.name, dept: dn(u.deptId) }); } });
     // 休日出勤・勤務時間変更の部署を選ぶための名前（送迎表の名前で持ち、各版で名前から探す）

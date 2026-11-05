@@ -323,3 +323,35 @@ console.log('extra OK');
   const r4 = C.reconcile(m2, r3, [], '2026-11-02'); assert.ok(!r4.blocks.some((b) => b.id === 'cal_evmonH_hold'), '予定を消すとコマも消える');
   console.log('monitor hold OK');
 }
+// ===== 中抜け勤務（2026-11-05 依頼者：新見 9:30〜14:00と16:00〜19:00、野津・橋本 6:00〜9:00と17:00〜22:00） =====
+{
+  const D = '2026-11-02', ni = S('新見');
+  assert.ok(ni && ni.start === '9:30' && ni.end === '19:00' && ni.awayFrom === '14:00' && ni.awayTo === '16:00', '新見さんの中抜け（初期データ） ' + JSON.stringify(ni && { s: ni.start, e: ni.end, a: ni.awayFrom, b: ni.awayTo }));
+  for (const n of ['野津', '橋本']) { const x = S(n); assert.ok(x.awayFrom === '9:00' && x.awayTo === '17:00', n + 'の中抜け'); }
+  // 前から使っている送迎表（中抜けなし）には1回だけ入れる。もう入っている人・手で消した後は触らない
+  const old = JSON.parse(JSON.stringify(m)); old.staff.forEach((s) => { if (s.name === '新見') { delete s.awayFrom; delete s.awayTo; } }); delete old.away1;
+  const up = E.upgradeAway1(old); assert.strictEqual(up.staff.find((s) => s.name === '新見').awayFrom, '14:00'); assert.ok(up.away1);
+  const cleared = JSON.parse(JSON.stringify(up)); cleared.staff.find((s) => s.name === '新見').awayFrom = ''; assert.strictEqual(E.upgradeAway1(cleared), cleared, '2回目は何もしない');
+  // 送迎表：中抜けの時間は灰色・その日の上書き・中抜けなし
+  assert.deepStrictEqual(E.awayOf(ni, {}), { from: '14:00', to: '16:00' });
+  assert.deepStrictEqual(E.awayOf(ni, { awayFrom: '13:00', awayTo: '15:30' }), { from: '13:00', to: '15:30' }, 'その日の中抜け');
+  assert.deepStrictEqual(E.awayMin(ni, { noAway: true }), [null, null], 'この日はなし');
+  assert.ok(E.outOfShiftSlot(ni, {}, 14 * 60) && E.outOfShiftSlot(ni, {}, 15 * 60 + 30) && !E.outOfShiftSlot(ni, {}, 16 * 60) && !E.outOfShiftSlot(ni, {}, 13 * 60 + 30), '中抜けの時間は灰色');
+  const w = E.offTimeBlockWarn(m, { blocks: [{ id: 'b1', staffId: ni.id, time: '14:30', durMin: 30, kind: 'help', label: '中村ヘルプ' }], staffOv: {} }, 1);
+  assert.ok(w.some((x) => /中抜けの時間\(14:00〜16:00は不在\)/.test(x)), '中抜けの時間に入ったヘルプは時間のエラー ' + w.join('/'));
+  // カレンダーの職員時間変更「中抜け」：その日の中抜け → staffOv。かかる便・予定は保留へ、予定を消すと元に戻る
+  const sh = Object.assign(E.emptySheet(), { blocks: [{ id: 'nb1', staffId: ni.id, time: '13:30', durMin: 30, kind: 'help', label: 'ヘルプ' }, { id: 'nb2', staffId: ni.id, time: '10:00', durMin: 30, kind: 'help', label: 'ヘルプ2' }] });
+  const ev1 = { id: 'evaw1', rev: 1, date: D, endDate: D, allDay: true, title: '新見 中抜け', sg: { type: 'shift', staff: ['新見'], wstart: '09:30', wend: '19:00', afrom: '13:00', ato: '15:00', reason: '中抜け' } };
+  const T = require('./calcore.js'); const nz = T.normSg(ev1.sg); assert.ok(nz.afrom === '13:00' && nz.ato === '15:00', '中抜けの時刻を持つ');
+  assert.ok(!('afrom' in T.normSg({ type: 'staff_off', staff: ['x'], afrom: '13:00', ato: '15:00' })), '職員時間変更だけ');
+  const r1 = C.reconcile(m, sh, [{ ...ev1, sg: nz }], D);
+  assert.deepStrictEqual(r1.staffOv[ni.id], { start: '9:30', end: '19:00', awayFrom: '13:00', awayTo: '15:00' });
+  assert.strictEqual(r1.blocks.find((b) => b.id === 'nb1').staffId, E.HOLD_ID, '中抜けにかかる予定は保留へ');
+  assert.strictEqual(r1.blocks.find((b) => b.id === 'nb2').staffId, ni.id, 'かからない予定はそのまま');
+  assert.ok(/中抜け13:00〜15:00/.test(C.summary(m, r1, [{ ...ev1, sg: nz }], D).find((x) => x.id === 'evaw1').time));
+  const r2 = C.reconcile(m, r1, [], D);
+  assert.ok(!(ni.id in r2.staffOv), '予定を消すと元に戻る'); assert.strictEqual(r2.blocks.find((b) => b.id === 'nb1').staffId, ni.id, '保留から元の担当へ');
+  const r3 = C.reconcile(m, sh, [{ ...ev1, sg: T.normSg({ type: 'shift', staff: ['新見'], noAway: true }) }], D);
+  assert.deepStrictEqual(r3.staffOv[ni.id], { noAway: true }, 'この日は中抜けなし');
+  console.log('away OK');
+}

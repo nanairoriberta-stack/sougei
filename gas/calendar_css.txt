@@ -379,3 +379,4 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 .grppick{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px}
 .grppick label span{width:100%;justify-content:center;height:38px;font-size:14px}
 .lblpick[data-lbl2]{padding:8px;border-radius:10px;background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.awt{display:inline-flex;align-items:center;gap:6px;margin-top:6px}.awt .input{width:auto;min-width:110px}

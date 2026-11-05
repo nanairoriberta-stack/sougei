@@ -433,7 +433,7 @@ const D = path.join(__dirname, "../gas/out");
   { // 職員時間変更の勤務：ﾏﾝｼｮﾝは時刻が入り送迎なし。9時間の職員（余村・森・窪田）は早6:00〜15:00、ほかは6:00〜14:00。休みは中抜け・時間休みの題名
     const D20 = "2026-11-20", setDay = async () => { await A.pg.fill("#f-date", D20); await A.pg.fill("#f-enddate", D20); };
     await add("shift"); await setDay(); await pick("staff", "森");
-    assert.deepStrictEqual(await A.pg.$$eval('input[name="w-kinmu"]', (o) => o.map((x) => x.value)), ["", "早番", "遅番", "日勤", "早遅ﾏﾝｼｮﾝのみ", "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝｼｮﾝのみ"]);
+    assert.deepStrictEqual(await A.pg.$$eval('input[name="w-kinmu"]', (o) => o.map((x) => x.value)), ["", "中抜け", "早番", "遅番", "日勤", "早遅ﾏﾝｼｮﾝのみ", "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝｼｮﾝのみ"]);
     await A.pg.locator('label:has(input[name="w-kinmu"][value="早ﾏﾝｼｮﾝのみ"])').click(); await A.pg.waitForTimeout(300);
     assert.deepStrictEqual([await A.pg.inputValue("#w-wst"), await A.pg.inputValue("#w-wet")], ["06:00", "15:00"], "森は9時間");
     assert.ok((await A.pg.locator(".sgbox").innerText()).includes("送迎（便）には入りません"));
@@ -463,6 +463,22 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(by("白戸 中抜け") && by("白戸 2時間休み") && by("安部 PM休み"), "中抜け・時間休み・PM休みの題名 " + evs.map((e) => e.title).join(","));
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300);   // 選んでいる日を元に戻す
     console.log("勤務・休みの題名:", evs.map((e) => e.title).join(" / ")); }
+  { // 職員時間変更「中抜け」（2026-11-05 依頼者：新見さん 9:30〜14:00と16:00〜19:00）：いつもの時間が入り、この日だけ直せる
+    const D22 = "2026-11-24";
+    await add("shift"); await A.pg.fill("#f-date", D22); await A.pg.fill("#f-enddate", D22);
+    await A.pg.locator('label:has(input[name="w-kinmu"][value="中抜け"])').click(); await A.pg.waitForTimeout(300);
+    assert.match(await A.pg.locator("#sgArea").innerText(), /職員を選ぶと、いつもの勤務時間と中抜けの時間が入ります/);
+    if (await A.pg.locator('[data-sgrm="staff"]').count()) { await A.pg.click('[data-sgrm="staff"]'); await A.pg.waitForTimeout(200); }
+    await pick("staff", "新見"); await A.pg.waitForTimeout(300);
+    assert.deepStrictEqual(await A.pg.evaluate(() => ["w-wst", "w-wet", "w-awf", "w-awt"].map((id) => document.getElementById(id) && document.getElementById(id).value)), ["09:30", "19:00", "14:00", "16:00"], "いつもの勤務時間と中抜け");
+    assert.match(await A.pg.locator("#sgArea").innerText(), /勤務は 09:30〜14:00 と 16:00〜19:00 になります/);
+    assert.ok((await A.pg.locator('[data-away-row]').innerText()).includes("いつもどおり（14:00〜16:00）"), "いつもの中抜けが分かる");
+    await A.pg.fill("#w-awf", "13:00"); await A.pg.fill("#w-awt", "15:30");
+    assert.match(await A.pg.locator("[data-away-two]").innerText(), /勤務は 09:30〜13:00 と 15:30〜19:00 になります/, "直すとすぐ変わる"); await A.pg.locator(".sheet").screenshot({ path: "g_away.png" }); await save(2000);
+    const ev = Object.values(api(t, "docs.query", [{ col: "days", from: D22, to: D22 }]).data.reduce((a, d) => Object.assign(a, d.events), {})).find((e) => e.label === "shift" && (e.sg.staff || [])[0] === "新見");
+    assert.ok(ev && ev.title === "新見 中抜け" && ev.sg.afrom === "13:00" && ev.sg.ato === "15:30" && ev.sg.wstart === "09:30", "中抜けの予定 " + JSON.stringify(ev && { t: ev.title, sg: ev.sg }));
+    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
+    console.log("中抜け:", ev.title, ev.sg.wstart, ev.sg.afrom + "〜" + ev.sg.ato, ev.sg.wend); }
   // 送迎：迎えは「受診後送り」、送りは時間変更
   await add("ride"); assert.strictEqual(await A.pg.locator("#f-title").count(), 0, "その他予定以外はタイトルの欄なし"); await pick("users", "森");
   const meetOpts = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));

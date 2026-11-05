@@ -666,6 +666,12 @@ function seedMasterLink() {
 }
 /* 以前の初期データ（部署「りんく・ぷれいす」・職員1〜5・車1〜3・午前1〜10/午後1〜10）を新しい名前に直す。
    中のID（送迎表の日の表が指している）はそのままで名前だけ変え、足りない人・車は足す。画面で名前を変えた人はそのまま */
+function upgradeAway1(cur) {
+  if (!cur || cur.away1) return cur;
+  const m = { ...cur, away1: true };
+  m.staff = (cur.staff || []).map((s) => (s.name === "新見" && !s.awayFrom && !s.awayTo ? { ...s, awayFrom: "14:00", awayTo: "16:00" } : s));
+  return m;
+}
 function upgradeLinkSeed(cur) {
   if (!cur || cur.linkSeed2) return cur;
   const m = JSON.parse(JSON.stringify(cur));
@@ -931,6 +937,7 @@ function seedMasterNanairo() {
   // 中抜け勤務(6〜9時+17〜22時、9〜17時は不在)
   staff.forEach((s) => {
     if (s.name === "野津" || s.name === "橋本") { s.awayFrom = "9:00"; s.awayTo = "17:00"; }
+    if (s.name === "新見") { s.awayFrom = "14:00"; s.awayTo = "16:00"; }   // 9:30〜14:00と16:00〜19:00（2026-11-05 依頼者）
   });
   // 井川を職員列の先頭へ
   {
@@ -998,7 +1005,7 @@ function seedMasterNanairo() {
     if (ti.note) u.helpNote = u.helpNote ? u.helpNote + " / " + ti.note : ti.note;
     if (ti.noRide) u.noRideDefault = ti.noRide; // 基本の送迎なし(新しいシート作成時に自動登録)
   });
-  return { departments, staff: staff.map(stripSameShift), vehicles, users, rules: seedRules(), seeded: true, seedVersion: SEED_VERSION };
+  return { departments, staff: staff.map(stripSameShift), vehicles, users, rules: seedRules(), seeded: true, seedVersion: SEED_VERSION, away1: true };
 }
 const emptySheet = () => ({ runs: [], blocks: [], staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", training: "", noRide: {}, libertaOff: {}, libertaOn: {}, userTime: {} });
 const emptyPattern = () => ({ runs: [], blocks: [] });
@@ -1391,7 +1398,7 @@ function maleCoverage(master, data, wd, timeMin) {
     const st = toMin(o.start || s.start), en = toMin(o.end || s.end);
     if (st != null && timeMin < st) return false; // 遅刻・出勤前
     if (en != null && timeMin >= en) return false; // 早退・退勤後
-    const aw0 = toMin(s.awayFrom), aw1 = toMin(s.awayTo);
+    const [aw0, aw1] = awayMin(s, o);
     if (aw0 != null && aw1 != null && timeMin >= aw0 && timeMin < aw1) return false; // 中抜けの不在時間帯
     return true;
   };
@@ -1469,6 +1476,21 @@ function staffTimeOf(s, weekday, ov) {
   };
 }
 
+// 職員の中抜け（不在の時間）: その日の上書き(staffOv の awayFrom/awayTo。カレンダーの職員時間変更)→ 職員のいつもの中抜け。
+// 2026-11-05 依頼者「新見さん 9:30〜14:00と16:00〜19:00、野津・橋本 6:00〜9:00と17:00〜22:00」。noAway=その日は中抜けなし
+function awayOf(s, ov) {
+  const o = ov || {};
+  if (o.noAway) return { from: "", to: "" };
+  if (o.awayFrom && o.awayTo) return { from: o.awayFrom, to: o.awayTo };
+  return { from: (s && s.awayFrom) || "", to: (s && s.awayTo) || "" };
+}
+// カレンダーの職員休み「中抜け」「時間休み」で入る「不在（…）」のコマ。表にはコマを出さず、その時間を勤務時間外と同じ灰色にする（2026-11-05 依頼者）。
+// データは残す（空き・重なりの判定、特記事項(職員)に出る）
+const isAwayBlock = (b) => !!b && b.staffId !== HOLD_ID && String(b.id || "").startsWith("cal_") && /^不在（/.test(String(b.label || ""));
+function awayBlockAt(blocks, sid, m) {
+  return (blocks || []).some((b) => b.staffId === sid && isAwayBlock(b) && !b.noteOnly && (() => { const t = toMin(b.time); return t != null && m + SLOT > t && m < t + (Number(b.durMin) || SLOT); })());
+}
+function awayMin(s, ov) { const a = awayOf(s, ov); const f = toMin(a.from), t = toMin(a.to); return f != null && t != null && t > f ? [f, t] : [null, null]; }
 // 利用者の実効利用時間: 日別上書き(sheet.userTime) → 曜日別(user.timeByDay) → 基本(meetTime/sendTime)
 function userTimeOf(u, weekday, sheetUserTime) {
   const dayOv = (u.timeByDay || {})[weekday] || {};
@@ -2145,7 +2167,7 @@ function runWarnings(run, master, data, wd) {
     const eff0 = staffTimeOf(stf, wd, ov);
     const st = toMin(eff0.start), en = toMin(eff0.end);
     {
-      const aw0 = toMin(stf.awayFrom), aw1 = toMin(stf.awayTo);
+      const [aw0, aw1] = awayMin(stf, ov);
       if (aw0 != null && aw1 != null && t != null && t >= aw0 && t < aw1) w.push("不在の時間帯(中抜け)");
     }
     if (t != null && st != null && en != null && !stf.noTimeWarn && (ov.start || ov.end) && (Math.floor(t / SLOT) * SLOT + SLOT <= st || t >= en)) {
@@ -2273,7 +2295,7 @@ function computeSuggestion({ deptId, time, userIds, includeOtherDept, master, da
       if (weekday != null && (s.offDays || []).includes(weekday) && !ov.workToday) return false;
       const eff0 = staffTimeOf(s, weekday, ov);
       const st = toMin(eff0.start), en = toMin(eff0.end);
-      const aw0 = toMin(s.awayFrom), aw1 = toMin(s.awayTo);
+      const [aw0, aw1] = awayMin(s, ov);
       if (aw0 != null && aw1 != null && t != null && t >= aw0 && t < aw1) return false;
       if (t != null && st != null && en != null && (t < st || t + SLOT > en)) return false;
       return true;
@@ -3413,7 +3435,9 @@ function earlyLeaveSlot(s, ov, blocks) {
 }
 // AM休・PM休・遅刻・早退などで勤務時間を変えた職員の、勤務時間の外のコマ（休みと同じ灰色にする）
 function outOfShiftSlot(s, ov, m) {
-  if (!s || !ov || !(ov.start || ov.end)) return false;
+  if (!s) return false;
+  { const [a0, a1] = awayMin(s, ov); if (a0 != null && m + SLOT > a0 && m < a1) return true; }   // 中抜けの時間も灰色（2026-11-05）
+  if (!ov || !(ov.start || ov.end)) return false;
   const st = toMin(ov.start || s.start), en = toMin(ov.end || s.end);
   return st != null && en != null && (m + SLOT <= st || m >= en);
 }
@@ -3427,6 +3451,7 @@ function offTimeBlockWarn(master, sheetData, wd) {
     const pre = `${s.name} ${b.time}【${b.label || (b.kind === "help" ? "ヘルプ" : "予定")}】: `;
     if (ov.off) out.push(pre + "休みの職員に入っています");
     else if (wd != null && (s.offDays || []).includes(wd) && !ov.workToday) out.push(pre + "固定休の職員に入っています");
+    else if ((() => { const [a0, a1] = awayMin(s, ov); return a0 != null && t < a1 && t + (Number(b.durMin) || SLOT) > a0; })()) { const a = awayOf(s, ov); out.push(pre + `中抜けの時間(${a.from}〜${a.to}は不在)`); }
     else if (outOfShiftSlot(staffTimeOf(s, wd, {}), ov, Math.floor(t / SLOT) * SLOT)) out.push(pre + `勤務時間外(この日は${ov.start ? ov.start + "から出勤" : ""}${ov.start && ov.end ? "・" : ""}${ov.end ? ov.end + "で退勤" : ""})`);
   });
   return out;
@@ -3589,7 +3614,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     const st2 = master.staff.find((s) => s.id === r.staffId);
     put(rid, r.time, `${st2 ? st2.name : ""}便に同乗`, (RANK[r.kind] != null ? RANK[r.kind] : 1) + 0.05, r.ord != null ? r.ord + 0.05 : null, ownCarRankOf(r));
   }));
-  sheet.blocks.filter((b) => !b.noteOnly).forEach((b) => put(b.staffId, b.time, itemText(b, false), b.kind === "help" ? RANK.help : RANK.block, b.ord, ownCarRankOf(b)));
+  sheet.blocks.filter((b) => !b.noteOnly && !(isAwayBlock(b) && workingSet.has(b.staffId))).forEach((b) => put(b.staffId, b.time, itemText(b, false), b.kind === "help" ? RANK.help : RANK.block, b.ord, ownCarRankOf(b)));   // 中抜け・時間休みの「不在」は灰色だけ
   cols.forEach((s) => { const sl = earlyLeaveSlot(s, (sheet.staffOv || {})[s.id], sheet.blocks); if (sl != null) put(s.id, toStr(sl), "退勤", RANK.block + 0.9, 9999); });   // PM休・早退の「退勤」
   // 予定がある時間の範囲を求め、その範囲を30分刻みで全て行にする(8:00と8:30は別の行)
   const HOUR = 60;
@@ -3789,7 +3814,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       if (prevM != null && spill[`${s.id}:${prevM}`]) return; // 上のセルの縦マージ範囲なので触らない
       const items = (cellMapH[`${s.id}:${m}`] || []).slice().sort((a, b) => ((a.oc != null ? a.oc : 1) - (b.oc != null ? b.oc : 1)) || ((a.o != null ? a.o : 999) - (b.o != null ? b.o : 999)) || (a.k - b.k));
       if (spill[`${s.id}:${m}`]) { try { ws.mergeCells(r, 2 + i2, r + 1, 2 + i2); } catch (e) {} }
-      setCell(r, 2 + i2, items.map((x) => x.t).join("\n"), { fill: isOff(s) || outOfShiftSlot(s, (sheet.staffOv || {})[s.id], m) ? "FFF5F5F4" : undefined, sideOnly: true, size: GF });
+      setCell(r, 2 + i2, items.map((x) => x.t).join("\n"), { fill: isOff(s) || outOfShiftSlot(s, (sheet.staffOv || {})[s.id], m) || awayBlockAt(sheet.blocks, s.id, m) ? "FFF5F5F4" : undefined, sideOnly: true, size: GF });
     });
     if (hasHold) {
       if (!(prevM != null && spill[`${HOLD_ID}:${prevM}`])) {
@@ -5293,7 +5318,7 @@ function buildCoverageCalc(master, data, wd, hours) {
         const eff = staffTimeOf(s, wd, o);
         const st = toMin(eff.start), en = toMin(eff.end);
         if (st == null || en == null || t < st || t + SLOT > en) return;
-        const aw0 = toMin(s.awayFrom), aw1 = toMin(s.awayTo);
+        const [aw0, aw1] = awayMin(s, o);
         if (aw0 != null && aw1 != null && t >= aw0 && t < aw1) return; // 中抜け不在
         const b = cnt[belongOf(s)];
         if (!b) return;
@@ -5466,7 +5491,7 @@ function autoAssignSheet(master, data, wd) {
       if (!isHelp && (ovAll[s.id] || {}).noRide) return false;   // この日は送迎なし（ﾏﾝｼｮﾝなど）
       if (!inWork(s, t0, dur)) return false;
       if (staffBusy(s.id, t0, dur, exceptId)) return false;
-      const aw0 = toMin(s.awayFrom), aw1 = toMin(s.awayTo);
+      const [aw0, aw1] = awayMin(s, ovAll[s.id] || {});
       if (aw0 != null && aw1 != null && t0 < aw1 && t0 + dur > aw0) return false;
       // 直帰ルール: 他部署の予定が勤務終了30分前以降に終わる割当は不可(自車のある自部署へ戻れない)
       if (belongDeptOf(master, s, wd) !== deptId) {
@@ -6678,7 +6703,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
   data.runs.forEach((r) => put(r.staffId, r.time, { type: "run", item: r }));
   // 同乗職員の列にも表示(クリックで元の便を編集)
   data.runs.forEach((r) => (r.staffRiderIds || []).forEach((rid) => put(rid, r.time, { type: "rider", item: r, riderId: rid })));
-  data.blocks.filter((b) => !b.noteOnly).forEach((b) => put(showLink && b.linkReq && b.staffId === HOLD_ID ? LINK_COL : b.staffId, b.time, { type: "block", item: b }));   // 「コマだけ消す」にしたものは表に出さない
+  data.blocks.filter((b) => !b.noteOnly && !(isAwayBlock(b) && workingSet.has(b.staffId))).forEach((b) => put(showLink && b.linkReq && b.staffId === HOLD_ID ? LINK_COL : b.staffId, b.time, { type: "block", item: b }));   // 「コマだけ消す」にしたものは表に出さない
 
   const holdCount = Object.keys(cellMap).filter((k) => k.startsWith(HOLD_ID)).reduce((a, k) => a + cellMap[k].length, 0);
 
@@ -6977,6 +7002,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                       {!ov.off && ov.start && toMin(ov.start) > toMin(s.start) ? "遅" : ""}
                       {!ov.off && ov.end && toMin(ov.end) < toMin(s.end) ? "早" : ""}
                     </div>
+                    {!ov.off && awayMin(s, ov)[0] != null && <div className={`text-[9px] leading-tight ${ov.awayFrom ? "text-amber-700 font-bold" : "text-stone-500"}`} data-away={s.id}>中抜け{awayOf(s, ov).from}-{awayOf(s, ov).to}</div>}
                     {ov.noRide && !ov.off && <div className="text-[10px] font-bold text-violet-700" data-noride={s.id}>送迎なし(ﾏﾝｼｮﾝ)</div>}
                     {ov.note && <div className="text-[10px] text-amber-700">{ov.note}</div>}
                   </div>
@@ -7041,7 +7067,8 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                 const items = cellMap[`${s.id}:${m}`] || [];
                 const ov = ovMap[s.id] || {};
                 const st = toMin(ov.start || s.start), en = toMin(ov.end || s.end);
-                const offGrid = ov.off || (st != null && en != null && (m + SLOT <= st || m >= en));
+                const [aw0, aw1] = awayMin(s, ov);
+                const offGrid = ov.off || (st != null && en != null && (m + SLOT <= st || m >= en)) || (aw0 != null && m + SLOT > aw0 && m < aw1) || awayBlockAt(data.blocks, s.id, m);   // 中抜けの時間も灰色（カレンダーの中抜け・時間休みのコマも）
                 const cKey = `${s.id}:${m}`;
                 return (
                   <td key={s.id}
@@ -8439,6 +8466,12 @@ function StaffTab({ master, update }) {
                     曜日別{Object.keys(s.shiftByDay || {}).length ? `(${Object.keys(s.shiftByDay).length})` : ""}
                   </button>
                 </div>
+                <div className="flex items-center gap-1 mt-0.5" title="中抜け勤務：この時間は不在（送迎・ヘルプに入れない。表は灰色）。空ならなし">
+                  <span className="text-[10px] text-stone-500 w-9">中抜け</span>
+                  <input data-away-from={s.id} className="w-16 border border-stone-300 rounded-md px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-400" value={s.awayFrom || ""} placeholder="なし" onChange={(e) => upd(s.id, { awayFrom: e.target.value.trim() })} />
+                  <span className="text-stone-400 text-xs">〜</span>
+                  <input data-away-to={s.id} className="w-16 border border-stone-300 rounded-md px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-400" value={s.awayTo || ""} placeholder="" onChange={(e) => upd(s.id, { awayTo: e.target.value.trim() })} />
+                </div>
                 {shiftDiffOf(s).length > 0 && (
                   <div className="text-[10px] text-amber-700 mt-0.5 leading-tight">
                     曜日別が優先: {shiftDiffOf(s).map(([wd, v]) => `${DAYS[wd]}${v.start}-${v.end}`).join(" ")}
@@ -9461,6 +9494,10 @@ function AppInner() {
             return empty ? resolveSeedPattern(m, SEED_PATTERNS[key]) : cur;
           });
         }
+      }
+      // 新見さんの中抜け（14:00〜16:00）を1回だけ入れる。もう中抜けが入っていれば触らない（2026-11-05 依頼者）
+      if (EDITION !== "v3" && m && !m.away1) {
+        m = await sUpdate("master", (cur) => (cur && !cur.away1 ? upgradeAway1(cur) : cur));
       }
       // りんく・ぷれいす版：以前の仮の名前（職員1〜5など）を新しい名前に直す（1回だけ。ロックの中で読み直して）
       if (EDITION === "v3" && m && !m.linkSeed2) {
