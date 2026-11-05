@@ -86,7 +86,7 @@ const D = path.join(__dirname, "../gas/out");
     const w = await where(); assert.ok(w.at === w.n - 1 && w.val === "", "しぼっていても見える " + JSON.stringify(w));
     const nu = api(t, "kv.get", ["v2:master"]).data.value.users.slice(-1)[0]; assert.strictEqual(nu.deptId, d2.id, "しぼっている部署で足す");
     console.log("部署でしぼっていても：" + d2.name + "の利用者として足す OK"); }
-  { // 通常外の予定の欄から送迎表のコマを消す（同じ予定が2件あっても両方）
+  { // 検索で「コマだけ消す」にした予定へ
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
     // 検索「いきいき」：表のコマ（1件目）と、「コマだけ消す」にした予定（2件目＝下の特記事項の欄が開いてその行へ）。2026-11-04 依頼者「1/1と出るけど画面が移動しない」
     await P.pg.fill('input[placeholder="🔍 検索(Ctrl+F)"]', "いきいき"); await P.pg.waitForTimeout(800);
@@ -96,15 +96,11 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await P.pg.locator("text=表に出していない予定・下の特記事項の欄").count()) + (await P.pg.locator("[data-noteonly-list]").count()) >= 1, "特記事項の欄が開く");
     await P.pg.fill('input[placeholder="🔍 検索(Ctrl+F)"]', ""); await P.pg.waitForTimeout(300);
     console.log("検索「いきいき」：表のコマと、コマだけ消した予定（特記事項の欄）へ移る OK");
-    const btn = P.pg.locator('[data-unlisted-del]').filter({ hasText: "2件" });
-    assert.strictEqual(await btn.count(), 1, "「送迎表から消す(2件)」のボタン");
-    await btn.click(); await P.pg.waitForTimeout(300);
-    await P.pg.click('button:text-is("OK"), button:text-is("はい")').catch(async () => { await P.pg.keyboard.press("Enter"); });
-    await P.pg.waitForTimeout(3000);
-    const left = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value.blocks.filter((b) => /増野/.test(b.label || ""));
-    assert.strictEqual(left.length, 0, "サーバーからも消えた " + JSON.stringify(left));
-    assert.strictEqual(await P.pg.locator('[data-unlisted-del]').filter({ hasText: "増野" }).count(), 0);
-    console.log("通常外の予定の欄から「増野(いきいき)ヘルプ」2件を送迎表から消した OK"); }
+    // 「通常外のヘルプ・その他予定(この日だけ)」の欄はなくした（2026-11-05 依頼者）。画面にも出前の確認にも出ない・データは残す
+    assert.strictEqual(await P.pg.locator("text=通常外のヘルプ・その他予定(この日だけ)").count(), 0, "欄が無い");
+    assert.strictEqual(await P.pg.locator("[data-unlisted-del]").count(), 0);
+    assert.strictEqual(api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value.blocks.filter((b) => /増野/.test(b.label || "")).length, 2, "送迎表のコマはそのまま");
+    console.log("通常外のヘルプ・その他予定の欄：なし OK"); }
   { // 検索：ヒットの場所へ表が動く（右の方の職員の列でも。2026-11-03 依頼者「検索してもその場所に画面が移動しない」）
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
     const shv = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value, mv = api(t, "kv.get", ["v2:master"]).data.value;

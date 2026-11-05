@@ -10050,18 +10050,6 @@ function AppInner() {
     return () => { alive = false; };
   }, [tab, master ? 1 : 0]);
 
-  // 送迎表の「通常外のヘルプ」用: 表示中の日の曜日の週間パターン(=通常のヘルプ)を読む
-  const [dayPattern, setDayPattern] = useState(null);
-  useEffect(() => {
-    if (!master || !date) return;
-    let alive = true;
-    (async () => {
-      const p = await sGet(`pattern:${weekdayOf(date)}`);
-      if (alive) setDayPattern(p || { runs: [], blocks: [] });
-    })();
-    return () => { alive = false; };
-  }, [date, tab, master ? 1 : 0]);
-
   // ヘルプ表からの削除: 週間パターン(全曜日)から同じヘルプ(名前+時刻)を消す
   // ヘルプ表から週間パターンへ: 指定の曜日に、同じヘルプ(名前+時刻)を担当つきで入れる。2名体制「A・B」は2件にする
   const addHelpToPatterns = async (label, time, byDay) => {
@@ -10271,16 +10259,8 @@ function AppInner() {
       });
     });
 
-    // 通常外のヘルプ・その他予定: 欄と送迎表を両方向で突き合わせる
+    // 通常外のヘルプ・その他予定の欄の確認は 2026-11-05 になくした（依頼者「この機能なくして」）
     const extraList = [];
-    {
-      const patDay = await sGet(`pattern:${wd}`);
-      const xc = extraHelpCheck(sheetMaster, sheetData, wd, patDay);
-      xc.missing.forEach((e) => extraList.push(`${extraHelpLabel(sheetMaster, e)}: 通常外の欄にありますが、送迎表に入っていません`));
-      xc.unlisted.forEach((h) => {
-        extraList.push(`${EXTRA_KIND_JP[h.kind]} ${h.time} ${h.label}(担当: ${extraStaffOf(sheetMaster, sheetData.blocks, h)}): 週間パターンに無い通常外の${EXTRA_KIND_JP[h.kind]}ですが、通常外の欄に書かれていません`);
-      });
-    }
 
     // その他のルール(チェックを入れたもの)を出力前の確認に出す
     const otherRuleList = (rulesOf(sheetMaster).otherRules || [])
@@ -10720,11 +10700,7 @@ function AppInner() {
                   onDropVehicleOnCell={dropVehicleOnCell}
                 />
 
-                {sheet && !isPattern && sheetMaster && (
-                  <ExtraHelpPanel master={sheetMaster} sheet={sheet} wd={weekdayOf(date)} patternForDay={dayPattern}
-                    onChange={(list) => updateSheet((prev) => ({ ...prev, extraHelps: list }))}
-                    onRemoveBlocks={(ids) => updateSheet((prev) => ({ ...prev, blocks: (prev.blocks || []).filter((b) => !ids.includes(b.id)) }))} />
-                )}
+                {/* 「通常外のヘルプ・その他予定(この日だけ)」の欄は 2026-11-05 依頼者の判断でなくした（出力前の確認もしない。入っていたデータ extraHelps はそのまま残す） */}
 
                 <div className="mt-2">
                   <button
@@ -12289,16 +12265,8 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
       });
     });
 
-    // 通常外のヘルプ・その他予定: 欄と送迎表を両方向で突き合わせる
+    // 通常外のヘルプ・その他予定の欄の確認は 2026-11-05 になくした（依頼者「この機能なくして」）
     const extraList = [];
-    {
-      const patDay = patDayArg;
-      const xc = extraHelpCheck(sheetMaster, sheetData, wd, patDay);
-      xc.missing.forEach((e) => extraList.push(`${extraHelpLabel(sheetMaster, e)}: 通常外の欄にありますが、送迎表に入っていません`));
-      xc.unlisted.forEach((h) => {
-        extraList.push(`${EXTRA_KIND_JP[h.kind]} ${h.time} ${h.label}(担当: ${extraStaffOf(sheetMaster, sheetData.blocks, h)}): 週間パターンに無い通常外の${EXTRA_KIND_JP[h.kind]}ですが、通常外の欄に書かれていません`);
-      });
-    }
 
     // その他のルール(チェックを入れたもの)を出力前の確認に出す
     const otherRuleList = (rulesOf(sheetMaster).otherRules || [])
