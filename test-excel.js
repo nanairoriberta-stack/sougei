@@ -265,3 +265,23 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.ok(sogeiRow > 2 && ws.getRow(sogeiRow - 1).height >= 15 && /\d{1,2}:\d{2}/.test(String(ws.getRow(sogeiRow - 2).getCell(1).value || "")), "「送迎」のすぐ上は表の最後の時間（30分ずつ2行）" + sogeiRow);
   console.log("no thin row OK (送迎は" + sogeiRow + "行目、すぐ上は " + ws.getRow(sogeiRow - 2).getCell(1).value + " の行)");
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// Excelの文字が切れないように行の高さを確かめる（2026-11-05 依頼者「文字の下の方が切れることがある」）
+(async () => {
+  const E13 = require("./eng.cjs"), m = E13.mergeSeedMaster(null, E13.seedMaster()), p = E13.resolveSeedPattern(m, E13.SEED_PATTERNS.mon);
+  // 長いメモ（特記事項）と長い名前の予定を入れても、出力したあとにもう一度確かめると直す行が無い（＝もう足りている）
+  const long = Array.from({ length: 14 }, (_, i) => `メモ${i + 1} ずっと長い特記事項の文です。折り返しても切れないように`).join("\n");
+  const sh = Object.assign(E13.emptySheet(), { runs: p.runs, blocks: [...p.blocks, { id: "lb1", kind: "block", time: "10:00", staffId: p.blocks[0].staffId, label: "とても長い名前の予定（市役所で手続きのあと病院へ寄って書類を受け取る）" }], notes: long, contact: long, notesStaff: long });
+  const wb = E13.buildWorkbook(ExcelJS, m, sh, "2026-11-02");
+  for (const name of ["送迎表", "車両の動き"]) assert.strictEqual(E13.fitRowHeights(wb.getWorksheet(name)), 0, name + "：出力の時点で高さが足りている");
+  // 低すぎる行は高くなる（1つのセル・縦に結合したセル）
+  const ws = new ExcelJS.Workbook().addWorksheet("t");
+  ws.getColumn(1).width = 11; ws.getColumn(2).width = 11;
+  ws.getCell(1, 1).value = "あいうえおかきくけこさしすせそたちつてと"; ws.getCell(1, 1).font = { size: 11 }; ws.getCell(1, 1).alignment = { wrapText: true }; ws.getRow(1).height = 15;
+  ws.mergeCells(2, 2, 3, 2); ws.getCell(2, 2).value = "一\n二\n三\n四\n五\n六"; ws.getCell(2, 2).font = { size: 11 }; ws.getCell(2, 2).alignment = { wrapText: true }; ws.getRow(2).height = 15; ws.getRow(3).height = 15;
+  assert.strictEqual(E13.fitRowHeights(ws), 2);
+  assert.ok(ws.getRow(1).height >= 4 * 11 * 1.5, "4行ぶん以上 " + ws.getRow(1).height);
+  assert.ok(ws.getRow(2).height + ws.getRow(3).height >= 6 * 11 * 1.5, "結合したセルは合わせて6行ぶん以上");
+  assert.strictEqual(E13.fitRowHeights(ws), 0, "2回目は何もしない");
+  console.log("fit row heights OK", Math.round(ws.getRow(1).height), Math.round(ws.getRow(2).height + ws.getRow(3).height));
+})().catch((e) => { console.error(e); process.exit(1); });

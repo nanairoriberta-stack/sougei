@@ -4142,6 +4142,8 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     vc.alignment = { horizontal: "right", vertical: "middle" };
     ws.headerFooter = { oddHeader: `&R&8送迎表 ${ver.replace(/&/g, "&&")}` };
   }
+  // ---- 文字が切れないように行の高さを確かめる（2026-11-05 依頼者「Excelで出すと文字の下の方が切れることがある」） ----
+  fitRowHeights(ws);
 
   // ---- 第2シート: 車両の動き(各部署にどの車がいつ残っているか) ----
   // ※ ヘルプ車なしシートを作る2回目の呼び出しでは作らない(同じシートが二重にできるため)
@@ -4182,9 +4184,43 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       ws2.getRow(r2).height = 20;
       r2++;
     });
+    fitRowHeights(ws2);   // 車両の動きも文字が切れないように
   }
 
   return wb;
+}
+
+/* Excelの全部のセル（結合したセルはまとめて）について、折り返したときの行数×文字の大きさで要る高さを見積もり、
+   足りない行を高くする（縦に結合したセルは一番下の行を足す）。少し多めに見積もる＝切れるより少し余るほうがよい。
+   返り値：高くした行の数（テスト用） */
+function fitRowHeights(ws) {
+  const dispW = (s) => [...String(s)].reduce((a, ch) => a + (/[\uFF61-\uFF9F\x20-\x7E]/.test(ch) ? 0.55 : 1), 0);
+  const colW = (c) => { const w = ws.getColumn(c).width; return w == null ? 9 : w; };
+  const merges = {};   // 親セルの番地 → {top,left,bottom,right}
+  Object.values(ws._merges || {}).forEach((m) => { const mm = m && (m.model || m); if (mm && mm.top != null) merges[ws.getCell(mm.top, mm.left).address] = { top: mm.top, left: mm.left, bottom: mm.bottom, right: mm.right }; });
+  const need = [];   // [下の行, 上の行, 要る高さ]
+  ws.eachRow({ includeEmpty: false }, (row, ri) => {
+    row.eachCell({ includeEmpty: false }, (cell, ci) => {
+      if (cell.isMerged && cell.master && cell.master !== cell && cell.master.address !== cell.address) return;
+      const v = cell.value; if (v == null || typeof v === "object") return;
+      const txt = String(v); if (!txt.trim()) return;
+      const al = cell.alignment || {}; if (al.shrinkToFit) return;
+      const rg = merges[cell.address] || { top: ri, left: ci, bottom: ri, right: ci };
+      let w = 0; for (let c = rg.left; c <= rg.right; c++) w += colW(c);
+      const size = (cell.font && cell.font.size) || 11;
+      // 列の幅1＝約7ピクセル（Excelの標準）、全角1文字＝文字の大きさ×4/3ピクセル。左右の余白の分を引く
+      const chars = Math.max(1, Math.floor((7 * w - 4) / (size * 4 / 3)));
+      const lines = al.wrapText === false ? txt.split("\n").length : txt.split("\n").reduce((a, l) => a + Math.max(1, Math.ceil(dispW(l) / chars)), 0);
+      need.push([rg.bottom, rg.top, lines * size * 1.7 + 2]);   // 游ゴシックは1行に文字の大きさの約1.7倍の高さが要る（以前の見積りは約1.54倍で、下が切れていた）
+    });
+  });
+  let changed = 0;
+  need.sort((a, b) => (a[0] - a[1]) - (b[0] - b[1]));          // 1行のセルを先に（結合はそのあと足りない分だけ）
+  for (const [bot, top, h] of need) {
+    let total = 0; for (let r = top; r <= bot; r++) total += ws.getRow(r).height || 15;
+    if (total + 0.5 < h) { const lr = ws.getRow(bot); lr.height = (lr.height || 15) + (h - total); changed++; }
+  }
+  return changed;
 }
 
 async function exportExcel(master, sheet, date) {
