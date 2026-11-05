@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.05d";
+const APP_VERSION="2026.11.05e";
 const C=window.TCCore;
 const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
@@ -639,7 +639,7 @@ function openSync(){
     <dt>アプリの版</dt><dd><span class="time">${APP_VERSION}</span>（データ形式 ${C.SCHEMA}）</dd></dl>
     <div class="row"><button class="ghost sm" data-resend ${st&&st.queued?"":"disabled"}>今すぐ再送</button><button class="ghost sm" data-reload>最新版を読み込み直す</button></div>
     ${issues.length?`<h3 style="margin:6px 0 0;font-size:14px">確認が必要な操作 ${issues.length}件</h3>${issues.map(opHtml).join("")}`:`<p class="by" style="font-size:13px;margin:0">確認が必要な操作はありません。</p>`}
-    ${S.isAdmin?`<div class="op"><h4>バックアップ（編集者のみ）</h4><p class="by" style="font-size:12px;margin:0">全期間の予定とコメントを端末に保存します。月末に1回保存しておくと、万一のときに戻せます。復元は「サーバーにない予定」と「削除された予定」だけを戻し、今ある予定は上書きしません。</p><div class="acts"><button class="primary sm" data-export="json">バックアップを保存（JSON）</button><button class="ghost sm" data-export="csv">一覧をCSVで保存</button><button class="ghost sm" data-restore-file>バックアップから復元</button></div><div id="bkSlot"></div></div>`:""}
+    ${S.isAdmin?`<div class="op"><h4>バックアップ（編集者のみ）</h4><p class="by" style="font-size:12px;margin:0">全期間の予定とコメントを端末に保存します。月末に1回保存しておくと、万一のときに戻せます。復元は「サーバーにない予定」と「削除された予定」だけを戻し、今ある予定は上書きしません。</p><div class="acts"><button class="primary sm" data-export="json">バックアップを保存（JSON）</button><button class="ghost sm" data-export="csv">一覧をCSVで保存</button><button class="ghost sm" data-restore-file>バックアップから復元</button><button class="ghost sm" data-ttfix>TimeTreeの「○○休み」を職員休みにする</button></div><div id="bkSlot"></div></div>`:""}
   </div></div></div>`;
   if(bkKeep&&$("bkSlot"))$("bkSlot").innerHTML=bkKeep;
 }
@@ -738,6 +738,13 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-resend]")){core.resume();openSync();return}
   const ex=t.closest("[data-export]");if(ex){doExport(ex.dataset.export);return}
   if(t.closest("[data-restore-file]")){$("restoreFile").click();return}
+  // TimeTreeから写した「岩田休み」など（その他予定）を、名前が送迎表の職員なら職員休みにする（2026-11-05 依頼者。送迎表のパート欄から消えなかった）
+  if(t.closest("[data-ttfix]")||t.closest("[data-ttfix-go]")){const go=!!t.closest("[data-ttfix-go]"),slot=$("bkSlot");if(!slot||!window.SGHost)return;
+    slot.innerHTML=`<p class="by">${go?"職員休みにしています…":"調べています…"}</p>`;
+    window.SGHost.call("cal.ttLeaveFix",{run:go}).then(r=>{const it=(r&&r.items)||[];
+      if(go){slot.innerHTML=`<p class="by" data-ttfix-done>${r.done||0}件を職員休みにしました。送迎表にも反映されます。</p>`;try{window.SGHost.pollOnce()}catch{}return}
+      slot.innerHTML=it.length?`<p style="font-size:13px;margin:8px 0">職員休みにする予定 ${it.length}件（名前が送迎表の職員と同じもの）：</p><ul class="by" style="margin:0 0 6px;padding-left:18px">${it.map(x=>`<li>${esc(x.date)} ${esc(x.title)}</li>`).join("")}</ul><div class="acts"><button class="primary sm" data-ttfix-go>職員休みにする</button><button class="ghost sm" data-restore-cancel>やめる</button></div>`:`<p class="by">TimeTreeから写した「○○休み」で、送迎表の職員の名前のものはありません。</p>`;
+    }).catch(()=>{slot.innerHTML=`<p class="err">できませんでした。通信状況を確かめて、もう一度押してください。</p>`});return}
   if(t.closest("[data-restore-cancel]")){restorePlan=null;$("bkSlot").innerHTML="";return}
   if(t.closest("[data-restore-go]")&&restorePlan){for(const e of restorePlan.add)core.save(Object.assign({},e),null);for(const e of restorePlan.undel)core.restore(e);
     $("bkSlot").innerHTML=`<p class="by">復元を始めました（${restorePlan.add.length+restorePlan.undel.length}件）。右上の件数が消えたら完了です。</p>`;restorePlan=null;render();return}

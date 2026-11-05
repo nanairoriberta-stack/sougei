@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.05d',
+  VERSION: '2026.11.05e',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -201,6 +201,7 @@ var HANDLERS = {
   'kv.getMany': function (me, a) { var idx = docIndex_(); return (a[0] || []).slice(0, 60).map(function (k) { var d = docGet_(kvPath_(String(k)), idx); return { key: String(k), rev: d ? d.rev : 0, value: d ? d.value.v : null }; }); },
   'names.list': function (me) { return namesList_(); },
   'cal.search': function (me, a) { return calSearch_(a[0] || {}); },
+  'cal.ttLeaveFix': function (me, a) { return ttLeaveFix_(me, !!((a[0] || {}).run)); },
   'app.base': function (me) { return appUrl_(); },   // 画面どうしのリンクに使う公開URL（開いたときに届かなかった場合の予備）
   'kv.importMany': function (me, a) { return kvImportMany_(me, a[0] || []); },
   'kv.list': function (me, a) { return kvList_(String(a[0] || '')); },
@@ -352,6 +353,36 @@ function calSearch_(q) {
   });
   hits.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.start || '').localeCompare(String(b.start || '')); });
   return { items: hits.slice(0, 300), more: hits.length > 300 };
+}
+/* TimeTreeから写した「○○休み」（その他予定）を、名前が送迎表の職員なら「職員休み」にする（管理者だけ。2026-11-05 依頼者「11/12 岩田さんがパートの欄から消えない」）。
+   run が false のときは直す予定の一覧だけ返す。直すときは普通の保存と同じ道（calApply_：ロック・変更履歴・送迎表への反映） */
+function ttLeaveFix_(me, run) {
+  if (me.role !== '管理者') throw { code: 'invalid_argument', message: '管理者だけが使えます' };
+  var idx = docIndex_(), staff = {};
+  ['v1', 'v2', 'v3'].forEach(function (ed) { var d = docGet_(kvPath_(APP.EDITIONS[ed] + 'master'), idx), m = d ? d.value.v : null; ((m && m.staff) || []).forEach(function (x) { if (x && x.name) staff[String(x.name).trim()] = 1; }); });
+  var day = function (n) { var d = new Date(today_() + 'T00:00:00'); d.setDate(d.getDate() + n); return Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd'); };
+  var events = TCCore.mergeDays(docsQuery_({ col: 'days', from: day(-366), to: day(731) })), out = [];
+  Object.keys(events).forEach(function (k) {
+    var e = events[k]; if (!e || e.deleted || !/^tt\d{8}_/.test(e.id) || (e.sg && e.sg.type) || e.label !== 'other') return;
+    var m = /^(.+?)[\s\u3000]*(AM|PM|ＡＭ|ＰＭ)?[\s\u3000]*お?休み$/i.exec(String(e.title || '').trim()); if (!m) return;
+    var name = m[1].replace(/[\s\u3000]+$/, ''); if (!staff[name]) return;
+    var half = m[2] ? (/a/i.test(m[2].normalize('NFKC')) ? 'am' : 'pm') : '';
+    out.push({ id: e.id, date: e.date, title: e.title, name: name, half: half, ev: e });
+  });
+  out.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  var list = out.map(function (x) { return { id: x.id, date: x.date, title: x.title, name: x.name, half: x.half }; });
+  if (!run) return { items: list };
+  var done = 0;
+  out.forEach(function (x) {
+    var e = x.ev, ev = {};
+    ['title', 'date', 'endDate', 'allDay', 'start', 'end', 'place', 'memo', 'members', 'biz', 'tanto'].forEach(function (k) { if (e[k] !== undefined) ev[k] = e[k]; });
+    ev.label = 'leave';
+    ev.sg = { type: 'staff_off', staff: [x.name], users: [] }; if (x.half) { ev.sg.half = x.half; ev.allDay = true; }
+    else if (!e.allDay) ev.sg.reason = '中抜け';
+    var r = calApply_(me, { kind: 'upsert', opId: 'op_ttfix_' + e.id, id: e.id, baseRev: e.rev, ev: ev });
+    if (r && r.status === 'ok') done++;
+  });
+  return { items: list, done: done };
 }
 /* Excel出力のあとにカレンダーの変更があった日（昨日以降）。送迎表の画面がときどき聞いて、お知らせを出す */
 function exportAlerts_(ns) {

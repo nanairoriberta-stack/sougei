@@ -249,6 +249,7 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   const cell = cells.find((x) => x.v.includes("\n\n休み：") && x.v.includes(kana(a.name)) && x.v.includes(kana(b.name)));
   assert.ok(cell, "利用者の枠の中に「休み：」 " + JSON.stringify(cells.filter((x) => x.v.includes("休み")).map((x) => x.v).slice(0, 4)));
   assert.ok(!cell.v.split("休み：")[0].includes(kana(a.name)), "休みの人は来る人の並びに入れない");
+  assert.ok(!cells.some((x) => x.v.includes("(車)") || x.v.includes("(ｸﾙﾏ)")), "利用者の名前のあとの「(車)」は出さない（2026-11-05 依頼者）");
   assert.ok(!cells.some((x) => x.ci === 1 && x.v === "休み"), "「休み」の行は無くなった");
   console.log("absent in user cell OK", JSON.stringify(cell.v.slice(-40)));
 })().catch((e) => { console.error(e); process.exit(1); });

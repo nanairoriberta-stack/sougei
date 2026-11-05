@@ -2530,7 +2530,7 @@ function buildExcelHtml(master, sheet, date) {
   rows += `<tr><td colspan="${totalCols}" style="border:none;height:8pt"></td></tr>`;
 
   master.departments.forEach((d) => {
-    const names = master.users.filter((u) => u.deptId === d.id && !absent[u.id]).map((u) => esc(u.name) + (u.wheelchair ? "(車)" : ""));
+    const names = master.users.filter((u) => u.deptId === d.id && !absent[u.id]).map((u) => esc(u.name));   // 「(車)」は不要（2026-11-05 依頼者）
     if (names.length) rows += secRow(`利用者:${esc(d.name)}`, names.join("・"), hexOf(d.id));
   });
   const absentNames = master.users.filter((u) => absent[u.id]).map((u) => esc(u.name));
@@ -3647,7 +3647,9 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   const dispW = (s) => [...String(s)].reduce((a, ch) => a + (/[\uFF61-\uFF9F\x20-\x7E]/.test(ch) ? 0.5 : 1), 0);
   const calcLines = (txt, chars) =>
     txt ? txt.split("\n").reduce((a, l) => a + Math.max(1, Math.ceil(dispW(l) / Math.max(2, chars))), 0) : 1;
-  const CHARS_PER_COL = 4.9 * COLW / 11; // 幅11・12pt太字でおよそ全角4.9文字
+  // 上の表（送迎・ヘルプのコマ）の文字の大きさ（2026-11-05 依頼者「上部の送迎欄だけ文字を大きく」。以前は12）
+  const GF = opts.gridFont || 12;
+  const CHARS_PER_COL = 4.9 * COLW / 11 * 12 / GF; // 幅11・12pt太字でおよそ全角4.9文字
   const LINE_H = 18.5;
   const segChars = (from, to) => Math.max(4, Math.floor(((to - from + 1) * COLW) / 3.0));
 
@@ -3767,14 +3769,14 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     colIds.forEach((cid) => {
       const ln = linesOf(cid, m);
       if (ln) {
-        const total = ln * 20 + 2;
+        const total = ln * Math.round(20 * GF / 12) + 2;
         // 下に流し込む場合は半分ずつ(このスロットの負担は半分)
         maxH = Math.max(maxH, spill[`${cid}:${m}`] ? Math.ceil(total / 2) : total);
       }
       // 上のスロットから流れ込んでいる分の負担
       const prev = usedSlots[i - 1];
       if (prev != null && spill[`${cid}:${prev}`]) {
-        maxH = Math.max(maxH, Math.ceil((linesOf(cid, prev) * 20 + 2) / 2));
+        maxH = Math.max(maxH, Math.ceil((linesOf(cid, prev) * Math.round(20 * GF / 12) + 2) / 2));
       }
     });
     return maxH;
@@ -3786,13 +3788,13 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       if (prevM != null && spill[`${s.id}:${prevM}`]) return; // 上のセルの縦マージ範囲なので触らない
       const items = (cellMapH[`${s.id}:${m}`] || []).slice().sort((a, b) => ((a.oc != null ? a.oc : 1) - (b.oc != null ? b.oc : 1)) || ((a.o != null ? a.o : 999) - (b.o != null ? b.o : 999)) || (a.k - b.k));
       if (spill[`${s.id}:${m}`]) { try { ws.mergeCells(r, 2 + i2, r + 1, 2 + i2); } catch (e) {} }
-      setCell(r, 2 + i2, items.map((x) => x.t).join("\n"), { fill: isOff(s) || outOfShiftSlot(s, (sheet.staffOv || {})[s.id], m) ? "FFF5F5F4" : undefined, sideOnly: true, size: 12 });
+      setCell(r, 2 + i2, items.map((x) => x.t).join("\n"), { fill: isOff(s) || outOfShiftSlot(s, (sheet.staffOv || {})[s.id], m) ? "FFF5F5F4" : undefined, sideOnly: true, size: GF });
     });
     if (hasHold) {
       if (!(prevM != null && spill[`${HOLD_ID}:${prevM}`])) {
         const items = (cellMapH[`${HOLD_ID}:${m}`] || []).slice().sort((a, b) => ((a.oc != null ? a.oc : 1) - (b.oc != null ? b.oc : 1)) || ((a.o != null ? a.o : 999) - (b.o != null ? b.o : 999)) || (a.k - b.k));
         if (spill[`${HOLD_ID}:${m}`]) { try { ws.mergeCells(r, 2 + cols.length, r + 1, 2 + cols.length); } catch (e) {} }
-        setCell(r, 2 + cols.length, items.map((x) => x.t).join("\n"), { fill: HOLDBG, sideOnly: true, size: 12 });
+        setCell(r, 2 + cols.length, items.map((x) => x.t).join("\n"), { fill: HOLDBG, sideOnly: true, size: GF });
       }
     }
     ws.getRow(r).height = Math.max(baseH, needH[i]);
@@ -4020,7 +4022,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       mergeSet(uHr, from, to, `${d.name}(${list.length}名)`, { bold: true, fill: argbOf(d.id), hAlign: "center", vAlign: "middle" });
       // 休み（欠席）は同じ枠の下に段落を分けて「休み：〇〇・〇〇」（2026-11-04 依頼者。以前は下に別の行・セル）
       const offList = master.users.filter((u) => u.deptId === d.id && absent[u.id] && (u.days || []).includes(wd));
-      const txt = list.map((u) => u.name + (u.wheelchair ? "(車)" : "")).join("・") + (offList.length ? "\n\n休み：" + offList.map((u) => u.name).join("・") : "");
+      const txt = list.map((u) => u.name).join("・") + (offList.length ? "\n\n休み：" + offList.map((u) => u.name).join("・") : "");
       maxLu = Math.max(maxLu, calcLines(toHankakuKana(txt), segChars(from, to)));
       mergeSet(uCr, from, to, txt, {});
     });

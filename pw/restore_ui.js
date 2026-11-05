@@ -60,6 +60,17 @@ const D = path.join(__dirname, "../gas/out");
   assert.strictEqual(api(t, "cal.search", [{ q: "更生センター" }]).data.items.length, 1);
   const m2 = await restore(); assert.ok(m2.includes("サーバーにない予定 0件"), "2回目は0件（二重にならない） " + m2);
   assert.strictEqual(api(t, "cal.search", [{ q: "松浦通院" }]).data.items.length, 1, "二重に入らない");
+  { // TimeTreeから写した「○○休み」を職員休みにするボタン（管理者・同期の画面。2026-11-05 依頼者）
+    const st = api(t, "kv.get", ["v2:master"]).data.value.staff.find((x) => x.emp === "パート") || api(t, "kv.get", ["v2:master"]).data.value.staff[0];
+    api(t, "cal.apply", [{ kind: "upsert", opId: "op_tt20261120_01", id: "tt20261120_01", baseRev: null, ev: { title: st.name + "休み", date: "2026-11-20", endDate: "2026-11-20", allDay: true, start: "", end: "", label: "other", place: "", memo: "", members: [] } }]);
+    if (!(await A.pg.locator("#bkSlot").isVisible())) { await A.pg.click("#syncBtn"); await A.pg.waitForTimeout(500); }
+    await A.pg.click("[data-ttfix]"); await A.pg.waitForSelector("[data-ttfix-go]", { timeout: 15000 });
+    assert.ok((await A.pg.locator("#bkSlot").innerText()).includes(st.name + "休み"), "直す予定の一覧");
+    await A.pg.click("[data-ttfix-go]"); await A.pg.waitForSelector("[data-ttfix-done]", { timeout: 15000 });
+    const it = api(t, "cal.search", [{ q: st.name + "休み" }]).data.items.find((e) => e.id === "tt20261120_01");
+    assert.ok(it.label === "leave" && it.sg.type === "staff_off" && it.sg.staff[0] === st.name, JSON.stringify(it));
+    console.log("TimeTreeの「" + st.name + "休み」→ 職員休み:", (await A.pg.locator("[data-ttfix-done]").innerText()));
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
   { // 名前を選ぶとき、部署ごとにまとめて出す（嫁島／ 八壁・井川…。2026-11-04 依頼者）
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
     await A.pg.click("#addBtn"); await A.pg.waitForTimeout(400);

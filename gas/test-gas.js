@@ -549,6 +549,30 @@ async function bootstrap() {
     return "page=calendar&embed=1 だけ ALLOWALL";
   });
 
+  await test("TimeTreeから写した「○○休み」（その他予定）を職員休みに：名前が送迎表の職員のものだけ・送迎表に反映・管理者だけ", async () => {
+    const { g, admin } = await bootstrap();
+    const E2 = engFor("v2"), m2 = (await admin.call("kv.get", "v2:master")).value, p = E2.resolveSeedPattern(m2, E2.SEED_PATTERNS.thu);
+    await admin.call("kv.cas", { key: "v2:sheet:2026-11-12", rev: 0, value: Object.assign(E2.emptySheet(), { runs: p.runs, blocks: p.blocks }) });
+    const ev = (id, title, o) => admin.call("cal.apply", { kind: "upsert", opId: "op_" + id, id, baseRev: null, ev: Object.assign({ title, date: id.slice(2, 6) + "-" + id.slice(6, 8) + "-" + id.slice(8, 10), allDay: true, start: "", end: "", label: "other", place: "", memo: "TimeTreeから写しました", members: [] }, o || {}) });
+    await ev("tt20261112_05", "岩田休み"); await ev("tt20261112_07", "松浦通院", { allDay: false, start: "10:00", end: "12:00" });
+    await ev("tt20261113_04", "近藤PM休み"); await ev("tt20261112_13", "石倉休み", { allDay: false, start: "17:00", end: "18:00" });
+    await ev("ev_other001", "八壁 休み", { date: "2026-11-12" });   // TimeTreeから写したものではない（IDが tt… でない）ので触らない
+    const dry = await admin.call("cal.ttLeaveFix", { run: false });
+    assert.deepStrictEqual(dry.items.map((x) => x.date + " " + x.name + (x.half ? ":" + x.half : "")), ["2026-11-12 岩田", "2026-11-12 石倉", "2026-11-13 近藤:pm"], "石倉さんはりんく・ぷれいす版の職員 " + JSON.stringify(dry.items));
+    const r = await admin.call("cal.ttLeaveFix", { run: true }); assert.strictEqual(r.done, dry.items.length);
+    const it = (await admin.call("cal.search", { q: "岩田休み" })).items[0];
+    assert.ok(it.label === "leave" && it.sg.type === "staff_off" && it.sg.staff[0] === "岩田" && it.title === "岩田休み", JSON.stringify(it));
+    const kd = (await admin.call("cal.search", { q: "近藤PM休み" })).items[0]; assert.strictEqual(kd.sg.half, "pm");
+    const sh = (await admin.call("kv.get", "v2:sheet:2026-11-12")).value, iw = m2.staff.find((s) => s.name === "岩田");
+    assert.strictEqual((sh.staffOv[iw.id] || {}).off, true, "送迎表で岩田さんが休み（パート欄から消える）");
+    assert.strictEqual((await admin.call("cal.search", { q: "松浦通院" })).items[0].label, "other", "名前が職員でない予定はそのまま");
+    assert.strictEqual((await admin.call("cal.search", { q: "八壁 休み" })).items[0].label, "other", "TimeTreeから写したもの以外はそのまま");
+    assert.strictEqual((await admin.call("cal.ttLeaveFix", { run: false })).items.length, 0, "2回目は0件");
+    const ippan = device(g); await ippan.login(noOf(g, "日野"), pinOf(g, "日野"));
+    await ippan.call("cal.ttLeaveFix", { run: true }).then(() => assert.fail("一般は使えない"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+    return `${r.done}件を職員休みに（${dry.items.map((x) => x.title).join("・")}）・送迎表の岩田さんが休み`;
+  });
+
   await test("シフト表（男性・女性）：G列の人と管理者が組める・表の職員は自分の希望だけ・同時に直しても消えない・変更履歴", async () => {
     const { g, admin } = await bootstrap();
     const ids = g.sheets.get("職員ID").data;
