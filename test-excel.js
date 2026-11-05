@@ -299,3 +299,30 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     console.log(`fill page OK ${k}: 列の幅 ${w}（印刷の倍率 ${Math.round(s0 * 100)}% → ${Math.round(s1 * 100)}%）`);
   }
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// 休みの職員の列は印刷に出さない（2026-11-05 依頼者「ウ」）。その人に残っていたコマは保留の列へ、休みの人は特記事項(職員)に
+(async () => {
+  const E15 = require("./eng.cjs"), m = E15.mergeSeedMaster(null, E15.seedMaster()), date = "2026-11-02";
+  const p = E15.resolveSeedPattern(m, E15.SEED_PATTERNS.mon);
+  const withItem = p.blocks.find((b) => b.staffId && b.staffId !== "__hold__" && !b.noteOnly), offA = m.staff.find((s) => s.id === withItem.staffId);
+  const offB = m.staff.find((s) => s.id !== offA.id && s.emp !== "パート" && !s.noGrid && !(s.offDays || []).includes(1));
+  const base = Object.assign(E15.emptySheet(), { runs: p.runs, blocks: p.blocks });
+  const sh = Object.assign({}, base, { staffOv: { [offA.id]: { off: true }, [offB.id]: { off: true } } });
+  const read = async (s) => { const wb = E15.buildWorkbook(ExcelJS, m, s, date, { colw: E15.bestColW(ExcelJS, m, s, date) }); const back = new ExcelJS.Workbook(); await back.xlsx.load(await wb.xlsx.writeBuffer()); const ws = back.getWorksheet("送迎表"), t = []; ws.eachRow((r, ri) => r.eachCell((c, ci) => t.push({ ri, ci, v: String(c.value || "") }))); return { ws, t, sc: E15.printScaleOf(wb.getWorksheet("送迎表")) }; };
+  const a = await read(base), b = await read(sh);
+  const nameRow = (x) => { const hit = x.t.find((c) => c.v === E15.toHankakuKana(offB.name) || c.v === offB.name); return hit ? hit.ri : -1; };
+  const ri = nameRow(a);
+  assert.ok(ri > 0, "いつもは列がある");
+  assert.ok(!b.t.some((c) => c.ri === ri && (c.v === offB.name || c.v === E15.toHankakuKana(offB.name) || /\(休/.test(c.v))), "休みの人の列は出さない");
+  assert.strictEqual(b.ws.columnCount, a.ws.columnCount - 2 + (a.t.some((c) => c.v === "保留") ? 0 : 1), "列が2つ減る（保留の列が無かった日は1つ増える）");
+  const lbl = E15.toHankakuKana(withItem.label);
+  assert.ok(b.t.some((c) => c.v.includes(lbl) && b.t.some((h) => h.ci === c.ci && h.v === "保留")), "休みの人のコマは保留の列に（消えない） " + lbl);
+  assert.ok(b.t.some((c) => c.v.includes("休み：") && c.v.includes(E15.toHankakuKana(offA.name)) && c.v.includes(E15.toHankakuKana(offB.name))), "特記事項(職員)に「休み：」");
+  const bestOf = (s, o) => { let best = 0; for (const w of [10.5, 11, 11.5, 12, 12.5, 13, 14, 15]) best = Math.max(best, E15.printScaleOf(E15.buildWorkbook(ExcelJS, m, s, date, Object.assign({ colw: w }, o)).getWorksheet("送迎表"))); return best; };
+  // 実際はカレンダーで休みにするとその人のコマは保留へ移る（calsync）。同じ状態で、休みの列を出す・出さないを比べる
+  const toHold = (x) => (x.staffId === offA.id || x.staffId === offB.id ? Object.assign({}, x, { staffId: "__hold__" }) : x);
+  const real = Object.assign({}, sh, { runs: sh.runs.map(toHold), blocks: sh.blocks.map(toHold) });
+  const shown = bestOf(real, { showOffCols: true }), hidden = bestOf(real, {});
+  assert.ok(hidden >= shown, "休みの列を出さないほうが大きく印刷できる " + shown + " " + hidden);
+  console.log("off columns hidden OK", offA.name, offB.name, "同じ日で 休みの列あり", Math.round(shown * 1000) / 10 + "% → なし", Math.round(hidden * 1000) / 10 + "%");
+})().catch((e) => { console.error(e); process.exit(1); });

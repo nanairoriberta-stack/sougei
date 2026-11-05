@@ -3449,14 +3449,15 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   const byDept = [...master.staff]
     .filter((s) => s.emp !== "パート" && !s.noGrid && (!fxOff(s) || wToday(s)))
     .sort((a, b) => staffColKey(master, a, wd) - staffColKey(master, b, wd));
-  const workingSet = new Set(byDept.map((s) => s.id));
   const actives = byDept.filter((s) => !(ov[s.id] && ov[s.id].off));
   const offs = byDept.filter((s) => ov[s.id] && ov[s.id].off);
+  // 休みの職員の列は印刷に出さない（2026-11-05 依頼者「ウ」＝列が減るぶん大きく印刷できる）。その人に残っているコマは保留の列へ（消えないように）
+  const workingSet = new Set((opts.showOffCols ? byDept : actives).map((s) => s.id));   // showOffCols＝以前の出し方（休みの列も出す）
   const known = new Set(master.staff.map((s) => s.id));
   const holdCount =
     sheet.runs.filter((r) => r.staffId === HOLD_ID || !known.has(r.staffId) || !workingSet.has(r.staffId)).length +
     sheet.blocks.filter((b) => !b.noteOnly && (b.staffId === HOLD_ID || !known.has(b.staffId) || !workingSet.has(b.staffId))).length;
-  const cols = [...actives, ...offs];
+  const cols = opts.showOffCols ? [...actives, ...offs] : [...actives];
   const hasHold = holdCount > 0;
   const nCols = 1 + cols.length + (hasHold ? 1 : 0);
   const isOff = (s) => !!(ov[s.id] && ov[s.id].off);
@@ -4109,7 +4110,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       ].filter(Boolean).join("\n");
     },
     staffCountOf,
-    [{ header: "連絡事項", lines: contactLines }, { header: "特記事項(職員)", lines: [...String(sheet.notesStaff || "").split("\n").filter(Boolean), ...staffNotes, ...calN.staff] }, { header: "訓練", lines: trainingLines }]
+    [{ header: "連絡事項", lines: contactLines }, { header: "特記事項(職員)", lines: [...(offs.length ? ["休み：" + offs.map((s) => s.name).join("・")] : []), ...String(sheet.notesStaff || "").split("\n").filter(Boolean), ...staffNotes, ...calN.staff] }, { header: "訓練", lines: trainingLines }]
   );
 
   // ---- 配車 / パート職員 ----
