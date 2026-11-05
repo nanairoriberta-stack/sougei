@@ -5,6 +5,8 @@ const path = require("path"), fs = require("fs");
 const { makeGas } = require("../gas/fakegas.js");
 global.window = {}; global.SGKV = require("../kvsync.js");
 const engFor = (ed) => { global.window = { __SG_EDITION: ed }; delete require.cache[require.resolve("../eng.cjs")]; return require("../eng.cjs"); };
+// ラベルは2段（2026-11-05）：1段目（職員／利用者／その他予定）を押してから2段目
+const pickLabel = async (pg, k) => { const g = { leave: "staff", shift: "staff", hwork: "staff", sother: "staff", other: "other" }[k] || "user"; await pg.locator(`label:has(#f-grp-${g})`).click(); await pg.waitForTimeout(250); if (k !== "other") await pg.locator(`label:has(#f-label-${k})`).click(); };
 const D = path.join(__dirname, "../gas/out");
 (async () => {
   const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Lib5_shift.gs", "Code.gs"].map((f) => path.join(D, f))); g.ctx.setup();
@@ -74,7 +76,7 @@ const D = path.join(__dirname, "../gas/out");
   { // 名前を選ぶとき、部署ごとにまとめて出す（嫁島／ 八壁・井川…。2026-11-04 依頼者）
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
     await A.pg.click("#addBtn"); await A.pg.waitForTimeout(400);
-    await A.pg.locator("label:has(#f-label-leave)").click(); await A.pg.waitForTimeout(300);
+    await pickLabel(A.pg, "leave"); await A.pg.waitForTimeout(300);
     await A.pg.focus("#f-sgq-staff"); await A.pg.waitForTimeout(1500);
     const heads = await A.pg.$$eval("#sghits-staff .sghd", (x) => x.map((e) => e.textContent));
     assert.ok(heads.length >= 3 && heads[0] === "嫁島", "部署の見出し（嫁島から） " + JSON.stringify(heads));
@@ -86,7 +88,7 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await A.pg.locator("#sghits-staff [data-sgpick]").first().getAttribute("data-name"), "八壁", "入力すると合う人が先頭");
     console.log("名前の選択：部署ごと", heads.slice(0, 5).join("／"), "… 嫁島：", (under["嫁島"] || []).slice(0, 3).join("・"));
     // 利用者の名前も部署ごと
-    await A.pg.locator("label:has(#f-label-user)").click(); await A.pg.waitForTimeout(300);
+    await pickLabel(A.pg, "user"); await A.pg.waitForTimeout(300);
     await A.pg.focus("#f-sgq-users"); await A.pg.waitForTimeout(800);
     const uh = await A.pg.$$eval("#sghits-users .sghd", (x) => x.map((e) => e.textContent));
     assert.ok(uh.length >= 3 && uh[0] === "嫁島", "利用者も部署の見出し " + JSON.stringify(uh));
@@ -95,7 +97,7 @@ const D = path.join(__dirname, "../gas/out");
   { // カレンダーの「送迎」：迎え・送りの選択肢は送迎表のルール⑪から。選んで保存すると送迎なしの理由に入る
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
     await A.pg.click("#addBtn"); await A.pg.waitForTimeout(400);
-    await A.pg.locator("label:has(#f-label-ride)").click(); await A.pg.waitForTimeout(300);
+    await pickLabel(A.pg, "ride"); await A.pg.waitForTimeout(300);
     const mo = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
     const so = await A.pg.$$eval('input[name="w-send"]', (o) => o.map((x) => x.parentElement.innerText));
     assert.deepStrictEqual(mo, ["いつもどおり", "時間変更", "家族送り", "母送り"], "迎えの選択肢 " + JSON.stringify(mo));

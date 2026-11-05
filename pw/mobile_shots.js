@@ -4,6 +4,8 @@ const path = require("path"), fs = require("fs");
 const { makeGas } = require("../gas/fakegas.js");
 global.window = {}; global.SGKV = require("../kvsync.js");
 const engFor = (ed) => { global.window = { __SG_EDITION: ed }; delete require.cache[require.resolve("../eng.cjs")]; return require("../eng.cjs"); };
+// ラベルは2段（2026-11-05）：1段目（職員／利用者／その他予定）を押してから2段目
+const pickLabel = async (pg, k) => { const g = { leave: "staff", shift: "staff", hwork: "staff", sother: "staff", other: "other" }[k] || "user"; await pg.locator(`label:has(#f-grp-${g})`).click(); await pg.waitForTimeout(250); if (k !== "other") await pg.locator(`label:has(#f-label-${k})`).click(); };
 const D = path.join(__dirname, "../gas/out");
 const OUT = process.argv[2] || __dirname;
 (async () => {
@@ -44,7 +46,7 @@ const OUT = process.argv[2] || __dirname;
     await pg.screenshot({ path: `${OUT}/${tag}_1top.png` }); await sw("最初");
     await pg.screenshot({ path: `${OUT}/${tag}_2full.png`, fullPage: true });
     await pg.click("#addBtn"); await pg.waitForTimeout(400); await pg.screenshot({ path: `${OUT}/${tag}_3editor.png` }); await sw("新しい予定");
-    await pg.check("#f-label-ride"); await pg.waitForTimeout(300); await pg.screenshot({ path: `${OUT}/${tag}_4ride.png`, fullPage: false }); await sw("送迎");
+    await pickLabel(pg, "ride"); await pg.waitForTimeout(300); await pg.screenshot({ path: `${OUT}/${tag}_4ride.png`, fullPage: false }); await sw("送迎");
     await pg.keyboard.press("Escape"); await pg.waitForTimeout(300);
     await pg.click("#syncBtn"); await pg.waitForTimeout(400); await pg.screenshot({ path: `${OUT}/${tag}_5sync.png` }); await sw("同期");
     await pg.keyboard.press("Escape"); await pg.waitForTimeout(300);

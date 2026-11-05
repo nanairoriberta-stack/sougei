@@ -13,7 +13,8 @@ const LOCK_WAIT_MAX = 90000;   // ロック待ちの上限（超えたら後で�
 const MAX_BYTES = 240000;      // 1文書の上限（基盤は256KiB）
 const MAX_COMMENTS = 100;
 const TRASH_DAYS = 30;
-const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien", "extra"];  // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
+const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien", "extra", "sother", "uother"];  // sother=職員のその他・uother=利用者のその他（2026-11-05）
+  // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
 const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "user_extra", "help", "hwork", "shift"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
@@ -45,6 +46,7 @@ function normEvent(r, id, depth) {
     label: LABEL_KEYS.includes(r.label) ? r.label : "other",
     biz: r.biz === "houkago" ? "houkago" : "seikatsu",   // 事業：生活介護（これまでの予定）／放課後デイ
     place: str(r.place, 80), memo: str(r.memo, 2000),
+    users: Array.isArray(r.users) ? [...new Set(r.users.filter(x => typeof x === "string" && x && x.length <= 40))].slice(0, 20) : [],  // 利用者の名前（利用者のその他）
     tanto: Array.isArray(r.tanto) ? [...new Set(r.tanto.filter(x => typeof x === "string" && x && x.length <= 40))].slice(0, 20) : [],  // 担当（職員の名前。その他予定）
     members: Array.isArray(r.members) ? [...new Set(r.members.filter(x => typeof x === "string" && x.length <= 64))].slice(0, 100) : [],
     createdBy: typeof r.createdBy === "string" ? r.createdBy.slice(0, 64) : null, createdAt: str(r.createdAt, 40),

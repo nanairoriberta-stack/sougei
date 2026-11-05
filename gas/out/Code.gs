@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.05f',
+  VERSION: '2026.11.05g',
   SESSION_DAYS: 120,
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -348,7 +348,7 @@ function calSearch_(q) {
     if (!e || e.deleted) return false;
     if (biz && (e.biz === 'houkago' ? 'houkago' : 'seikatsu') !== biz) return false;
     var sg = e.sg || {};
-    var hay = norm([e.title, e.place, e.memo, (e.tanto || []).join(' '), (sg.staff || []).join(' '), (sg.users || []).join(' '), sg.reason, sg.note, sg.meetPlace, sg.sendPlace].join(' '));
+    var hay = norm([e.title, e.place, e.memo, (e.tanto || []).join(' '), (e.users || []).join(' '), (sg.staff || []).join(' '), (sg.users || []).join(' '), sg.reason, sg.note, sg.meetPlace, sg.sendPlace].join(' '));
     return terms.every(function (t) { return hay.indexOf(t) >= 0; });
   });
   hits.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.start || '').localeCompare(String(b.start || '')); });

@@ -1,8 +1,12 @@
 
 "use strict";
-const APP_VERSION="2026.11.05f";
+const APP_VERSION="2026.11.05g";
 const C=window.TCCore;
-const LABELS=[{k:"help",n:"ヘルプ"},{k:"ride",n:"送迎"},{k:"user",n:"利用者休み"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"leave",n:"職員休み"},{k:"hwork",n:"休日出勤"},{k:"shift",n:"職員時間変更"},{k:"other",n:"その他予定"}];
+const LABELS=[{k:"leave",n:"職員休み"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
+/* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
+const GRP=[{k:"staff",n:"職員",ls:[["leave","休み"],["shift","時間変更"],["hwork","休日出勤"],["sother","その他"]]},{k:"user",n:"利用者",ls:[["help","ヘルプ"],["user","休み"],["ride","送迎変更"],["extra","利用日外利用"],["monitor","モニタリング"],["shien","支援会議"],["uother","その他"]]},{k:"other",n:"その他予定",ls:[["other","その他予定"]]}];
+const grpOf=k=>(GRP.find(g=>g.ls.some(l=>l[0]===k))||GRP[2]);
+const isOth=k=>k==="other"||k==="sother"||k==="uother";   // タイトル・時間・場所を入れる「その他」のラベル
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
 const HOL={
 "2026-01-01":"元日","2026-01-12":"成人の日","2026-02-11":"建国記念の日","2026-02-23":"天皇誕生日","2026-03-20":"春分の日","2026-04-29":"昭和の日","2026-05-03":"憲法記念日","2026-05-04":"みどりの日","2026-05-05":"こどもの日","2026-05-06":"振替休日","2026-07-20":"海の日","2026-08-11":"山の日","2026-09-21":"敬老の日","2026-09-22":"国民の休日","2026-09-23":"秋分の日","2026-10-12":"スポーツの日","2026-11-03":"文化の日","2026-11-23":"勤労感謝の日",
@@ -129,7 +133,7 @@ function renderGrid(vis){
 }
 function evRow(e,ps){
   const av=e.members.slice(0,6).map(id=>ps[id]?`<img src="${esc(ps[id].avatarUrl)}" alt="${esc(ps[id].name||"メンバー")}" title="${esc(ps[id].name||"メンバー")}">`:"").join("");
-  return`<li><button class="ev-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(e.title)}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
+  return`<li><button class="ev-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(e.title)}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${(e.users||[]).length?`<span>利用者：${esc(e.users.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
 function renderPanel(vis,ps){
   const d=parse(S.sel),evs=on(vis,S.sel),hol=HOL[S.sel],can=db&&S.canWrite&&core;
   let body;
@@ -153,7 +157,7 @@ function fitGrid(){
 }
 function dsRow(e){
   const tm=e.allDay||e.date!==e.endDate&&!(e.date===S.sel&&e.start)?`<span class="ds-time">終日</span>`:`<span class="ds-time">${esc(e.start)}<small>${esc(e.end)}</small></span>`;
-  const sub=[LMAP[e.label]?.n||"その他",e.place,(e.tanto||[]).length?"担当："+e.tanto.join("・"):""].filter(Boolean).map(esc).join(" ・ ");
+  const sub=[LMAP[e.label]?.n||"その他",e.place,(e.tanto||[]).length?"担当："+e.tanto.join("・"):"",(e.users||[]).length?"利用者："+e.users.join("・"):""].filter(Boolean).map(esc).join(" ・ ");
   return`<li><button class="ds-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${misTag(e)}${bizTag(e)}${esc(e.title)}</b><small>${sub}</small></span></button></li>`;
 }
 function renderDay(vis){
@@ -191,7 +195,7 @@ const SR={open:false,q:"",items:[],loading:false,err:"",more:false,seq:0,timer:0
 function openSearch(){SR.open=true;document.documentElement.classList.add("srchopen");renderSearch();setTimeout(()=>{const i=$("sq");if(i)i.focus()},30)}
 function closeSearch(){SR.open=false;clearTimeout(SR.timer);SR.seq++;$("searchRoot").innerHTML="";document.documentElement.classList.remove("srchopen")}
 const srTerms=()=>SR.q.split(/[\s\u3000]+/).map(kanaNorm).filter(Boolean);
-function srMatch(e,terms){const sg=e.sg||{};const hay=kanaNorm([e.title,e.place,e.memo,(e.tanto||[]).join(" "),(sg.staff||[]).join(" "),(sg.users||[]).join(" "),sg.reason,sg.note,sg.meetPlace,sg.sendPlace,LMAP[e.label]?.n].join(" "));return terms.every(t=>hay.includes(t))}
+function srMatch(e,terms){const sg=e.sg||{};const hay=kanaNorm([e.title,e.place,e.memo,(e.tanto||[]).join(" "),(e.users||[]).join(" "),(sg.staff||[]).join(" "),(sg.users||[]).join(" "),sg.reason,sg.note,sg.meetPlace,sg.sendPlace,LMAP[e.label]?.n].join(" "));return terms.every(t=>hay.includes(t))}
 function srList(){
   const terms=srTerms();if(!terms.length)return[];
   const ok=e=>e&&!e.deleted&&srMatch(e,terms)&&(S.biz==="all"||bizOf(e)===S.biz);
@@ -347,7 +351,7 @@ function sgText(sg){if(!sg)return"";const who=[...(sg.staff||[]),...(sg.users||[
 function workOf(d){
   const sg=d.sg||{};
   const[kinmu,reason]=sg.type==="shift"?splitKinmu(sg.reason):["",sg.reason||""];
-  return{staff:[...(sg.staff||d.tanto||[])],users:[...(sg.users||[])],reason:sg.type==="staff_off"?"":reason,kinmu,dest:sg.type==="help"&&sg.note!==(sg.users||[])[0]?sg.note||"":"",dept:sg.dept||"",
+  return{staff:[...(sg.staff||d.tanto||[])],users:[...(sg.users||d.users||[])],reason:sg.type==="staff_off"?"":reason,kinmu,dest:sg.type==="help"&&sg.note!==(sg.users||[])[0]?sg.note||"":"",dept:sg.dept||"",
     leave:sg.half||(sg.type==="staff_off"&&!d.allDay?(sg.reason==="時間休み"?"hours":"naka"):"day"),
     meetM:sg.meet?"time":sg.noMeet?"r:"+sg.noMeet:"same",sendM:sg.send?"time":sg.noSend?"r:"+sg.noSend:"same",meet:sg.meet||"",send:sg.send||"",mplace:sg.meetPlace||"",splace:sg.sendPlace||"",
     plan:sg.type==="staff_plan",wsM:sg.wstart?"time":"same",weM:sg.wend?"time":"same",wstart:sg.wstart||"",wend:sg.wend||"",
@@ -364,7 +368,7 @@ function sgOf(label,w){
   if(label==="hwork")return Object.assign(base,{type:"hwork",users:[],dept:w.dept});
   if(label==="shift")return Object.assign(base,{type:"shift",users:[],dept:w.dept,reason:[w.kinmu,w.reason].filter(Boolean).join("・"),wstart:w.wsM==="time"?w.wstart:"",wend:w.weM==="time"?w.wend:""},KINMU_NORIDE.has(w.kinmu)?{noRide:true}:{});
   if(PLAN_LABELS.includes(label))return Object.assign(base,{type:"staff_plan"});
-  if(label==="other"&&w.plan)return Object.assign(base,{type:"staff_plan",users:[]});
+  if((label==="other"||label==="sother")&&w.plan)return Object.assign(base,{type:"staff_plan",users:[]});
   return null;
 }
 const minOf=t=>{const m=/^(\d{1,2}):(\d{2})$/.exec(t||"");return m?Number(m[1])*60+Number(m[2]):0};
@@ -428,7 +432,9 @@ function drawSg(){
   else if(PLAN_LABELS.includes(L))h=who("users","利用者","利用者の名前で検索")+who("staff","対応者（決まっていなければ空けておく）","職員の名前で検索")
     +`<div class="sgsub"><label class="lbl2" for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="例：自宅・事業所・○○病院" ${ro?"readonly":""}></div>`
     +hint("送迎表のその時間に入ります。対応者を選べばその職員の欄（送迎と重なると注意が出ます）、空けておけば「保留」の欄に入るので、送迎表で担当を決めてください。");
-  else h=who("staff","担当","職員の名前で検索","なし")
+  else if(L==="uother")h=who("users","利用者","利用者の名前で検索")
+    +hint("カレンダーだけの予定です（送迎表には入りません。送迎表の特記事項(利用者)に出ます）。");
+  else h=who("staff",L==="sother"?"職員":"担当","職員の名前で検索",L==="sother"?"":"なし")
     +`<label class="check"><input type="checkbox" id="w-plan" ${w.plan?"checked":""} ${dis}>担当の職員の予定として送迎表にも載せる（会議・研修・外出など）</label>`
     +(w.plan?hint("その時間の予定として担当の職員の欄に入り、送迎と重なると注意が出ます。"):"");
   box.innerHTML=h+(!SGN.loaded?`<span class="by">名前の一覧を読み込んでいます…</span>`:"");
@@ -508,7 +514,7 @@ function openEditor(ev,day,draft){
   const base=ev||null;
   // 新しい予定は「ヘルプ」から（ヘルプを入れられない一般職員は「職員休み」から）
   const d=draft?draft.form:ev?{...ev,members:[...ev.members]}:{title:"",date:day||S.sel,endDate:day||S.sel,allDay:false,start:"10:00",end:"11:00",label:(meInfo().canSougei||meInfo().admin)?"help":"leave",place:"",memo:"",members:S.me?[S.me]:[],sg:null,biz:newBiz()};
-  if(d.sg&&LABEL_OF_SG[d.sg.type]&&!(d.sg.type==="staff_plan"&&PLAN_LABELS.includes(d.label)))d.label=LABEL_OF_SG[d.sg.type];
+  if(d.sg&&LABEL_OF_SG[d.sg.type]&&!(d.sg.type==="staff_plan"&&(PLAN_LABELS.includes(d.label)||d.label==="sother")))d.label=LABEL_OF_SG[d.sg.type];
   if(!d.w)d.w=workOf(d);
   if(!ev&&!draft){fixTimes(d);try{window.SGHost&&window.SGHost.pollOnce&&window.SGHost.pollOnce()}catch{}}   // 新しい予定を入れる前に、ほかの人の分を読み直す   // 最初に選ばれているラベルに合わせて終日・時刻をそろえる
   // 見るだけになる理由（入力できないときに画面に出す）：まだ準備中・権限がない・送迎表の担当者だけのラベル
@@ -541,10 +547,11 @@ function drawSheet(){
     ${ro?`<div class="note warn" data-ro-why><p>${ed.roWhy==="loading"?"まだ読み込み中のため、入力できません。少し待つと入力できるようになります。":ed.roWhy==="label"?`この予定（${esc(LMAP[d.label]?.n||"")}）は送迎表の担当者・管理者だけが変更できます。見るだけです。`:"この予定は見るだけです（変更できません）。"}</p></div>`:""}
     <div class="note warn" id="liveNote" ${ed.changed?"":"hidden"}><p>この予定は、開いている間に他の人が変更または削除しました。このまま保存すると、どちらを残すか確認する画面が出ます。</p></div>
     <div class="field"><span class="lbl">事業</span><div class="labels bizpick">${["seikatsu","houkago"].map(k=>`<label style="--c:var(--b-${k})"><input type="radio" name="f-biz" id="f-biz-${k}" value="${k}" ${bizOf(d)===k?"checked":""} ${ro?"disabled":""}><span>${BIZN[k]}</span></label>`).join("")}</div>${(()=>{const mm=bizMismatch({biz:d.biz,sg:sgOf(d.label,d.w)});return mm.length?`<p class="err" data-bizmis>⚠ ${esc(mm.join("・"))}さんは${BIZN[otherBiz(bizOf(d))]}の人です。事業が合っているか確かめてください。</p>`:""})()}</div>
-    <div class="field"><span class="lbl">ラベル</span><div class="labels lblpick">${LABELS.map(l=>`<label style="--c:var(--l-${l.k})"><input type="radio" name="f-label" id="f-label-${l.k}" value="${l.k}" ${d.label===l.k?"checked":""} ${ro||(!canLabel(l.k)&&d.label!==l.k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${l.n}</span></label>`).join("")}</div></div>
-    ${d.label==="other"?"":box}
-    ${d.label==="other"?`<div class="field"><label for="f-title">タイトル</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="例：週次定例" ${v()}></div>`:""}
-    <label class="check" ${d.label==="other"?"":"hidden"}><input type="checkbox" id="f-allday" ${d.allDay?"checked":""} ${ro?"disabled":""}>終日</label>
+    <div class="field"><span class="lbl">ラベル</span><div class="labels grppick">${GRP.map(g=>`<label style="--c:var(--l-${g.ls[0][0]})"><input type="radio" name="f-grp" id="f-grp-${g.k}" value="${g.k}" ${grpOf(d.label).k===g.k?"checked":""} ${ro?"disabled":""}><span>${g.n}</span></label>`).join("")}</div>
+      ${grpOf(d.label).ls.length>1?`<div class="labels lblpick" data-lbl2="${grpOf(d.label).k}">${grpOf(d.label).ls.map(([k,n])=>`<label style="--c:var(--l-${k})"><input type="radio" name="f-label" id="f-label-${k}" value="${k}" ${d.label===k?"checked":""} ${ro||(!canLabel(k)&&d.label!==k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${n}</span></label>`).join("")}</div>`:`<input type="radio" name="f-label" id="f-label-other" value="other" checked hidden>`}</div>
+    ${isOth(d.label)?"":box}
+    ${isOth(d.label)?`<div class="field"><label for="f-title">タイトル</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="例：週次定例" ${v()}></div>`:""}
+    <label class="check" ${isOth(d.label)?"":"hidden"}><input type="checkbox" id="f-allday" ${d.allDay?"checked":""} ${ro?"disabled":""}>終日</label>
     <div class="row">
       <div class="field"><label for="f-date">開始日</label><input class="input" type="date" id="f-date" value="${esc(d.date)}" ${v()}></div>
       <div class="field" ${d.allDay?"hidden":""} id="w-start"><label for="f-start">${d.label==="hwork"?"出勤の時刻":"開始時刻"}</label><input class="input" type="time" id="f-start" value="${esc(d.start||"10:00")}" step="300" ${v()}></div>
@@ -553,9 +560,9 @@ function drawSheet(){
       <div class="field" ${d.label==="help"?"hidden":""}><label for="f-enddate">終了日</label><input class="input" type="date" id="f-enddate" value="${esc(d.endDate)}" ${v()}></div>
       <div class="field" ${d.allDay||d.label==="help"?"hidden":""} id="w-end"><label for="f-end">${d.label==="hwork"?"退勤の時刻":"終了時刻"}</label><input class="input" type="time" id="f-end" value="${esc(d.end||"11:00")}" step="300" ${v()}></div>
     </div>
-    ${d.label==="other"?`<div class="field"><label for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="会議室A / オンライン など" ${v()}></div>`:""}
-    ${d.label==="other"?box:""}
-    <div class="field"><label for="f-memo">メモ</label><textarea class="input" id="f-memo" maxlength="2000" placeholder="${d.label==="other"?"議題、持ち物、URL など":"伝えたいこと（送迎表には出ません）"}" ${v()}>${esc(d.memo)}</textarea></div>
+    ${isOth(d.label)?`<div class="field"><label for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="会議室A / オンライン など" ${v()}></div>`:""}
+    ${isOth(d.label)?box:""}
+    <div class="field"><label for="f-memo">メモ</label><textarea class="input" id="f-memo" maxlength="2000" placeholder="${isOth(d.label)?"議題、持ち物、URL など":"伝えたいこと（送迎表には出ません）"}" ${v()}>${esc(d.memo)}</textarea></div>
     <p class="err" id="f-err" ${ed.err?"":"hidden"}>${esc(ed.err)}</p>
     ${ed.base&&ed.base.updatedBy?`<p class="by" id="byline"></p>`:""}
     ${ed.base&&ed.base.prev&&!ro&&!ed.base.pending?`<div><button type="button" class="ghost sm" data-revert>1つ前の内容に戻す</button> <span class="by">「${esc(ed.base.prev.title)}」${timeText(ed.base.prev)}</span></div>`:""}
@@ -596,15 +603,17 @@ function save(){
   readForm();const d=ed.d;
   d.sg=sgOf(d.label,d.w);
   const bad=checkSg(d,d.sg);if(bad)return showErr(bad);
+  if(d.label==="sother"&&!d.w.staff.length)return showErr("職員を選んでください。");
+  if(d.label==="uother"&&!d.w.users.length)return showErr("利用者を選んでください。");
   if(!ed.base)for(const k of["staff","users"])if(oneOnly(d.label,k)&&(d.w[k]||[]).length>1)return showErr("1つの予定に1人です。ほかの人は×で外して、別の予定で入れてください。");
   // その他予定だけタイトルを入れてもらう。ほかのラベルは入力した内容から毎回付け直す（直したときに古い題名が残らない）
-  if(d.label!=="other")d.title=autoTitle(d.label,d.sg,d)||LMAP[d.label]?.n||d.title;
+  if(!isOth(d.label))d.title=autoTitle(d.label,d.sg,d)||LMAP[d.label]?.n||d.title;
   if(!d.title)return showErr("タイトルを入力してください。");
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d.date))return showErr("開始日を選んでください。");
   if(d.endDate<d.date)return showErr("終了日は開始日以降にしてください。");
   if(!d.allDay&&!d.start)return showErr("開始時刻を入れてください。");
   if(!d.allDay&&d.endDate===d.date&&d.end<=d.start)return showErr("終了時刻は開始時刻より後にしてください。");
-  const ev={title:d.title,date:d.date,endDate:d.endDate,allDay:d.allDay,start:d.allDay?"":d.start,end:d.allDay?"":d.end,label:lab(d.label),biz:bizOf(d),place:d.place,memo:d.memo,members:d.members,tanto:d.label==="other"?[...d.w.staff]:[],sg:d.sg||null};
+  const ev={title:d.title,date:d.date,endDate:d.endDate,allDay:d.allDay,start:d.allDay?"":d.start,end:d.allDay?"":d.end,label:lab(d.label),biz:bizOf(d),place:d.place,memo:d.memo,members:d.members,tanto:d.label==="other"||d.label==="sother"?[...d.w.staff]:[],users:d.label==="uother"?[...d.w.users]:[],sg:d.sg||null};
   {const mm=bizMismatch(ev),sig=bizOf(ev)+"|"+mm.join(",");   // 事業の取り違えの確認（放課後デイの職員の休みを生活介護に入れる、など）
     if(mm.length&&ed.bizWarned!==sig){ed.bizWarned=sig;return showErr(`この予定は「${BIZN[bizOf(ev)]}」の予定ですが、${mm.join("・")}さんは${BIZN[otherBiz(bizOf(ev))]}の人です。このまま入れるときは、もう一度「保存」を押してください（上の「事業」で変えられます）。`)}}
   if(!ed.base){const dup=dupOf(ev);if(dup&&ed.dupWarned!==dup.id){ed.dupWarned=dup.id;return showErr(`同じ予定がもう入っています（${dup.date.slice(5).replace("-","/")}「${dup.title}」）。それでも入れるときは、もう一度「保存」を押してください。`)}}
@@ -776,6 +785,7 @@ document.addEventListener("change",e=>{if(ed&&e.target.name==="f-biz"){ed.d.biz=
   if(!ed)return;
   // ラベル・休みの形などを変えたら、入力欄を作り直す（入力済みの値は残す）
   if(e.target.name==="w-kinmu"){readForm();ed.d.w.kinmu=e.target.value;applyKinmu(ed.d.w);drawSheet();draftSave();return}   // 勤務を選ぶと出勤・退勤の時刻が入る
+  if(e.target.name==="f-grp"){readForm();const g=GRP.find(x=>x.k===e.target.value);if(g&&grpOf(ed.d.label).k!==g.k){ed.lastIn=ed.lastIn||{};ed.lastIn[grpOf(ed.d.label).k]=ed.d.label;ed.d.label=ed.lastIn[g.k]||g.ls[0][0];fixTimes(ed.d)}drawSheet();draftSave();return}   // 1段目：その中で前に選んだラベル（無ければ最初）
   if(e.target.name==="f-label"||e.target.id==="w-plan"||["w-leave","w-meet","w-send","w-ws","w-we","w-hdur"].includes(e.target.name)){
     readForm();drawSheet();draftSave();return}
   if(e.target.id==="f-allday"){$("w-start").hidden=$("w-end").hidden=e.target.checked}
