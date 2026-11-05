@@ -285,3 +285,16 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.strictEqual(E13.fitRowHeights(ws), 0, "2回目は何もしない");
   console.log("fit row heights OK", Math.round(ws.getRow(1).height), Math.round(ws.getRow(2).height + ws.getRow(3).height));
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// 用紙いっぱいに：列の幅をいくつか試して、一番大きく印刷できる幅で出す（2026-11-05 依頼者「余白がかなりある」）
+(async () => {
+  const E14 = require("./eng.cjs"), m = E14.mergeSeedMaster(null, E14.seedMaster());
+  for (const k of ["mon", "thu"]) {
+    const p = E14.resolveSeedPattern(m, E14.SEED_PATTERNS[k]), sh = Object.assign(E14.emptySheet(), { runs: p.runs, blocks: p.blocks });
+    const sc = (w) => E14.printScaleOf(E14.buildWorkbook(ExcelJS, m, sh, "2026-11-02", w ? { colw: w } : {}).getWorksheet("送迎表"));
+    const w = E14.bestColW(ExcelJS, m, sh, "2026-11-02"), s0 = sc(11), s1 = sc(w);
+    assert.ok(s1 >= s0, "今までより小さくならない");
+    for (const x of [10, 12, 14, 16]) assert.ok(s1 + 0.005 >= sc(x), `幅${x}より大きく出る`);
+    console.log(`fill page OK ${k}: 列の幅 ${w}（印刷の倍率 ${Math.round(s0 * 100)}% → ${Math.round(s1 * 100)}%）`);
+  }
+})().catch((e) => { console.error(e); process.exit(1); });

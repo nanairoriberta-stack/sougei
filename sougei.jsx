@@ -3623,7 +3623,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   });
 
   // 列幅
-  const COLW = 11;
+  const COLW = opts.colw || 11;   // 職員の列の幅。出力のときは用紙いっぱいに大きく出る幅を選ぶ（bestColW、2026-11-05 依頼者）
   ws.getColumn(1).width = 8.5;
   for (let i = 0; i < cols.length; i++) ws.getColumn(2 + i).width = COLW;
   if (hasHold) ws.getColumn(2 + cols.length).width = COLW + 1;
@@ -3647,7 +3647,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   const dispW = (s) => [...String(s)].reduce((a, ch) => a + (/[\uFF61-\uFF9F\x20-\x7E]/.test(ch) ? 0.5 : 1), 0);
   const calcLines = (txt, chars) =>
     txt ? txt.split("\n").reduce((a, l) => a + Math.max(1, Math.ceil(dispW(l) / Math.max(2, chars))), 0) : 1;
-  const CHARS_PER_COL = 4.9; // 幅11・12pt太字でおよそ全角4.9文字
+  const CHARS_PER_COL = 4.9 * COLW / 11; // 幅11・12pt太字でおよそ全角4.9文字
   const LINE_H = 18.5;
   const segChars = (from, to) => Math.max(4, Math.floor(((to - from + 1) * COLW) / 3.0));
 
@@ -4190,6 +4190,22 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   return wb;
 }
 
+/* 印刷したときの倍率（A4横・1枚に収める）。列の幅1＝約7px＋5px、1px＝0.75pt。余白は左右上下0.2インチ */
+function printScaleOf(ws) {
+  let W = 0, H = 0;
+  for (let c = 1; c <= ws.columnCount; c++) { const w = ws.getColumn(c).width; W += (7 * (w == null ? 9 : w) + 5) * 0.75; }
+  ws.eachRow({ includeEmpty: true }, (r) => { H += r.height || 15; });
+  return Math.min(1, (842 - 29) / Math.max(1, W), (595 - 36) / Math.max(1, H));
+}
+/* 用紙いっぱいに一番大きく印刷できる列の幅を選ぶ（2026-11-05 依頼者「余白がかなりあるので画面いっぱい使ってほしい。文字が大きくなるなら」）。
+   縦に長いと横に余白が出るので、列を広げて折り返しを減らし、縦を短くする */
+function bestColW(ExcelJS, master, sheet, date) {
+  let best = { w: 11, s: 0 };   // 同じくらいなら狭いほう（今までの見た目に近い）
+  for (const w of [10.5, 11, 11.5, 12, 12.5, 13, 14, 15]) {
+    try { const sc = printScaleOf(buildWorkbook(ExcelJS, master, sheet, date, { colw: w }).getWorksheet("送迎表")); if (sc > best.s + 0.005) best = { w, s: sc }; } catch (e) { break; }
+  }
+  return best.w;
+}
 /* Excelの全部のセル（結合したセルはまとめて）について、折り返したときの行数×文字の大きさで要る高さを見積もり、
    足りない行を高くする（縦に結合したセルは一番下の行を足す）。少し多めに見積もる＝切れるより少し余るほうがよい。
    返り値：高くした行の数（テスト用） */
@@ -4227,8 +4243,9 @@ async function exportExcel(master, sheet, date) {
   try {
     const ExcelJS = await loadExcelJS();
     // 1枚目=通常(ヘルプにも車名あり) / 2枚目=ヘルプの車名だけ消したもの
-    const wb = buildWorkbook(ExcelJS, master, sheet, date);
-    buildWorkbook(ExcelJS, master, sheet, date, { wb, sheetName: "送迎表(ヘルプ車なし)", hideHelpVeh: true, gridOnly: true });
+    const colw = bestColW(ExcelJS, master, sheet, date);   // 用紙いっぱいに大きく出る列の幅
+    const wb = buildWorkbook(ExcelJS, master, sheet, date, { colw });
+    buildWorkbook(ExcelJS, master, sheet, date, { wb, sheetName: "送迎表(ヘルプ車なし)", hideHelpVeh: true, gridOnly: true, colw });
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
