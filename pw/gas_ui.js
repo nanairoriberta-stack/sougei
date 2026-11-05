@@ -185,14 +185,16 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(await P.pg.locator('[data-item-id="blkNote1"]').isVisible(), "表に戻す");
     console.log("コマだけ消す: 表から消えて特記事項に残る → 表に戻す"); }
   // Excel出力のあとにカレンダーが変わったら、送迎表の画面にお知らせ（ほかの日も）。その日を開くと上に帯
-  { const d3 = "2026-11-03", s0 = api(t, "kv.get", ["sheet:" + date]).data.value;
+  { // お知らせは「昨日以降」の日だけ（日本時間）。テストを動かす日に左右されないように、明日の日付で試す（2026-11-05 に 11/3 固定で落ちた）
+    const jst = new Date(Date.now() + 9 * 3600e3 + 864e5), d3 = jst.toISOString().slice(0, 10), d3Label = `${jst.getUTCMonth() + 1}月${jst.getUTCDate()}日(${"日月火水木金土"[jst.getUTCDay()]})`;
+    const s0 = api(t, "kv.get", ["sheet:" + date]).data.value;
     api(t, "kv.merge", [{ key: "sheet:" + d3, base: null, baseKnown: false, mine: { ...s0, calApplied: {}, exportedAt: "2026-11-02T06:00:00.000Z", exportSnap: {} } }]);
     api(t, "cal.apply", [{ kind: "upsert", opId: "op_expui001", id: "ev_expui001", baseRev: null, ev: { title: "白戸 休み", date: d3, endDate: d3, allDay: true, start: "", end: "", label: "leave", place: "", memo: "", members: [], sg: { type: "staff_off", staff: ["白戸"] } } }]);
     await P.pg.reload(); await P.pg.waitForTimeout(5000);
     const pop = await P.pg.locator("[data-exp-popup]").innerText();
-    assert.ok(pop.includes("11月3日(火)のカレンダーに変更があります") && pop.includes("白戸 休み（追加）"), pop);
+    assert.ok(pop.includes(d3Label + "のカレンダーに変更があります") && pop.includes("白戸 休み（追加）"), pop);
     await P.pg.locator("[data-exp-popup]").screenshot({ path: "g_exp_popup.png" });
-    await P.pg.click('[data-exp-open="2026-11-03"]'); await P.pg.waitForTimeout(1500);
+    await P.pg.click(`[data-exp-open="${d3}"]`); await P.pg.waitForTimeout(1500);
     assert.ok((await P.pg.locator("[data-exp-banner]").innerText()).includes("白戸 休み（追加）"), "その日の上に帯");
     assert.strictEqual(await P.pg.locator("[data-exp-popup]").count(), 0, "開いている日のお知らせは帯だけ");
     await P.pg.locator("[data-exp-banner]").screenshot({ path: "g_exp_banner.png" });

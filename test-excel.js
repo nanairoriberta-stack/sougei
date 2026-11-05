@@ -252,3 +252,16 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.ok(!cells.some((x) => x.ci === 1 && x.v === "休み"), "「休み」の行は無くなった");
   console.log("absent in user cell OK", JSON.stringify(cell.v.slice(-40)));
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// 表と「送迎」の間の細い空行（高さ6）は出さない（印刷で上の行の文字を隠すことがあった。2026-11-04 依頼者）
+(async () => {
+  const E12 = require("./eng.cjs"), m = E12.mergeSeedMaster(null, E12.seedMaster()), p = E12.resolveSeedPattern(m, E12.SEED_PATTERNS.mon);
+  const wb = E12.buildWorkbook(ExcelJS, m, Object.assign(E12.emptySheet(), { runs: p.runs, blocks: p.blocks }), "2026-11-02");
+  const back = new ExcelJS.Workbook(); await back.xlsx.load(await wb.xlsx.writeBuffer());
+  const ws = back.getWorksheet("送迎表"); const thin = [];
+  ws.eachRow({ includeEmpty: true }, (r, ri) => { if (r.height != null && r.height < 10) thin.push(ri + ":" + r.height); });
+  assert.deepStrictEqual(thin, [], "細い空行が無い");
+  let sogeiRow = 0; ws.eachRow((r, ri) => { if (!sogeiRow && String(r.getCell(1).value || "") === "送迎") sogeiRow = ri; });
+  assert.ok(sogeiRow > 2 && ws.getRow(sogeiRow - 1).height >= 15 && /\d{1,2}:\d{2}/.test(String(ws.getRow(sogeiRow - 2).getCell(1).value || "")), "「送迎」のすぐ上は表の最後の時間（30分ずつ2行）" + sogeiRow);
+  console.log("no thin row OK (送迎は" + sogeiRow + "行目、すぐ上は " + ws.getRow(sogeiRow - 2).getCell(1).value + " の行)");
+})().catch((e) => { console.error(e); process.exit(1); });

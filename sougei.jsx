@@ -3796,9 +3796,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     r++;
   });
 
-  // 空行
-  ws.getRow(r).height = 6;
-  r++;
+  // （以前はここに高さ6の空行。印刷すると上の行の文字を隠すことがあったのでなくした。2026-11-04 依頼者）
 
   // ---- 下部まとめ:部署が横並び+右に特記エリア ----
   const YELLOW = "FFFEF08A";
