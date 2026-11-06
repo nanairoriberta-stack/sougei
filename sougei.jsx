@@ -181,6 +181,8 @@ function DatePop({ date, setDate, empty }) {
   );
 }
 // ファイル名用の日付。曜日をかっこ付きで添える(例: 2026-08-26(水))
+// 今日から見て次のその曜日の日付（週間パターンをExcelに出すときの、その日のルールのため）
+const nextDateOfWeekday = (wd) => { const d = new Date(); d.setHours(12, 0, 0, 0); while (d.getDay() !== Number(wd)) d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const dateWithDay = (dateStr) => `${dateStr}(${DAYS[weekdayOf(dateStr)]})`;
 const weekdayOf = (dateStr) => {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -3720,7 +3722,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   // 月日行(左端ラベル+日付)
   setCell(r, 1, "月日", { bold: true, fill: HEADBG, hAlign: "center", vAlign: "middle" });
   ws.mergeCells(r, 2, r, Math.max(2, nCols));
-  setCell(r, 2, `${date}(${DAYS[wd]})`, { size: 13, bold: true, vAlign: "middle" });
+  setCell(r, 2, opts.dayLabel || `${date}(${DAYS[wd]})`, { size: 13, bold: true, vAlign: "middle" });   // 週間パターンの出力は「月曜日の週間パターン」
   borderRange(r, 2, Math.max(2, nCols));
   ws.getRow(r).height = 15;
   r++;
@@ -4202,7 +4204,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     const vr = ws.rowCount + 2;
     ws.mergeCells(vr, 1, vr, nCols);
     const vc = ws.getCell(vr, 1);
-    vc.value = `出力: 送迎表 ${ver}　${EDITION_LABEL}　${date}(${DAYS[wd]})`;
+    vc.value = `出力: 送迎表 ${ver}　${EDITION_LABEL}　${opts.dayLabel || `${date}(${DAYS[wd]})`}`;
     vc.font = { name: "Yu Gothic", size: 9, color: { argb: "FF78716C" } };
     vc.alignment = { horizontal: "right", vertical: "middle" };
     ws.headerFooter = { oddHeader: `&R&8送迎表 ${ver.replace(/&/g, "&&")}` };
@@ -4230,7 +4232,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     // 描画
     let r2 = 1;
     ws2.mergeCells(r2, 1, r2, 1 + vehDepts.length);
-    set2(r2, 1, `車両の動き ${date}(${DAYS[wd]}) — 各部署に残っている車`, { size: 13, hAlign: "center", vAlign: "middle" });
+    set2(r2, 1, `車両の動き ${opts.dayLabel || `${date}(${DAYS[wd]})`} — 各部署に残っている車`, { size: 13, hAlign: "center", vAlign: "middle" });
     ws2.getRow(r2).height = 20;
     r2++;
     set2(r2, 1, "時刻", { size: 10, fill: HEADBG, hAlign: "center", vAlign: "middle" });
@@ -4304,18 +4306,19 @@ function fitRowHeights(ws) {
   return changed;
 }
 
-async function exportExcel(master, sheet, date) {
+async function exportExcel(master, sheet, date, xo) {
+  const ex = xo || {};   // 週間パターン：{ dayLabel:"月曜日の週間パターン", fileLabel:"週間パターン_月曜日" }
   try {
     const ExcelJS = await loadExcelJS();
     // 1枚目=通常(ヘルプにも車名あり) / 2枚目=ヘルプの車名だけ消したもの
     const colw = bestColW(ExcelJS, master, sheet, date);   // 用紙いっぱいに大きく出る列の幅
-    const wb = buildWorkbook(ExcelJS, master, sheet, date, { colw });
-    buildWorkbook(ExcelJS, master, sheet, date, { wb, sheetName: "送迎表(ヘルプ車なし)", hideHelpVeh: true, gridOnly: true, colw });
+    const wb = buildWorkbook(ExcelJS, master, sheet, date, { colw, dayLabel: ex.dayLabel });
+    buildWorkbook(ExcelJS, master, sheet, date, { wb, sheetName: "送迎表(ヘルプ車なし)", hideHelpVeh: true, gridOnly: true, colw, dayLabel: ex.dayLabel });
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `送迎表_${dateWithDay(date)}_${appVerLabel()}.xlsx`;
+    a.download = ex.fileLabel ? `${ex.fileLabel}_${appVerLabel()}.xlsx` : `送迎表_${dateWithDay(date)}_${appVerLabel()}.xlsx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -8837,13 +8840,15 @@ function UserTab({ master, update }) {
 
 
 /* ============================================================
-   ヘルプ表タブ(週間パターンのヘルプと連動)
+   ヘルプ表タブ(2026-11-06〜 週間パターンとは別。登録した行だけ・確認にだけ使う)
    ============================================================ */
 function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePattern, onAddPattern }) {
   // 井上入浴→井上ヘルプ など、同じヘルプは同じ名前で並べる
   const patterns = useMemo(() => Object.fromEntries(Object.entries(patterns0 || {}).map(([k, p]) => [k, p ? { ...p, blocks: canonHelpBlocks(p.blocks) } : p])), [patterns0]);
   const rules = rulesOf(master);
-  const rows = collectHelpRows(master, patterns || {});
+  // ヘルプ表は週間パターンとは別（2026-11-06 依頼者「一旦独立させてエラーチェックの時だけあてるようにして。いらないヘルプが入りすぎる」）。
+  // 行はヘルプ表に登録したものだけ。週間パターンのヘルプは行にしない・週間パターンへ入れる/消すもしない。日々の送迎表の確認（helpBaseWarn）にだけ使う
+  const rows = {};
   const WDS = [1, 2, 3, 4, 5, 6, 0];
   const useWds = WDS.filter((wd) => (patterns || {})[wd] || Object.values(rows).some((r) => r.pattern[wd]));
   const wds = [...new Set([1, 2, 3, 4, 5, ...useWds])].sort((a, b) => WDS.indexOf(a) - WDS.indexOf(b));
@@ -8873,10 +8878,7 @@ function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePa
     setAddTime(""); setAddUser(""); setAddLabel(""); setAddOpen(false);
   };
   // 基本の担当があるのに週間パターンに入っていない曜日
-  const missingInPattern = (r) => {
-    const b = helpBaseFor(rules, r.label, r.time);
-    return Object.entries((b && b.byDay) || {}).filter(([wd, nm]) => nm && !r.pattern[wd]).map(([wd]) => Number(wd));
-  };
+  const missingInPattern = () => [];
   const pushToPattern = async (r) => {
     const days = missingInPattern(r);
     if (!days.length || !onAddPattern) return;
@@ -8961,6 +8963,7 @@ function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePa
   // 2名体制のヘルプか(週間パターンに2件あるか、ルール⑥の2名体制に載っていて15時以降)
   const isTwoRow = (r) => {
     if (Object.values(r.pattern || {}).some((v) => String(v).includes("・"))) return true;
+    { const b = helpBaseFor(rules, r.label, r.time); if (b && Object.values(b.byDay || {}).some((v) => String(v).includes("・"))) return true; }
     const t = toMin(r.time);
     return (rules.helpTwo || []).some((x) => x && x.user && String(r.label || "").startsWith(x.user)) && t != null && t >= 15 * 60;
   };
@@ -8990,10 +8993,6 @@ function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePa
     return (
       <td key={wd} className={`px-1 py-1 align-top border-l border-stone-200 ${bad ? "bg-rose-50" : diff ? "bg-amber-50" : ""}`}>
         {Array.from({ length: slots }, (_, k) => one(k))}
-        <div className={`text-[10px] mt-0.5 truncate ${diff ? "text-amber-700 font-bold" : "text-stone-400"}`}
-          title={now ? `週間パターンの担当: ${now}` : "週間パターンにこの曜日のヘルプはありません"}>
-          {now ? (diff ? `現在: ${now}` : now) : "—"}
-        </div>
         {iss.errors.map((m, i) => <div key={"e" + i} className="text-[10px] leading-tight mt-0.5 text-rose-700 font-bold">⚠ {m}</div>)}
         {iss.infos.map((m, i) => <div key={"i" + i} className="text-[10px] leading-tight mt-0.5 text-amber-700">ℹ {m}</div>)}
       </td>
@@ -9025,9 +9024,9 @@ function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePa
   return (
     <div className="bg-white border border-stone-300 rounded-lg p-3 overflow-x-auto">
       <div className="text-xs text-stone-500 mb-2">
-        週間パターンに入っているヘルプの一覧です。<b>この曜日はこの人</b>という基本の担当を選んでおくと、
-        日々の送迎表でそれ以外の人になっているときに<b>Excel出力前の最終確認</b>に出ます。
-        下の小さい文字は、いまの週間パターンの担当です(ちがう場合は黄色)。夕方の黒田・井上のような2名体制のヘルプは、1人目・2人目を別々に選べます。「＋ ヘルプを追加」で新しいヘルプの行を作れます(担当を選んだあと「週間パターンに入れる」で毎週の表にも入ります)。右端の「削除」で、基本の担当や、週間パターンのヘルプそのものを消せます。<br />ルールとの関係: 男性のみ・2名体制に反するマスは赤くなります。ルールの「予定・ヘルプの固定担当」と重なる場合は、<b>ヘルプ表のほうを優先</b>します(ルールはヘルプ表に無い時刻のヘルプにだけ効きます)。
+        <b>この曜日はこの人</b>という基本の担当を決めておく表です。<b>週間パターンとは別</b>で、ここに入れたヘルプが送迎表や週間パターンに入ることはありません。
+        日々の送迎表で、ここに登録したヘルプがそれ以外の人になっているときだけ<b>Excel出力前の最終確認</b>に出ます(送迎表に無いヘルプは確認しません)。
+        「＋ ヘルプを追加」で行を作り、曜日ごとの担当を選んでください。要らない行は右端の「削除」で消せます。夕方の黒田・井上のような2名体制のヘルプは、1人目・2人目を別々に選べます。<br />ルールとの関係: 男性のみ・2名体制に反するマスは赤くなります。ルールの「予定・ヘルプの固定担当」と重なる場合は、<b>ヘルプ表のほうを優先</b>します(ルールはヘルプ表に無い時刻のヘルプにだけ効きます)。
       </div>
       <div className="mb-2">
         {!addOpen ? (
@@ -9053,7 +9052,6 @@ function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePa
         )}
       </div>
       <div className="flex items-center gap-2 flex-wrap mb-2">
-        <button className={`${btnSec} text-xs py-1`} onClick={fillFromPattern}>週間パターンの担当を基本として一括登録</button>
         <button className={`${btnSec} text-xs py-1`} onClick={clearAll}>基本の担当をすべて消す</button>
         <span className="text-[11px] text-stone-500">
           ヘルプ{keys.length}種類 / 基本を登録済み {(rules.helpBase || []).length}件
@@ -9081,7 +9079,7 @@ function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePa
                     {r.label}
                     {(() => {
                       const miss = missingInPattern(r);
-                      if (!miss.length) return Object.keys(r.pattern || {}).length ? null : <div className="text-[10px] font-normal text-stone-400">週間パターンには未登録</div>;
+                      if (!miss.length) return null;
                       return (
                         <div>
                           <button className="mt-0.5 text-[10px] font-normal px-1.5 py-0.5 rounded border border-sky-400 text-sky-700 hover:bg-sky-50"
@@ -9100,7 +9098,7 @@ function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePa
                 </tr>
               );
             })}
-            {!keys.length && <tr><td colSpan={3 + wds.length} className="px-2 py-4 text-sm text-stone-400">ヘルプがありません。上の「＋ ヘルプを追加」で作るか、週間パターンにヘルプを入れてください。</td></tr>}
+            {!keys.length && <tr><td colSpan={3 + wds.length} className="px-2 py-4 text-sm text-stone-400">ヘルプ表に登録したヘルプはありません。上の「＋ ヘルプを追加」で作ってください。</td></tr>}
           </tbody>
         </table>
       )}
@@ -10410,15 +10408,7 @@ function AppInner() {
       };
       sheetMaster.departments.forEach((d) => {
         { const e = maleAllDayMsg(d, calc2); if (e) maleErr.push(e); }   // 男性不在は一日中いないときだけ（2026-11-06 依頼者）
-        const tol = d.staffMin != null && d.staffMin !== "";
-        if (tol) {
-          const unders = hours2.filter((t2) => { const cc = (calc2.find((c) => c.t === t2) || {}).cnt; const v = cc && cc[d.id]; return v && v.u > 0 && v.s < Number(d.staffMin); });
-          if (unders.length) maleErr.push(`${d.name}: 在席職員が最低${d.staffMin}名を下回る区間 → ${rangeText(unders)}`);
-        }
-        if (d.staffMax != null && d.staffMax !== "") {
-          const overs2 = hours2.filter((t2) => { const cc = (calc2.find((c) => c.t === t2) || {}).cnt; const v = cc && cc[d.id]; return v && v.s > Number(d.staffMax); });
-          if (overs2.length) maleErr.push(`${d.name}: 職員が上限${d.staffMax}名(駐車制約)を超える区間 → ${rangeText(overs2)}`);
-        }
+        // 職員数の下限・上限（在席職員が最低○名・上限○名）のエラーは出さない（2026-11-06 依頼者）
       });
     }
 
@@ -10432,7 +10422,7 @@ function AppInner() {
     addG("🏠", "いつもと違う送り先・迎え先(最終確認)", placeList, "利用者タブの「いつもの迎え先・送り先」(自宅・ﾘﾍﾞ・家族送り・家族迎えなど)と違っています。この内容で合っていれば、そのまま進めてください");
     addG("🚗", "車両のエラー(定員・重複)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
     addG("⏰", "時間のエラー(勤務時間外・重複)", timeErr, "職員名クリックで勤務時間の確認、または担当の変更を");
-    addG("🚻", "男性が一日中いない・職員数の区間", maleErr, "人数・男性カバー表で確認してください");
+    addG("🚻", "男性が一日中いない", maleErr, "人数・男性カバー表で確認してください");
     addG("📋", "その他の警告", otherErr, "");
     addG("📌", "その他のルール(確認)", otherRuleList, "ルールタブ「⑨ その他のルール」で確認を求めている決まりごとです。守れていればそのまま進めてください");
 
@@ -11213,6 +11203,13 @@ function AppInner() {
                 </button>
               </div>
               <button className={btnPri} onClick={() => setModal({ type: "import" })}>📥 Excelから取り込み</button>
+              <button className={btnSec} data-pattern-print
+                title="この曜日の週間パターンを、日別の送迎表と同じ形のExcel(A4横1枚)で出します。開いて印刷してください"
+                onClick={() => {
+                  if (!pattern || (!(pattern.runs || []).length && !(pattern.blocks || []).length)) { notify(`${DAYS[weekday]}曜日のパターンが空です`, "warn"); return; }
+                  const d0 = nextDateOfWeekday(weekday);
+                  exportExcel(patternMaster || master, { ...emptySheet(), ...pattern, staffOv: pattern.staffOv || {} }, d0, { dayLabel: `${DAYS[weekday]}曜日の週間パターン`, fileLabel: `週間パターン_${DAYS[weekday]}曜日` });
+                }}>🖨 この曜日を印刷(Excel)</button>
             </div>
             <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg p-2 mb-3">
               ここで組んだ{DAYS[weekday]}曜日の固定パターンは、日別の送迎表で「パターンから読込」を押すと取り込まれます。退職などで職員がいなくなった予定は自動的に「保留」列に表示され、クリックして別の職員へ割り当て直せます。
@@ -12414,15 +12411,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
       };
       sheetMaster.departments.forEach((d) => {
         { const e = maleAllDayMsg(d, calc2); if (e) maleErr.push(e); }   // 男性不在は一日中いないときだけ（2026-11-06 依頼者）
-        const tol = d.staffMin != null && d.staffMin !== "";
-        if (tol) {
-          const unders = hours2.filter((t2) => { const cc = (calc2.find((c) => c.t === t2) || {}).cnt; const v = cc && cc[d.id]; return v && v.u > 0 && v.s < Number(d.staffMin); });
-          if (unders.length) maleErr.push(`${d.name}: 在席職員が最低${d.staffMin}名を下回る区間 → ${rangeText(unders)}`);
-        }
-        if (d.staffMax != null && d.staffMax !== "") {
-          const overs2 = hours2.filter((t2) => { const cc = (calc2.find((c) => c.t === t2) || {}).cnt; const v = cc && cc[d.id]; return v && v.s > Number(d.staffMax); });
-          if (overs2.length) maleErr.push(`${d.name}: 職員が上限${d.staffMax}名(駐車制約)を超える区間 → ${rangeText(overs2)}`);
-        }
+        // 職員数の下限・上限（在席職員が最低○名・上限○名）のエラーは出さない（2026-11-06 依頼者）
       });
     }
 
@@ -12436,7 +12425,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
     addG("🏠", "いつもと違う送り先・迎え先(最終確認)", placeList, "利用者タブの「いつもの迎え先・送り先」(自宅・ﾘﾍﾞ・家族送り・家族迎えなど)と違っています。この内容で合っていれば、そのまま進めてください");
     addG("🚗", "車両のエラー(定員・重複)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
     addG("⏰", "時間のエラー(勤務時間外・重複)", timeErr, "職員名クリックで勤務時間の確認、または担当の変更を");
-    addG("🚻", "男性が一日中いない・職員数の区間", maleErr, "人数・男性カバー表で確認してください");
+    addG("🚻", "男性が一日中いない", maleErr, "人数・男性カバー表で確認してください");
     addG("📋", "その他の警告", otherErr, "");
     addG("📌", "その他のルール(確認)", otherRuleList, "ルールタブ「⑨ その他のルール」で確認を求めている決まりごとです。守れていればそのまま進めてください");
 

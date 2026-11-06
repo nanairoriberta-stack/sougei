@@ -144,6 +144,24 @@ const D = path.join(__dirname, "../gas/out");
     const g13 = await cellOf(hi.id, "13:00"), g12 = await cellOf(hi.id, "12:00");
     assert.ok(g13 && g13.grey && g12 && g12.grey, "日野さん：カレンダーの中抜け13:00・職員のタブの中抜け12:00も灰色 " + JSON.stringify([g12, g13]));
     console.log("中抜け：灰色（コマにしない）・職員のタブで入れられる OK"); }
+  { // 週間パターンを印刷（Excel）・ヘルプ表は週間パターンとは別（2026-11-06 依頼者）
+    await P.pg.click('button:text-is("週間パターン")'); await P.pg.waitForTimeout(1200);
+    await P.pg.click('button:text-is("月")'); await P.pg.waitForTimeout(1200);
+    // ダウンロードは画面の中で受け取る（ファイル名と中身）
+    await P.pg.evaluate(() => { window.__dl = null; const o = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) { window.__dl = { name: this.download, href: this.href }; return; } return o.call(this); }; });
+    await P.pg.click("[data-pattern-print]");
+    await P.pg.waitForFunction(() => window.__dl, null, { timeout: 20000 });
+    const got = await P.pg.evaluate(async () => { const r = await fetch(window.__dl.href); const b = new Uint8Array(await r.arrayBuffer()); return { name: window.__dl.name, bytes: Array.from(b) }; });
+    const fn = got.name; assert.ok(/^週間パターン_月曜日_.*\.xlsx$/.test(fn), "週間パターンのExcel " + fn);
+    const ExcelJS = require("exceljs"); const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(got.bytes));
+    const ws = wb.getWorksheet("送迎表"); assert.match(String(ws.getRow(1).getCell(2).value), /^月曜日の週間(パターン|ﾊﾟﾀｰﾝ)$/, "日付のかわりに「月曜日の週間パターン」（Excelは半角カナ）");
+    let n = 0; ws.eachRow((row) => row.eachCell((c) => { if (/ﾍﾙﾌﾟ|迎|送/.test(String(c.value || ""))) n++; })); assert.ok(n > 10, "便・ヘルプが入っている " + n);
+    await P.pg.click('button:text-is("ヘルプ表")'); await P.pg.waitForTimeout(800);
+    const hb = (api(t, "kv.get", ["v2:master"]).data.value.rules || {}).helpBase || [];
+    assert.ok(await P.pg.locator("text=ヘルプ表に登録したヘルプはありません").count() === (hb.length ? 0 : 1), "週間パターンのヘルプは行にしない（登録" + hb.length + "件）");
+    assert.strictEqual(await P.pg.locator('button:has-text("週間パターンの担当を基本として一括登録")').count(), 0, "週間パターンからの一括登録はなし");
+    await P.pg.click('button:text-is("＋ ヘルプを追加")'); await P.pg.waitForTimeout(300);
+    console.log("週間パターンの印刷:", fn, "／ヘルプ表は登録した行だけ"); }
   assert.deepStrictEqual(P.errs.filter((e) => !/net::ERR_FAILED|favicon/.test(e)), [], "画面エラーなし");
   console.log("画面エラー: []");
   await b.close();

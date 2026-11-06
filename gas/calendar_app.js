@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.06d";
+const APP_VERSION="2026.11.06f";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -56,6 +56,9 @@ const bizTag=e=>S.biz==="all"&&bizOf(e)==="houkago"?`<span class="tag-biz">放�
 function renderBiz(){document.documentElement.dataset.biz=S.biz;   // タブごとに背景の色を少し変える（全体＝薄い青・生活介護＝薄緑・放課後デイ＝薄ピンク）
   $("bizTabs").innerHTML=BIZ.map(b=>`<button role="tab" data-biz="${b.k}" aria-selected="${S.biz===b.k}">${b.n}</button>`).join("")}
 function gridRange(){const s=addDays(S.cursor,-S.cursor.getDay());return{start:s,end:addDays(s,41)}}
+/* 外側（暗いところ）を押して閉じるのは、押したところも離したところも外側のときだけ。
+   入力欄の文字をマウスでなぞって枠の外で離すと閉じていた（2026-11-06 依頼者「ドラッグして枠からはみ出すとポップアップ画面が落ちる」） */
+let PDOWN=null;document.addEventListener("pointerdown",e=>{PDOWN=e.target},true);
 function allEvents(){return core?Object.values(core.overlay(S.server)):Object.values(S.server)}
 function visible(){return allEvents().filter(e=>!e.deleted&&pass(e))}
 function pass(e){if(S.biz!=="all"&&bizOf(e)!==S.biz)return false;if(S.label!=="all"&&e.label!==S.label)return false;if(S.mine&&!isMine(e))return false;return true}
@@ -762,7 +765,7 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-reload]")){location.reload();return}
   if(t.closest("[data-draft-open]")){const d=draftGet();if(d){const cur=d.id?allEvents().find(x=>x.id===d.id):null;openEditor(cur||d.base||null,null,d)}return}
   if(t.closest("[data-draft-drop]")){draftDrop();render();return}
-  if(t.id==="dayOv"||t.closest("[data-day-close]")){S.dayOpen=false;render();return}
+  if((t.id==="dayOv"&&PDOWN===t)||t.closest("[data-day-close]")){S.dayOpen=false;render();return}
   const ac=t.closest("[data-add-cell]");   // パソコン：日付の右を押すとその日の予定を追加
   if(ac&&!isMob()){if(db&&S.canWrite&&core){S.sel=ac.dataset.addCell;openEditor(null,ac.dataset.addCell)}return}
   if(t.closest("[data-sr-close]")){closeSearch();return}
@@ -779,7 +782,7 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-add-day]")){openEditor(null,S.sel);return}
   const rs=t.closest("[data-restore]");if(rs){const x=allEvents().find(z=>z.id===rs.dataset.restore);if(x&&core){core.restore(x);toast("元に戻しました")}return}
   if(!$("ov"))return;
-  if(t.id==="ov"||t.closest("[data-close]")){if(ed)closeEditor();else{$("sheetRoot").innerHTML=""}return}
+  if((t.id==="ov"&&PDOWN===t)||t.closest("[data-close]")){if(ed)closeEditor();else{$("sheetRoot").innerHTML=""}return}
   /* 同期画面 */
   const f=t.closest("[data-force]");if(f){core.force(f.dataset.force);openSync();return}
   const r=t.closest("[data-retry]");if(r){core.retry(r.dataset.retry);openSync();return}

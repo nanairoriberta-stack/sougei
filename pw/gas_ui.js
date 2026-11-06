@@ -405,6 +405,20 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await A.pg.locator("[data-ro-why]").count(), 0, "入力できる画面には理由の帯は出ない");
     await A.pg.locator("[data-close]").first().click(); await A.pg.waitForTimeout(300);
     if (await A.pg.locator("#evForm").count()) { await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); } }
+  { // 入力欄の中で押して、枠の外で離しても閉じない。外側で押して離すと閉じる（2026-11-06 依頼者「ドラッグして枠からはみ出すとポップアップ画面が落ちる」）
+    await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await pickLabel(A.pg, "other"); await A.pg.waitForTimeout(300);
+    await A.pg.fill("#f-title", "なぞって選ぶ試しの文字");
+    const ib = await A.pg.locator("#f-title").boundingBox(), sb = await A.pg.locator("#ov .sheet").boundingBox(), vp = A.pg.viewportSize();
+    await A.pg.mouse.move(ib.x + 10, ib.y + ib.height / 2); await A.pg.mouse.down();
+    const ox = sb.x > 30 ? sb.x / 2 : Math.min(vp.width - 5, sb.x + sb.width + 20), oy = sb.y > 30 ? sb.y / 2 : ib.y + ib.height / 2;
+    await A.pg.mouse.move(ox, oy, { steps: 5 }); await A.pg.mouse.up(); await A.pg.waitForTimeout(300);
+    assert.ok(await A.pg.locator("#evForm").count(), "なぞって外で離しても入力画面は閉じない " + JSON.stringify({ ox, oy, sb }));
+    const ov = await A.pg.locator("#ov").boundingBox();
+    if (sb.x > 30 || sb.y > 30) { await A.pg.mouse.click(sb.x > 30 ? sb.x / 2 : ox, sb.y > 30 ? sb.y / 2 : oy); await A.pg.waitForTimeout(300); assert.strictEqual(await A.pg.locator("#evForm").count(), 0, "外側を押すと閉じる"); }
+    else { await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
+    if (await A.pg.locator("#evForm").count()) { await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
+    try { await A.pg.evaluate(() => { try { Object.keys(localStorage).filter((k) => /draft/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch {} }); } catch {}
+    console.log("なぞって外で離しても閉じない OK", ov && Math.round(ov.width)); }
   { // ラベルの2段（2026-11-05）：職員の中の「その他」・利用者の中の「その他」・その他予定（2段目なし）
     const D21 = "2026-11-21", setDay = async () => { await A.pg.fill("#f-date", D21); await A.pg.fill("#f-enddate", D21); };
     await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300);

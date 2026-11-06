@@ -183,6 +183,10 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  // 車がどこにいるかの想定のエラー（出発時に○○に居る想定・基地に戻らない・1日の最終位置）は出さない（2026-11-06 依頼者）。以前は月〜金の初期パターンで6件出ていた
  { let n=0; [['mon',1,'2026-11-02'],['tue',2,'2026-11-03'],['wed',3,'2026-11-04'],['thu',4,'2026-11-05'],['fri',5,'2026-11-06']].forEach(([k,wd,d])=>{ const pp=E6.resolveSeedPattern(m,E6.SEED_PATTERNS[k]); const sh=Object.assign(E6.emptySheet(),{runs:pp.runs,blocks:pp.blocks});
    n+=(JSON.stringify(E6.collectSheetChecks(E6.applyDayDept(m,wd,null,null,null,d),sh,d,null)).match(/居る想定|最終位置|基地\(/g)||[]).length; }); assert.strictEqual(n,0,'車の位置の想定のエラーは出さない'); }
+ // 職員数の下限・上限のエラーは出さない（2026-11-06 依頼者）：津田（最低3名・上限4名）の職員を全員休みにしても出ない
+ { const tsu=dm.departments.find((d)=>d.name==='津田'); assert.ok(tsu&&tsu.staffMin!=null,'津田に下限がある');
+   const ov2={}; dm.staff.filter((s)=>s.deptId===tsu.id).forEach((s)=>{ ov2[s.id]={off:true}; });
+   const t3=txt(E6.collectSheetChecks(dm,Object.assign({},sheet,{staffOv:ov2}),date,null)); assert.ok(!/下回る|上限\d+名\(駐車/.test(t3),'職員数のエラーは出さない'); }
  console.log('male all-day OK', (g2.find((g)=>/男性が一日中/.test(g.title))||{items:[]}).items[0]);
 }
 // 紙で確かめる一覧（職員・車・ヘルプ表・利用者・ルール）：罫線つき・A4（職員・利用者は横）・並びは基本の部署の順（2026-10-31）
