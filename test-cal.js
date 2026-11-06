@@ -355,3 +355,16 @@ console.log('extra OK');
   assert.deepStrictEqual(r3.staffOv[ni.id], { noAway: true }, 'この日は中抜けなし');
   console.log('away OK');
 }
+// ===== 遅刻・早退（職員時間変更の中身）・家族迎えの時刻（2026-11-06 依頼者） =====
+{
+  const D = '2026-11-02', T = require('./calcore.js'), ks = S('春日'), mo = U('森');
+  assert.ok(T.normEvent({ id: 'evlate1', title: 'x', date: D, endDate: D, allDay: true, label: 'late' }, 'evlate1', 0).label === 'late', 'ラベル late/early を残す');
+  const L = [{ id: 'evl1', rev: 1, date: D, endDate: D, allDay: true, title: '春日 10:00出勤（遅刻）', label: 'late', sg: T.normSg({ type: 'shift', staff: ['春日'], wstart: '10:00', reason: '遅刻' }) },
+    { id: 'eve1', rev: 1, date: D, endDate: D, allDay: true, title: '春日 15:30早退', label: 'early', sg: T.normSg({ type: 'shift', staff: ['春日'], wend: '15:30', reason: '早退' }) },
+    { id: 'evf1', rev: 1, date: D, endDate: D, allDay: true, title: '森 家族迎え16:30', label: 'ride', sg: T.normSg({ type: 'user_time', users: ['森'], noSend: '家族迎え16:30' }) }];
+  const x = C.reconcile(m, sheet, L, D);
+  assert.deepStrictEqual(x.staffOv[ks.id], { start: '10:00', end: '15:30' }, '遅刻と早退の両方');
+  assert.strictEqual(x.noRide[mo.id].send, '家族迎え16:30', '家族迎えは時刻つきの理由で入る');
+  assert.ok(!(x.userTime || {})[mo.id], '送りの時刻（便）は変えない');
+  console.log('late/early/family time OK');
+}

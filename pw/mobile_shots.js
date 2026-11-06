@@ -5,7 +5,7 @@ const { makeGas } = require("../gas/fakegas.js");
 global.window = {}; global.SGKV = require("../kvsync.js");
 const engFor = (ed) => { global.window = { __SG_EDITION: ed }; delete require.cache[require.resolve("../eng.cjs")]; return require("../eng.cjs"); };
 // ラベルは2段（2026-11-05）：1段目（職員／利用者／その他予定）を押してから2段目
-const pickLabel = async (pg, k) => { const g = { leave: "staff", shift: "staff", hwork: "staff", sother: "staff", other: "other" }[k] || "user"; await pg.locator(`label:has(#f-grp-${g})`).click(); await pg.waitForTimeout(250); if (k !== "other") await pg.locator(`label:has(#f-label-${k})`).click(); };
+const pickLabel = async (pg, k) => { const g = { leave: "staff", late: "staff", early: "staff", shift: "staff", hwork: "staff", sother: "staff", other: "other" }[k] || "user"; await pg.locator(`label:has(#f-grp-${g})`).click(); await pg.waitForTimeout(250); if (k !== "other") await pg.locator(`label:has(#f-label-${k})`).click(); };
 const D = path.join(__dirname, "../gas/out");
 const OUT = process.argv[2] || __dirname;
 (async () => {
