@@ -2138,7 +2138,7 @@ function runWarnings(run, master, data, wd) {
         const home2 = vehicleHomeOf(master, veh);
         let fin2 = home2;
         [...tripsV].sort((a, b) => a.end - b.end).forEach((e) => { fin2 = vehicleAfterPos(master, veh, e, fin2, lastSendT2); });
-        if (fin2 && fin2 !== home2) {
+        if (false && fin2 && fin2 !== home2) {   // 車がどこにいるかの想定のエラーは出さない（2026-11-06 依頼者）
           const dn2 = (id) => { const d = master.departments.find((x) => x.id === id); return d ? d.name : "?"; };
           w.push(`この予定の後、${veh.name}が基地(${dn2(home2)})に戻りません(最終位置:${dn2(fin2)})`);
         }
@@ -2152,7 +2152,7 @@ function runWarnings(run, master, data, wd) {
       const libD0 = master.departments.find((x) => /リベルタ/.test(x.name));
       const yokaId0 = (master.departments.find((x) => x.name.startsWith("嫁島")) || {}).id;
       const commuteFromYoka = stf && !stf.hasOwnCar && !(libD0 && stf.deptId === libD0.id) && t < 10 * 60 && pos === yokaId0;
-      if (!swapCar && !commuteFromYoka && pos && expDept && pos !== expDept) {
+      if (false && !swapCar && !commuteFromYoka && pos && expDept && pos !== expDept) {   // 出発時の車の位置の想定のエラーは出さない（2026-11-06 依頼者）
         const dn = (id) => { const d = master.departments.find((x) => x.id === id); return d ? d.name : "?"; };
         w.push(`出発時、${veh.name}は${dn(pos)}に居る想定(この予定は${dn(expDept)}発)。前の便の行先を変えるか車を替えてください`);
       }
@@ -2922,7 +2922,7 @@ function vehicleConflictList(master, sheetData) {
     const home = vehicleHomeOf(master, v);
     let fin = home;
     [...trips].sort((a, b) => a.end - b.end).forEach((e) => { fin = vehicleAfterPos(master, v, e, fin, lastSendT); });
-    if (fin && fin !== home) {
+    if (false && fin && fin !== home) {   // 1日の最終位置の想定のエラーは出さない（2026-11-06 依頼者）
       const dn = (id) => { const d = master.departments.find((x) => x.id === id); return d ? d.name : "?"; };
       out.push(`${vShort[v.id] || v.name}: 1日の最終位置が${dn(fin)}になっています(${dn(home)}着で終わる必要があります)。最後の予定の行先を確認してください`);
     }
@@ -10393,7 +10393,7 @@ function AppInner() {
     addG("🆘", "通常外のヘルプ・その他予定の確認", extraList, "画面下の「通常外のヘルプ・その他予定」欄と、送迎表に入っている予定が合っていません。入れ忘れ・書き忘れがないか確認してください");
     addG("🏥", "送迎なしの人の最終確認", noRideList, "受診後来所・家族送迎などで送迎を入れていない人です。本当にこの扱いでよいか確認してください");
     addG("🏠", "いつもと違う送り先・迎え先(最終確認)", placeList, "利用者タブの「いつもの迎え先・送り先」(自宅・ﾘﾍﾞ・家族送り・家族迎えなど)と違っています。この内容で合っていれば、そのまま進めてください");
-    addG("🚗", "車両のエラー(定員・重複・位置)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
+    addG("🚗", "車両のエラー(定員・重複)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
     addG("⏰", "時間のエラー(勤務時間外・重複)", timeErr, "職員名クリックで勤務時間の確認、または担当の変更を");
     addG("🚻", "男性が一日中いない・職員数の区間", maleErr, "人数・男性カバー表で確認してください");
     addG("📋", "その他の警告", otherErr, "");
@@ -12397,7 +12397,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
     addG("🆘", "通常外のヘルプ・その他予定の確認", extraList, "画面下の「通常外のヘルプ・その他予定」欄と、送迎表に入っている予定が合っていません。入れ忘れ・書き忘れがないか確認してください");
     addG("🏥", "送迎なしの人の最終確認", noRideList, "受診後来所・家族送迎などで送迎を入れていない人です。本当にこの扱いでよいか確認してください");
     addG("🏠", "いつもと違う送り先・迎え先(最終確認)", placeList, "利用者タブの「いつもの迎え先・送り先」(自宅・ﾘﾍﾞ・家族送り・家族迎えなど)と違っています。この内容で合っていれば、そのまま進めてください");
-    addG("🚗", "車両のエラー(定員・重複・位置)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
+    addG("🚗", "車両のエラー(定員・重複)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
     addG("⏰", "時間のエラー(勤務時間外・重複)", timeErr, "職員名クリックで勤務時間の確認、または担当の変更を");
     addG("🚻", "男性が一日中いない・職員数の区間", maleErr, "人数・男性カバー表で確認してください");
     addG("📋", "その他の警告", otherErr, "");

@@ -156,6 +156,9 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  const g2=E6.collectSheetChecks(dm,Object.assign({},sheet,{staffOv:ov}),date,null), t2=txt(g2);
  assert.ok(t2.includes('嫁島: 利用者がいるのに、一日中男性職員がいません'),'一日中男性がいないときはエラー '+t2.slice(0,300));
  assert.ok(g2.some((g)=>/男性が一日中いない/.test(g.title)),'見出し');
+ // 車がどこにいるかの想定のエラー（出発時に○○に居る想定・基地に戻らない・1日の最終位置）は出さない（2026-11-06 依頼者）。以前は月〜金の初期パターンで6件出ていた
+ { let n=0; [['mon',1,'2026-11-02'],['tue',2,'2026-11-03'],['wed',3,'2026-11-04'],['thu',4,'2026-11-05'],['fri',5,'2026-11-06']].forEach(([k,wd,d])=>{ const pp=E6.resolveSeedPattern(m,E6.SEED_PATTERNS[k]); const sh=Object.assign(E6.emptySheet(),{runs:pp.runs,blocks:pp.blocks});
+   n+=(JSON.stringify(E6.collectSheetChecks(E6.applyDayDept(m,wd,null,null,null,d),sh,d,null)).match(/居る想定|最終位置|基地\(/g)||[]).length; }); assert.strictEqual(n,0,'車の位置の想定のエラーは出さない'); }
  console.log('male all-day OK', (g2.find((g)=>/男性が一日中/.test(g.title))||{items:[]}).items[0]);
 }
 // 紙で確かめる一覧（職員・車・ヘルプ表・利用者・ルール）：罫線つき・A4（職員・利用者は横）・並びは基本の部署の順（2026-10-31）
