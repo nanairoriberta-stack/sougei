@@ -59,6 +59,30 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     assert.ok(E.buildAutoNotes(dm, sh4.blocks).staffNotes.some((l) => l.startsWith("不在（日野 中抜け）")), "特記事項(職員)には残る");
     console.log("中抜けのExcel OK");
   }
+  { // Excelを取り込んだ日でも、カレンダーから入った分（出勤・退勤の時刻・休み・ヘルプ）はカレンダーが優先（2026-11-06 依頼者「職員の出勤の時間とかうまく変わってない」）
+    const C = require("./calsync.js"), T = require("./calcore.js"), S = (n) => m.staff.find((s) => s.name === n).id;
+    const dm4 = E.applyDayDept(m, 1, null, null, null, date);
+    const ev = (id, title, label, sg, x) => Object.assign({ id, rev: 1, date, endDate: date, allDay: true, title, label, sg: T.normSg(sg) }, x || {});
+    const evs = [ev("e1", "春日 15:30早退", "early", { type: "shift", staff: ["春日"], wend: "15:30", reason: "早退" }), ev("e3", "日野 10:00出勤", "late", { type: "shift", staff: ["日野"], wstart: "10:00", reason: "遅刻" }),
+      ev("e4", "中村 ヘルプ", "help", { type: "help", users: ["中村"] }, { allDay: false, start: "14:00", end: "15:00" })];
+    const sh = C.reconcile(m, Object.assign(E.emptySheet(), { runs: p.runs, blocks: p.blocks }), evs, date);
+    sh.blocks.find((b) => b.id.startsWith("cal_e4")).staffId = S("白戸");   // 送迎表でヘルプを白戸に
+    const old = JSON.parse(JSON.stringify(sh)); old.staffOv[S("日野")] = { start: "9:00" }; old.staffOv[S("八壁")] = { off: true };   // 前に出したExcel（日野は手で9:00・八壁は手で休み）
+    const wb5 = E.buildWorkbook(ExcelJS, dm4, old, date); const b5 = new ExcelJS.Workbook(); await b5.xlsx.load(await wb5.xlsx.writeBuffer());
+    const ws5 = b5.getWorksheet("送迎表"), aoa5 = [];
+    ws5.eachRow({ includeEmpty: true }, (row, rn) => { const a = []; row.eachCell({ includeEmpty: true }, (c, cn) => { const v = c.value; a[cn - 1] = v && v.richText ? v.richText.map((x) => x.text).join("") : v; }); aoa5[rn - 1] = a; });
+    const res = E.importMondayGrid(aoa5, dm4);
+    assert.ok(res.staffOv[S("八壁")] && res.staffOv[S("八壁")].off, "休みの職員（列は出さない）は特記事項(職員)の「休み：」から読み戻す");
+    assert.ok(!/休み：/.test(res.notesStaff || ""), "「休み：」の行は特記事項に残さない（出力のたびに作り直す）");
+    const imp = E.calWinsOverImport(sh, { ...sh, runs: res.runs, blocks: res.blocks, staffOv: res.staffOv });
+    const r = C.reconcile(m, imp, evs, date);
+    assert.deepStrictEqual(r.staffOv[S("日野")], { start: "10:00" }, "カレンダーの遅刻（10:00出勤）が残る");
+    assert.deepStrictEqual(r.staffOv[S("春日")], { end: "15:30" }, "カレンダーの早退");
+    assert.ok(r.staffOv[S("八壁")].off, "手で入れた休みも残る");
+    const hs = r.blocks.filter((b) => b.time === "14:00" && /中村/.test(b.label || ""));
+    assert.ok(hs.length === 1 && hs[0].id.startsWith("cal_e4") && hs[0].staffId === S("白戸"), "カレンダーのヘルプは1つだけ・担当そのまま " + JSON.stringify(hs.map((b) => [b.id, b.staffId, b.label])));
+    console.log("import keeps calendar OK");
+  }
   { // 出力したExcelを取り込む：車つきのその他予定（例：ケロ／会議）は1つのコマのまま戻る（2026-10-30）
     const yk = m.staff.find((x) => x.name === "八壁"), kero = m.vehicles.find((v) => /ケロ/.test(v.name)) || m.vehicles[0];
     const sh3 = Object.assign({}, sheet, { blocks: [...sheet.blocks, { id: "bk1", kind: "block", time: "13:00", staffId: yk.id, label: "会議", vehicleId: kero.id }] });

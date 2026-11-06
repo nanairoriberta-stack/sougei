@@ -1705,7 +1705,14 @@ function importAppExport(aoa, master) {
       extra.notes = manualLines.join("\n");
     }
     const staffNoteText = findPanel("特記事項(職員)");
-    if (staffNoteText) extra.notesStaff = staffNoteText.split("\n").map((x) => x.trim()).filter(Boolean).join("\n");
+    if (staffNoteText) {
+      let ls = staffNoteText.split("\n").map((x) => x.trim()).filter(Boolean);
+      // 「休み：八壁・白戸」（出力のとき休みの職員の列は出さないので、ここで休みを読み戻す。2026-11-06）。この行は出力のたびに作り直すので特記事項には残さない
+      ls = ls.filter((ln) => { const mm = /^休み[：:](.*)$/.exec(ln); if (!mm) return true;
+        mm[1].split(/[・､、,，\s]+/).map((x) => x.trim()).filter(Boolean).forEach((n) => { const sid = sByName[n]; if (sid) staffOvOut[sid] = { ...(staffOvOut[sid] || {}), off: true }; });
+        return false; });
+      extra.notesStaff = ls.join("\n");
+    }
     const contactText = findPanel("連絡事項");
     if (contactText) {
       // 「〜 15:00〜」形式の行は予定ブロック由来(グリッドから復元済み)のため除外
@@ -1870,6 +1877,36 @@ function importAppExport(aoa, master) {
   }
   if (extra.notesStaff) log.push(`特記事項(職員)も復元: ${extra.notesStaff.split("\n").length}行`);
   return { runs, blocks, training: training.join("\n"), ...extra, staffOv: staffOvOut, unmatched: [...unmatched], log, srcDate, srcWd };
+}
+
+/* Excelを取り込んだ日の送迎表：カレンダーから入っている分（休み・出勤/退勤の時刻・欠席・送迎の変更・カレンダーのヘルプや予定）はカレンダーを優先する（2026-11-06 依頼者
+   「エクセルからの読み込みをした場合、職員の出勤の時間とかうまく変わってない」）。取り込んだ値のうちカレンダーが入れた項目は外し、保存のときにサーバーがカレンダーの値を入れ直す（heal）。
+   取り込んだコマのうち、カレンダーのコマ（cal_）と同じ職員・時刻・名前のものは二重になるので外す */
+function calWinsOverImport(prev, next) {
+  const ca = (prev && prev.calApplied) || {};
+  const out = { ...next };
+  for (const field of ["staffOv", "userTime", "noRide", "userAbsent", "userExtra"]) {
+    const cur = out[field]; if (!cur) continue;
+    let copy = null;
+    for (const rec of Object.values(ca)) for (const [id, r] of Object.entries((rec && rec[field]) || {})) {
+      if (cur[id] === undefined) continue;
+      if (!copy) copy = { ...cur };
+      const mine = r && r.mine;
+      if (mine && typeof mine === "object" && copy[id] && typeof copy[id] === "object") {
+        const o = { ...copy[id] }; Object.keys(mine).forEach((k) => delete o[k]);
+        if (Object.keys(o).length) copy[id] = o; else delete copy[id];
+      } else delete copy[id];
+    }
+    if (copy) out[field] = copy;
+  }
+  const calBlocks = ((prev && prev.blocks) || []).filter((b) => String(b.id || "").startsWith("cal_"));
+  if (calBlocks.length) {
+    // 「中村」（カレンダーのヘルプ）と、Excelから戻した「中村ヘルプ」は同じコマ
+    const key = (b) => `${b.staffId}|${toMin(b.time)}|${canonHelpLabel(String(b.label || "")).replace(/[（(].*$/, "").replace(/ヘルプ$/, "").trim()}`;
+    const ks = new Set(calBlocks.map(key));
+    out.blocks = [...(out.blocks || []).filter((b) => !ks.has(key(b))), ...calBlocks.filter((b) => !(out.blocks || []).some((x) => x.id === b.id))];
+  }
+  return out;
 }
 
 function importMondayGrid(aoa, master) {
@@ -11882,7 +11919,7 @@ function AppInner() {
           targetLabel={(() => { const d = new Date(date + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}(${DAYS[d.getDay()]})の送迎表`; })()}
           onApply={(res) => {
             // この日のシートだけに反映(週間パターンは変更しない)
-            updateSheet((prev) => ({
+            updateSheet((prev) => calWinsOverImport(prev, {
               ...(prev || emptySheet()),
               runs: remapRetired(master, date, res.runs || []),
               blocks: remapRetired(master, date, res.blocks || []),
