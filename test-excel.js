@@ -142,6 +142,22 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  assert.ok(chk.includes('休みの職員に入っています')&&chk.includes('勤務時間外(この日は12:30で退勤)'),'出力前の確認に出る');
  console.log('off-time check OK');
 }
+// 男性不在のエラー（2026-11-06 依頼者）：時間ごとの男性のいない区間はエラーにしない。利用者がいるのに一日中男性職員がいない部署だけエラー
+{
+ const E6=E;   // 同じ版のまま（読み直すと先に走っている出力の試しが混ざる）
+ const m=E6.mergeSeedMaster(null,E6.seedMaster()), date='2026-11-02', p=E6.resolveSeedPattern(m,E6.SEED_PATTERNS.mon);
+ const sheet=Object.assign(E6.emptySheet(),{runs:p.runs,blocks:p.blocks}), dm=E6.applyDayDept(m,1,null,null,null,date);
+ const txt=(g)=>JSON.stringify(g);
+ const g1=E6.collectSheetChecks(dm,sheet,date,null);
+ assert.ok(!/男性職員不在が許容時間/.test(txt(g1)),'男性のいない区間はエラーにしない');
+ // 嫁島の男性職員を全員休みにする → その部署は「一日中男性職員がいません」
+ const yome=dm.departments.find((d)=>d.name==='嫁島');
+ const ov={}; dm.staff.filter((s)=>s.isMale).forEach((s)=>{ ov[s.id]={off:true}; });
+ const g2=E6.collectSheetChecks(dm,Object.assign({},sheet,{staffOv:ov}),date,null), t2=txt(g2);
+ assert.ok(t2.includes('嫁島: 利用者がいるのに、一日中男性職員がいません'),'一日中男性がいないときはエラー '+t2.slice(0,300));
+ assert.ok(g2.some((g)=>/男性が一日中いない/.test(g.title)),'見出し');
+ console.log('male all-day OK', (g2.find((g)=>/男性が一日中/.test(g.title))||{items:[]}).items[0]);
+}
 // 紙で確かめる一覧（職員・車・ヘルプ表・利用者・ルール）：罫線つき・A4（職員・利用者は横）・並びは基本の部署の順（2026-10-31）
 {
  const assert=require('assert'); const E6=require('./eng.cjs'); const m6=E6.mergeSeedMaster(null,E6.seedMaster());

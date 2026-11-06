@@ -5241,6 +5241,13 @@ function HolidayWorkModal({ master, wd, staffOv, onToggle, onClose }) {
    男性職員カバー状況(部署×時間帯)
    ============================================================ */
 // 「利用者が居るのに男性職員ゼロ」の連続時間を部署ごとに判定。
+// 出力前の確認の男性不在：時間ごとの「男性がいない区間」はエラーにしない。利用者がいる時間に男性職員が一度もいない（一日中いない）部署だけエラー（2026-11-06 依頼者）
+function maleAllDayMsg(d, calc) {
+  const withU = calc.filter((c) => ((c.cnt[d.id] || {}).u || 0) > 0);
+  if (!withU.length) return "";
+  if (withU.some((c) => ((c.per[d.id] || {}).present || []).length > 0)) return "";
+  return `${d.name}: 利用者がいるのに、一日中男性職員がいません(${toStr(withU[0].t)}〜${toStr(withU[withU.length - 1].t + SLOT)})`;
+}
 // 連続時間が部署の許容(maleGapMin、既定30分)以内なら "warn"(黄)、超えたらその連続区間全体を "over"(赤)
 function maleGapStatus(master, calc) {
   const res = {};
@@ -10353,7 +10360,6 @@ function AppInner() {
       const hours2 = [];
       for (let t2 = 8 * 60; t2 <= 18 * 60; t2 += SLOT) hours2.push(t2);
       const calc2 = buildCoverageCalc(sheetMaster, sheetData, wd, hours2);
-      const gs2 = maleGapStatus(sheetMaster, calc2);
       const rangeText = (list) => {
         const out2 = [];
         let st2 = null, prev = null;
@@ -10366,8 +10372,7 @@ function AppInner() {
         return out2.map(([a, b2]) => `${toStr(a)}〜${toStr(b2)}`).join("、");
       };
       sheetMaster.departments.forEach((d) => {
-        const overs = hours2.filter((t2) => (gs2[d.id] || {})[t2] === "over");
-        if (overs.length) maleErr.push(`${d.name}: 男性職員不在が許容時間を超える区間 → ${rangeText(overs)}`);
+        { const e = maleAllDayMsg(d, calc2); if (e) maleErr.push(e); }   // 男性不在は一日中いないときだけ（2026-11-06 依頼者）
         const tol = d.staffMin != null && d.staffMin !== "";
         if (tol) {
           const unders = hours2.filter((t2) => { const cc = (calc2.find((c) => c.t === t2) || {}).cnt; const v = cc && cc[d.id]; return v && v.u > 0 && v.s < Number(d.staffMin); });
@@ -10390,7 +10395,7 @@ function AppInner() {
     addG("🏠", "いつもと違う送り先・迎え先(最終確認)", placeList, "利用者タブの「いつもの迎え先・送り先」(自宅・ﾘﾍﾞ・家族送り・家族迎えなど)と違っています。この内容で合っていれば、そのまま進めてください");
     addG("🚗", "車両のエラー(定員・重複・位置)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
     addG("⏰", "時間のエラー(勤務時間外・重複)", timeErr, "職員名クリックで勤務時間の確認、または担当の変更を");
-    addG("🚻", "男性不在・職員数の区間", maleErr, "人数・男性カバー表で該当時間帯の色を確認してください");
+    addG("🚻", "男性が一日中いない・職員数の区間", maleErr, "人数・男性カバー表で確認してください");
     addG("📋", "その他の警告", otherErr, "");
     addG("📌", "その他のルール(確認)", otherRuleList, "ルールタブ「⑨ その他のルール」で確認を求めている決まりごとです。守れていればそのまま進めてください");
 
@@ -12359,7 +12364,6 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
       const hours2 = [];
       for (let t2 = 8 * 60; t2 <= 18 * 60; t2 += SLOT) hours2.push(t2);
       const calc2 = buildCoverageCalc(sheetMaster, sheetData, wd, hours2);
-      const gs2 = maleGapStatus(sheetMaster, calc2);
       const rangeText = (list) => {
         const out2 = [];
         let st2 = null, prev = null;
@@ -12372,8 +12376,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
         return out2.map(([a, b2]) => `${toStr(a)}〜${toStr(b2)}`).join("、");
       };
       sheetMaster.departments.forEach((d) => {
-        const overs = hours2.filter((t2) => (gs2[d.id] || {})[t2] === "over");
-        if (overs.length) maleErr.push(`${d.name}: 男性職員不在が許容時間を超える区間 → ${rangeText(overs)}`);
+        { const e = maleAllDayMsg(d, calc2); if (e) maleErr.push(e); }   // 男性不在は一日中いないときだけ（2026-11-06 依頼者）
         const tol = d.staffMin != null && d.staffMin !== "";
         if (tol) {
           const unders = hours2.filter((t2) => { const cc = (calc2.find((c) => c.t === t2) || {}).cnt; const v = cc && cc[d.id]; return v && v.u > 0 && v.s < Number(d.staffMin); });
@@ -12396,7 +12399,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
     addG("🏠", "いつもと違う送り先・迎え先(最終確認)", placeList, "利用者タブの「いつもの迎え先・送り先」(自宅・ﾘﾍﾞ・家族送り・家族迎えなど)と違っています。この内容で合っていれば、そのまま進めてください");
     addG("🚗", "車両のエラー(定員・重複・位置)", vehErr, "「車両の動き」タブで空き車を確認して差し替えてください");
     addG("⏰", "時間のエラー(勤務時間外・重複)", timeErr, "職員名クリックで勤務時間の確認、または担当の変更を");
-    addG("🚻", "男性不在・職員数の区間", maleErr, "人数・男性カバー表で該当時間帯の色を確認してください");
+    addG("🚻", "男性が一日中いない・職員数の区間", maleErr, "人数・男性カバー表で確認してください");
     addG("📋", "その他の警告", otherErr, "");
     addG("📌", "その他のルール(確認)", otherRuleList, "ルールタブ「⑨ その他のルール」で確認を求めている決まりごとです。守れていればそのまま進めてください");
 
@@ -12536,7 +12539,7 @@ ${Object.entries(DEPT_TRAVEL_MIN).map(([k, v]) => k.replace("|", "→") + ":" + 
    ・AIの案はすべて「下書き」に当てはめる。送迎表は出力前チェックと同じ基準で確かめ、問題が残れば自動でAIに差し戻す(最大2回)
    ・「この案を反映」を押すまで何も変わらない。反映は相談中の他の人の変更と統合する(上書きしない)
    ============================================================ */
-const AGENT_FIX_GROUPS = /重大エラー|乗せ忘れ|車両のエラー|時間のエラー|男性不在/;
+const AGENT_FIX_GROUPS = /重大エラー|乗せ忘れ|車両のエラー|時間のエラー|男性不在|男性が一日中/;
 const WDN = ["日", "月", "火", "水", "木", "金", "土"];
 // ルールタブの各一覧と、項目の種類(名前は送迎表のマスタにある人・車だけ受け付ける)
 const RULE_LISTS = {
