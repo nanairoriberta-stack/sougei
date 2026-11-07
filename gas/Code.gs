@@ -9,8 +9,8 @@
  */
 
 var APP = {
-  VERSION: '2026.11.07b',
-  SESSION_DAYS: 120,
+  VERSION: '2026.11.07c',
+  SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
   CHUNK: 45000,             // 1セルの上限(5万字)より小さく分割
@@ -311,7 +311,12 @@ function session_(token) {
   if (hit) no = hit;
   else {
     var r = rows_(APP.SH.sess), now = new Date();
-    for (var i = r.length - 1; i >= 0; i--) if (r[i][0] === th) { if (new Date(r[i][2]) > now) no = normNo_(r[i][1]); break; }
+    var hitRow = -1;
+    for (var i = r.length - 1; i >= 0; i--) if (r[i][0] === th) { if (new Date(r[i][2]) > now) { no = normNo_(r[i][1]); hitRow = i; } break; }
+    // 以前の120日のログインも、使っているうちは期限をのばす（残りが1年を切ったら10年先へ。10分に1回までしか読まないので書くのはまれ）
+    if (no && hitRow >= 0 && new Date(r[hitRow][2]) < new Date(now.getTime() + 365 * 864e5)) {
+      try { var lk = LockService.getScriptLock(); if (lk.tryLock(2000)) { try { var r2 = rows_(APP.SH.sess); if (r2[hitRow] && r2[hitRow][0] === th && new Date(r2[hitRow][2]) > new Date()) sheet_(APP.SH.sess).getRange(hitRow + 2, 3).setValue(new Date(Date.now() + APP.SESSION_DAYS * 864e5)); } finally { lk.releaseLock(); } } } catch (e) {}   // 混んでいるときは次の機会に
+    }
     if (no) { try { cache.put('s:' + th, no, 600); } catch (e) {} }
   }
   if (!no) return null;

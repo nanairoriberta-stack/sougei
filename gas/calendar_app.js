@@ -1,11 +1,12 @@
 
 "use strict";
-const APP_VERSION="2026.11.07b";
+const APP_VERSION="2026.11.07c";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
 const GRP=[{k:"staff",n:"職員",ls:[["leave","休み"],["late","遅刻"],["early","早退"],["shift","時間変更"],["hwork","休日出勤"],["sother","その他"]]},{k:"user",n:"利用者",ls:[["help","ヘルプ"],["user","休み"],["ride","送迎変更"],["extra","利用日外利用"],["monitor","モニタリング"],["shien","支援会議"],["uother","その他"]]},{k:"other",n:"その他予定",ls:[["other","その他予定"]]}];
 const grpOf=k=>(GRP.find(g=>g.ls.some(l=>l[0]===k))||GRP[2]);
+const NAME_FIRST=k=>k==="sother"||k==="uother";   // 職員・利用者の「その他」は名前を上に、タイトル・時間・場所はその下（2026-11-07 依頼者）
 const isOth=k=>k==="other"||k==="sother"||k==="uother";   // タイトル・時間・場所を入れる「その他」のラベル
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
 const HOL={
@@ -607,7 +608,7 @@ function drawSheet(){
     <div class="field"><span class="lbl">事業</span><div class="labels bizpick">${["seikatsu","houkago"].map(k=>`<label style="--c:var(--b-${k})"><input type="radio" name="f-biz" id="f-biz-${k}" value="${k}" ${bizOf(d)===k?"checked":""} ${ro?"disabled":""}><span>${BIZN[k]}</span></label>`).join("")}</div>${(()=>{const mm=bizMismatch({biz:d.biz,sg:sgOf(d.label,d.w)});return mm.length?`<p class="err" data-bizmis>⚠ ${esc(mm.join("・"))}さんは${BIZN[otherBiz(bizOf(d))]}の人です。事業が合っているか確かめてください。</p>`:""})()}</div>
     <div class="field"><span class="lbl">ラベル</span><div class="labels grppick">${GRP.map(g=>`<label style="--c:var(--l-${g.ls[0][0]})"><input type="radio" name="f-grp" id="f-grp-${g.k}" value="${g.k}" ${grpOf(d.label).k===g.k?"checked":""} ${ro?"disabled":""}><span>${g.n}</span></label>`).join("")}</div>
       ${grpOf(d.label).ls.length>1?`<div class="labels lblpick" data-lbl2="${grpOf(d.label).k}">${grpOf(d.label).ls.map(([k,n])=>`<label style="--c:var(--l-${k})"><input type="radio" name="f-label" id="f-label-${k}" value="${k}" ${d.label===k?"checked":""} ${ro||(!canLabel(k)&&d.label!==k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${n}</span></label>`).join("")}</div>`:`<input type="radio" name="f-label" id="f-label-other" value="other" checked hidden>`}</div>
-    ${isOth(d.label)?"":box}
+    ${isOth(d.label)&&!NAME_FIRST(d.label)?"":box}
     ${isOth(d.label)?`<div class="field"><label for="f-title">タイトル</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="例：週次定例" ${v()}></div>`:""}
     <label class="check" ${isOth(d.label)?"":"hidden"}><input type="checkbox" id="f-allday" ${d.allDay?"checked":""} ${ro?"disabled":""}>終日</label>
     <div class="row">
@@ -619,7 +620,7 @@ function drawSheet(){
       <div class="field" ${d.allDay||d.label==="help"?"hidden":""} id="w-end"><label for="f-end">${d.label==="hwork"?"退勤の時刻":"終了時刻"}</label><input class="input" type="time" id="f-end" value="${esc(d.end||"11:00")}" step="300" ${v()}></div>
     </div>
     ${isOth(d.label)?`<div class="field"><label for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="会議室A / オンライン など" ${v()}></div>`:""}
-    ${isOth(d.label)?box:""}
+    ${isOth(d.label)&&!NAME_FIRST(d.label)?box:""}
     <div class="field"><label for="f-memo">メモ</label><textarea class="input" id="f-memo" maxlength="2000" placeholder="${isOth(d.label)?"議題、持ち物、URL など":"伝えたいこと（送迎表には出ません）"}" ${v()}>${esc(d.memo)}</textarea></div>
     <p class="err" id="f-err" ${ed.err?"":"hidden"}>${esc(ed.err)}</p>
     ${ed.base&&ed.base.updatedBy?`<p class="by" id="byline"></p>`:""}

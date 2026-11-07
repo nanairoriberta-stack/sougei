@@ -621,6 +621,19 @@ async function bootstrap() {
     return "白戸＝男性を組める・横田＝自分の希望だけ・八壁＝女性だけ、別の日の同時保存はどちらも残る";
   });
 
+  await test("ログインはログアウトするまで続く：期限は10年・以前の120日のログインも使っているうちにのびる・ログアウトで切れる（2026-11-07 依頼者）", async () => {
+    const { g, admin } = await bootstrap();
+    const sess = () => g.sheets.get("_sessions").data.slice(1);
+    const yrs = (d) => (new Date(d) - Date.now()) / (365 * 864e5);
+    const last = sess()[sess().length - 1]; assert.ok(yrs(last[2]) > 9, "新しいログインの期限は10年 " + last[2]);
+    // 以前のログイン（残り30日）→ 使うと10年先へ
+    const row = sess().length; g.sheets.get("_sessions").data[row][2] = new Date(Date.now() + 30 * 864e5);
+    for (const k of [...g.cache.keys()]) if (/^[sm]:/.test(k)) g.cache.delete(k);
+    await admin.call("auth.me");
+    assert.ok(yrs(g.sheets.get("_sessions").data[row][2]) > 9, "使うと期限がのびる " + g.sheets.get("_sessions").data[row][2]);
+    await admin.call("auth.logout", admin.token || "").catch(() => {});
+    return "期限 " + Math.round(yrs(g.sheets.get("_sessions").data[row][2])) + "年";
+  });
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
     const { g, admin } = await bootstrap();
     const date = "2026-11-25"; const E = engFor("v1"); const m = await admin.kv().get("master"); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);
