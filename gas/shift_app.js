@@ -11,7 +11,9 @@
   const pad = (n) => String(n).padStart(2, "0");
   const today = new Date(), thisYm = /^\d{4}-\d{2}-\d{2}$/.test(window.__SG_DATE || "") ? window.__SG_DATE.slice(0, 7) : `${today.getFullYear()}-${pad(today.getMonth() + 1)}`;   // ?d= があればその月
   const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
-  const S = { group: store.get("sh:group") === "f" ? "f" : "m", ym: thisYm, loaded: false, err: "", canEdit: false, member: false,
+  // 男性の表は、?d= が無ければ翌月から開く（2026-11-07 依頼者「男性は希望を入れる画面は翌月をデフォルトに」）
+  const nextYm = (() => { const d = new Date(today.getFullYear(), today.getMonth() + 1, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; })(), hasD = /^\d{4}-\d{2}-\d{2}$/.test(window.__SG_DATE || "");
+  const S = { group: store.get("sh:group") === "f" ? "f" : "m", ym: store.get("sh:group") !== "f" && !hasD ? nextYm : thisYm, loaded: false, err: "", canEdit: false, member: false,
     cfg: null, cfgBase: null, month: null, monthBase: null, mode: "shift", wishWho: "", withNames: true, saving: 0, failed: "", pick: null, settings: null, showLine: false };
   const me = () => H.me || {};
   const cfg = () => X.cfgOf(S.group, S.cfg);
@@ -121,6 +123,7 @@
     if (S.err) { root.innerHTML = html + `<p class="sh-err">${esc(S.err)}</p>`; return; }
     if (!S.loaded) { root.innerHTML = html + `<p class="sh-wait">読み込んでいます…</p>`; return; }
     html += `<div class="sh-tools">` + (S.canEdit ? `<span class="seg"><button data-mode="shift" aria-pressed="${S.mode === "shift"}">シフトを組む</button><button data-mode="wish" aria-pressed="${S.mode === "wish"}">希望を入れる</button></span>
+      <button data-act="auto" class="primary" data-auto title="希望が出そろったら押してください。基本パターン・決まり・希望・遅番の次の日は早番にしない、を見て、空いている枠を埋めます（手で入れた枠はそのまま）">🤖 シフトを自動で作る</button>
       <button data-act="draft" title="職員ごとの曜日のパターン（下の表）と希望から、空いている枠だけを埋めます">基本パターンで下書き</button>
       <button data-act="line" class="primary">空きを見てLINE文を作る</button><button data-act="excel" data-excel title="この月のシフト表を、紙と同じカレンダーの形でExcelに出します（A4横）">Excelで出力</button><button data-act="settings">設定（職員・枠の数）</button>` : `<span class="note">あなたの希望を入れられます（日付を押すたびに 休→PM休→AM休→早→遅→日→なし）</span>`) + `</div>`;
     if (S.mode === "wish") html += `<div class="sh-wishbar">希望を入れる人：${S.canEdit ? `<select id="shWho">${c.members.map((x) => `<option ${x.name === S.wishWho ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<b>${esc(S.wishWho)}</b>`}
@@ -271,6 +274,14 @@
     if (act === "fixturn") { const r = X.fixLateEarly(S.month, cfg(), S.ym); S.month = r.month; changed("month");
       toast(`遅番の次の日の早番を替えました：${r.fixed.map((x) => x.late ? `${X.label(x.late.date)} 遅${X.MARK[x.late.slot]}→${x.late.to}` : `${X.label(x.date)} 早${X.MARK[x.slot]}→${x.to}`).join("、")}`); return; }
     if (act === "fixrules") { const n = X.ruleIssues(S.month, cfg(), S.ym).length; S.month = X.fixRules(S.month, cfg(), S.ym); changed("month"); toast(`決まりどおりに並べ替えました（${n}件）`); return; }
+    if (act === "auto") {
+      if (!confirm(`${S.ym.replace("-", "年")}月のシフトを自動で作ります。\n希望・基本パターン・決まり・「遅番の次の日は早番にしない」を見て、空いている枠を埋めます。\n手で入れた枠はそのままです。よろしいですか？`)) return;
+      const before = X.holes(S.month, cfg(), S.ym).length, r = X.autoShift(S.month, cfg(), S.ym); S.month = r.month; changed("month");
+      const cnt = (h) => r.filled.filter((x) => x.how === h).length, hw = r.filled.filter((x) => x.how === "休日出勤");
+      const msg = [`自動で作りました：空き ${before} → ${r.holes.length}`, cnt("日勤から") ? `日勤から ${cnt("日勤から")}枠` : "", cnt("早遅") ? `早遅 ${cnt("早遅")}枠` : "",
+        hw.length ? `休日出勤 ${hw.length}枠（${hw.slice(0, 6).map((x) => `${X.label(x.date)} ${x.name}`).join("、")}${hw.length > 6 ? "…" : ""}）※本人に依頼してください` : "",
+        r.turns.length ? `遅番の次の日の早番 ${r.turns.length}件（どうしても替われない分）` : "", r.conflicts.length ? `希望とちがう ${r.conflicts.length}件` : ""].filter(Boolean).join("・");
+      S.autoMsg = msg; toast(msg + "。残りは下の「空き」とLINE文で確かめてください", 12000); return; }
     if (act === "draft") { const before = X.holes(S.month, cfg(), S.ym).length; S.month = X.draft(S.month, cfg(), S.ym); changed("month"); toast(`空いている枠を基本パターンで埋めました（空き ${before} → ${X.holes(S.month, cfg(), S.ym).length}）`); return; }
     if (act === "excel") { exportExcel(); return; }
     if (act === "calendar") { const u = H.url("?page=calendar"); if (u) { const l = document.createElement("a"); l.href = u; l.target = "_top"; document.body.appendChild(l); l.click(); l.remove(); } return; }
@@ -318,7 +329,7 @@
       toast("Excelを出力しました");
     } catch (e) { toast((e && e.message) || "Excelを出力できませんでした"); }
   }
-  let tt; function toast(m) { const el = $("shToast"); if (!el) return; el.textContent = m; el.hidden = false; clearTimeout(tt); tt = setTimeout(() => { el.hidden = true; }, 3200); }
+  let tt; function toast(m, ms) { const el = $("shToast"); if (!el) return; el.textContent = m; el.hidden = false; clearTimeout(tt); tt = setTimeout(() => { el.hidden = true; }, ms || 3200); }
   window.addEventListener("online", () => { save("cfg"); save("month"); });
 
   H.ready.then(() => { load(); setInterval(() => { if (!S.saving && !pendingCount() && !S.pick && !S.settings && document.visibilityState !== "hidden") load(true); }, 30000); });

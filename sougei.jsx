@@ -1311,7 +1311,10 @@ function calNoteLines(master, events, date, edition) {
   const evs = events.filter((e) => e && !e.deleted && e.date <= date && (e.endDate || e.date) >= date)
     .sort((a, b) => (a.allDay ? 0 : 1) - (b.allDay ? 0 : 1) || String(a.start || "").localeCompare(String(b.start || "")) || String(a.title || "").localeCompare(String(b.title || "")));
   for (const e of evs) {
-    const sg = e.sg || {}, t = sg.type || "", title = String(e.title || "").trim();
+    const sg = e.sg || {}, t = sg.type || "";
+    // 職員・利用者の「その他」は「名前 内容」（以前に入れた題名に名前が無くても。2026-11-07 依頼者「横田 PM検診みたいに」）
+    const nm0 = e.label === "sother" ? (e.tanto || [])[0] : e.label === "uother" ? (e.users || [])[0] : "", t0 = String(e.title || "").trim();
+    const title = nm0 && !(t0 === nm0 || t0.startsWith(nm0 + " ") || t0.startsWith(nm0 + "　")) ? `${nm0} ${t0}` : t0;
     if (!title || t === "help" || t === "staff_plan" || t === "user_absent") continue;
     const line = title + (e.allDay || !e.start ? "" : ` ${hm(e.date === date ? e.start : "0:00")}〜${hm((e.endDate || e.date) === date ? e.end : "24:00")}`);
     if (t === "user_time" || t === "user_extra" || t === "help_cancel" || t === "liberta") { if ((sg.users || []).some((n) => users.includes(n))) out.user.push(line); continue; }   // ヘルプキャンセルも特記事項(利用者)に

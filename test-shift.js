@@ -72,22 +72,27 @@ assert.strictEqual(dr.days["2026-11-03"].e[1].n, "横田", "入っている枠�
 assert.ok(!S.workers(dr, "2026-11-03").has("余村慎"), "希望休の日は入れない");
 const wed = dr.days["2026-11-04"];   // 水曜の基本シフト（依頼者の表）：早①余村慎・②橋本・③横田、遅①橋本・②宮永・③長島
 assert.deepStrictEqual(Object.values(wed.e).map((s) => s.n), ["余村慎", "橋本", "横田"], "基本シフトの番号どおり");
-assert.deepStrictEqual([1, 2, 3].map((i) => wed.l[i].n), ["宮永", "橋本", "長島"], "早・遅の橋本は両方に入る。遅番3人の日の橋本さんは②（決まり）");
-assert.strictEqual(wed.e[2].n, "橋本", "早番は決まりなし＝基本シフトどおり");
-// 職員ごとの決まり（橋本さんは遅番3人の日は②）
-assert.strictEqual(S.ruleSlot(cfg, "橋本", "l", "2026-11-04"), 2);
-assert.strictEqual(S.ruleSlot(cfg, "橋本", "l", "2026-11-06"), 0, "金曜は遅番2人＝決まりの外");
-assert.strictEqual(S.ruleSlot(cfg, "橋本", "e", "2026-11-04"), 0);
-assert.strictEqual(S.ruleText(cfg.rules[0]), "橋本さんは遅番3人の日は②");
+assert.deepStrictEqual([1, 2, 3].map((i) => wed.l[i].n), ["橋本", "宮永", "長島"], "早・遅の橋本は両方に入る。遅番3人の日の橋本さんは①（決まり）");
+assert.strictEqual(wed.e[2].n, "橋本", "早番3人の日の橋本さんは②（決まり）");
+// 職員ごとの決まり（2026-11-07 依頼者：橋本さんは早番2人の日は①・3人の日は②、遅番は2人でも3人でも①）
+assert.strictEqual(S.ruleSlot(cfg, "橋本", "l", "2026-11-04"), 1);
+assert.strictEqual(S.ruleSlot(cfg, "橋本", "l", "2026-11-06"), 1, "金曜は遅番2人＝①");
+assert.strictEqual(S.ruleSlot(cfg, "橋本", "e", "2026-11-04"), 2, "早番3人＝②");
+assert.strictEqual(S.ruleSlot(cfg, "橋本", "e", "2026-11-02"), 1, "月曜は早番2人＝①");
+assert.deepStrictEqual(cfg.rules.map(S.ruleText), ["橋本さんは早番2人の日は①", "橋本さんは早番3人の日は②", "橋本さんは遅番2人の日は①", "橋本さんは遅番3人の日は①"]);
+// 以前の決まり（遅番3人の日は②だけ）で保存されていた設定は新しい決まりになる。自分で決めた決まりはそのまま
+assert.strictEqual(S.cfgOf("m", { rules: [{ n: "橋本", k: "l", cnt: 3, slot: 2 }] }).rules.length, 4);
+assert.deepStrictEqual(S.cfgOf("m", { rules: [{ n: "森", k: "e", cnt: 0, slot: 1 }] }).rules, [{ n: "森", k: "e", cnt: 0, slot: 1 }]);
+assert.deepStrictEqual(S.cfgOf("m", { rulesV2: true, rules: [] }).rules, [], "新しくしたあとで消した決まりは戻さない");
 { const nov = S.monthOf("m", ym, null), ri = S.ruleIssues(nov, cfg, ym);
-  assert.ok(ri.length > 0 && ri.every((x) => x.name === "橋本" && x.kind === "l" && x.slot === 2 && x.now !== 2), JSON.stringify(ri));
-  assert.ok(ri.some((x) => x.date === "2026-11-04" && x.now === 1), "紙の11/4は遅①橋本");
+  assert.ok(ri.length > 0 && ri.every((x) => x.name === "橋本" && x.kind === "l" && x.slot === 1 && x.now !== 1), JSON.stringify(ri));
+  assert.ok(ri.some((x) => x.date === "2026-11-02" && x.now === 2), "紙の11/2は遅②橋本");
   const fx = S.fixRules(nov, cfg, ym);
   assert.deepStrictEqual(S.ruleIssues(fx, cfg, ym), [], "並べ替えたら決まりどおり");
-  assert.deepStrictEqual([1, 2, 3].map((i) => fx.days["2026-11-04"].l[i].n), ["宮永", "橋本", "長島"], "入れ替えるだけ（ほかの人はそのまま）");
+  assert.deepStrictEqual([1, 2, 3].map((i) => fx.days["2026-11-02"].l[i].n), ["橋本", "宮永", "野津"], "入れ替えるだけ（ほかの人はそのまま）");
   assert.strictEqual(S.holes(fx, cfg, ym).length, S.holes(nov, cfg, ym).length, "空きは増えない");
-  const man = { days: { "2026-11-04": { l: { 1: { n: "橋本" } } } } }, dm = S.draft(man, cfg, ym);
-  assert.strictEqual(dm.days["2026-11-04"].l[1].n, "橋本", "手で入れた枠は下書きで動かさない"); }
+  const man = { days: { "2026-11-04": { l: { 2: { n: "橋本" } } } } }, dm = S.draft(man, cfg, ym);
+  assert.strictEqual(dm.days["2026-11-04"].l[2].n, "橋本", "手で入れた枠は下書きで動かさない"); }
 assert.strictEqual(S.patOf(cfg, cfg.members.find((m) => m.name === "橋本"), 3), "早・遅", "パターンは基本シフトから");
 assert.strictEqual(S.patOf(cfg, cfg.members.find((m) => m.name === "近藤"), 3), "休");
 // 基本の人が希望休 → その番号の枠は、その曜日のパターンが合う別の人（いなければ空き）
@@ -166,3 +171,44 @@ console.log("shift OK", S.holes(dr, cfg, ym).length, "の穴が下書きのあ�
   assert.ok(lt.includes("・11/17(火) 早②(6~9)　秋山さんが前の日遅番のため（入れそうな人：宮永さん）"), lt);
   console.log("late→early OK");
 }
+
+// 2026-11-07 依頼者：希望が「早番」などの人は「休み」の行に出さない／自動でシフトを作る／カレンダーは基本シフトと違う日だけ
+{ const cm = S.cfgOf("m", null), ym3 = "2026-12";
+  const w = { days: { "2026-12-01": { e: { 1: { n: "横田" } } } }, wish: { "余村慎": { "2026-12-01": "早" }, "秋山": { "2026-12-01": "休" } } };
+  const off = S.offList(w, cm, "2026-12-01");
+  assert.ok(!off.includes("余村慎") && off.includes("秋山") && !off.includes("横田"), "希望が早番の人は休みに出さない " + off.join());
+  const empty = { days: {}, wish: { "橋本": { "2026-12-07": "休" } } }, r = S.autoShift(empty, cm, ym3);
+  assert.ok(S.holes(empty, cm, ym3).length > 100 && r.holes.length < 10, "自動で作ると空きが埋まる " + r.holes.length);
+  assert.ok(!S.workers(r.month, "2026-12-07").has("橋本"), "希望休の日は入れない");
+  assert.deepStrictEqual(S.ruleIssues(r.month, cm, ym3), [], "決まりどおり");
+  assert.deepStrictEqual(S.lateEarly(r.month, cm, ym3), [], "遅番の次の日に早番を入れない");
+  const keep = { days: { "2026-12-02": { e: { 1: { n: "長島" } } } }, wish: {} };
+  assert.strictEqual(S.autoShift(keep, cm, ym3).month.days["2026-12-02"].e[1].n, "長島", "手で入れた枠はそのまま");
+  // カレンダー：基本シフトどおりの人は出さない。違う日だけ「余村慎 早番①」、基本では出る日に入っていなければ「休み」
+  const nov = S.monthOf("m", "2026-11", null), all = S.calItems(nov, "2026-11"), diff = S.calItems(nov, "2026-11", cm);
+  assert.ok(diff.length > 0 && diff.length < all.length / 2, `${all.length} → ${diff.length}`);
+  assert.ok(!diff.some((x) => x.date === "2026-11-01"), "11/1は基本シフトどおり");
+  assert.ok(diff.some((x) => x.date === "2026-11-03" && x.title === "余村慎 早番③(6~9)"), "基本とちがう勤務は出る");
+  assert.ok(diff.some((x) => x.date === "2026-11-03" && x.title === "近藤 休み"), "基本は出る日に入っていなければ休み");
+  const tue = Object.assign(JSON.parse(JSON.stringify(nov)), {}); const b2 = S.baseFor(cm, "2026-11-10");
+  assert.deepStrictEqual(S.calItems({ days: { "2026-11-10": { e: Object.fromEntries((b2.e || []).map((n, i) => [i + 1, { n }])), l: Object.fromEntries((b2.l || []).map((n, i) => [i + 1, { n }])), d: b2.d || [] } } }, "2026-11", cm).filter((x) => x.date === "2026-11-10"), [], "基本シフトどおりの日は何も出さない");
+  assert.deepStrictEqual(S.calItems({ days: {} }, "2026-11", cm), [], "まだ組んでいない月は何も出さない"); }
+console.log("shift extra ok");
+// 自動で作る流れ（2026-11-07 依頼者）：希望どおり → 日勤から → 早遅 → 休日出勤（12日連続にしない）、遅番の次の日の早番はさける（野津・橋本さんは除く）
+{ const cm = S.cfgOf("m", null), ym4 = "2026-12";
+  assert.deepStrictEqual(cm.turnFree, ["野津", "橋本"]);
+  const wishes = { "近藤": { "2026-12-03": "早" }, "秋山": { "2026-12-04": "日" }, "宮永": { "2026-12-05": "9:00~15:00" } };
+  const r = S.autoShift({ days: {}, wish: wishes }, cm, ym4);
+  assert.ok(S.entries(r.month, "2026-12-03").some((e) => e.n === "近藤") && Object.values(r.month.days["2026-12-03"].e).some((x) => x.n === "近藤"), "希望の早番に入る");
+  assert.ok((r.month.days["2026-12-04"].d || []).includes("秋山"), "希望の日勤");
+  assert.ok((r.month.days["2026-12-05"].d || []).includes("宮永(9:00~15:00)"), "希望の時刻");
+  const le = S.lateEarly(r.month, cm, ym4); assert.ok(le.every((x) => !["野津", "橋本"].includes(x.name)), "野津・橋本さんは数えない");
+  // 多くの人が休みの週：日勤から・早遅・休日出勤で埋める。12日連続にはしない
+  const off = {}; for (const n of ["余村慎", "横田", "秋山", "長島"]) { off[n] = {}; for (let d = 7; d <= 13; d++) off[n][`2026-12-${String(d).padStart(2, "0")}`] = "休"; }
+  const r2 = S.autoShift({ days: {}, wish: off }, cm, ym4);
+  assert.ok(r2.filled.length > 0, "足りない枠を埋める " + JSON.stringify(r2.filled.map((x) => x.how)));
+  assert.ok(r2.filled.every((x) => ["日勤から", "早遅", "休日出勤"].includes(x.how)));
+  for (let d = 7; d <= 13; d++) for (const n of ["余村慎", "横田", "秋山", "長島"]) assert.ok(!S.workers(r2.month, `2026-12-${String(d).padStart(2, "0")}`).has(n), "希望休は入れない");
+  for (const mb of cm.members) { let c = 0, mx = 0; for (const dt of S.daysOfMonth(ym4)) { c = S.workers(r2.month, dt).has(mb.name) ? c + 1 : 0; mx = Math.max(mx, c); }
+    assert.ok(mx < 12 || !r2.filled.some((x) => x.name === mb.name && x.how === "休日出勤"), `${mb.name} 休日出勤で12日連続にしない ${mx}`); }
+  console.log("auto shift:", r2.filled.map((x) => `${x.date.slice(8)}${x.kind}${x.idx} ${x.name} ${x.how}`).join(" / "), "空き", r2.holes.length, "遅→早", S.lateEarly(r2.month, cm, ym4).length); }

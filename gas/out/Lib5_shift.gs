@@ -20,10 +20,12 @@
   // 1日に要る枠の数（曜日ごと）。写真のシフト表（2026年11月・男性）から。画面の「設定」で変えられる
   const DEFAULT_NEED = { 0: { e: 2, l: 2 }, 1: { e: 2, l: 3 }, 2: { e: 3, l: 3 }, 3: { e: 3, l: 3 }, 4: { e: 3, l: 3 }, 5: { e: 3, l: 2 }, 6: { e: 2, l: 2 } };
   const pat = (a) => Object.fromEntries(a.map((v, i) => [i, v]));
+  const HASHI_RULES = [{ n: "橋本", k: "e", cnt: 2, slot: 1 }, { n: "橋本", k: "e", cnt: 3, slot: 2 }, { n: "橋本", k: "l", cnt: 2, slot: 1 }, { n: "橋本", k: "l", cnt: 3, slot: 1 }];
   const DEFAULT_CFG = {
     m: { title: "リベルタけやき坂とおり シフト表（男性職員）", need: DEFAULT_NEED,
       // 職員ごとの決まり（2026-11-03 依頼者「橋本さんは遅番3人時には基本②」）。k=早e/遅l、cnt=その日の枠の数（空ならいつも）、slot=番号
-      rules: [{ n: "橋本", k: "l", cnt: 3, slot: 2 }],
+      // 2026-11-07 依頼者「橋本は早番2名の時は基本①、早番3名の時は基本②、遅番2名の時は①、遅番3名の時も①」
+      rules: HASHI_RULES, rulesV2: true, turnFree: ["野津", "橋本"],
       base: {
       // 基本シフト（曜日ごとに 早①②③・遅①②③・日勤 がだれか。2026-11-02 依頼者の表から。日曜の近藤さんは表に無く、紙のパターン（日）から日勤に）
       1: { e: ["橋本", "野津"], l: ["秋山", "橋本", "野津"], d: ["横田", "近藤"] },
@@ -104,7 +106,12 @@
   // その月の表：保存されたものがあればそれ、なければ紙から写した最初の中身（無ければ空）
   // 紙の表は「遅番の次の日は早番にしない」で直したもの（2026-11-03 依頼者「シフト変更もしてください」。11/17 遅③ 余村慎→近藤（日勤から））
   const monthOf = (group, ym, saved) => saved || (SEED_MONTHS[`${group}:${ym}`] ? fixLateEarly(clone(SEED_MONTHS[`${group}:${ym}`]), cfgOf(group, null), ym).month : null);
-  const cfgOf = (group, saved) => Object.assign(clone(DEFAULT_CFG[group] || DEFAULT_CFG.m), saved || {});
+  const cfgOf = (group, saved) => {
+    const c = Object.assign(clone(DEFAULT_CFG[group] || DEFAULT_CFG.m), saved || {});
+    // 以前の決まり（橋本 遅番3人のとき②だけ）のまま保存されている男性の表は、新しい決まりにする（1回だけ。設定で直した決まりはそのまま）
+    if (group === "m" && saved && !saved.rulesV2) { if (!saved.rules || JSON.stringify(saved.rules) === JSON.stringify([{ n: "橋本", k: "l", cnt: 3, slot: 2 }])) c.rules = clone(HASHI_RULES); c.rulesV2 = true; }
+    return c;
+  };
   const pad = (n) => String(n).padStart(2, "0");
   // その月の日付（"YYYY-MM-DD"）。曜日は日付の文字から計算する（時差でずれないように UTC で）
   function daysOfMonth(ym) {
@@ -126,24 +133,85 @@
     return out;
   }
   // カレンダーに出す勤務（2026-11-07 依頼者「男性・女性のシフト表は全体カレンダーに自動で随時反映」）。1人1日1件：「余村慎 早番①」「橋本 早番②・遅番①」「近藤 日勤(9~18)」
-  function calItems(month, ym) {
+  /* cfg を渡すと、基本シフト（曜日ごと）と同じ勤務の人は出さない（2026-11-07 依頼者「基本パターンから変更がある時のみ。余村 火曜は基本日勤だけど早番に変わったときに 余村 早番」）。
+     比べるのは 早・遅・日勤 と時間の補足（①②③の番号は見ない＝女性の週ごとのずれは変更にしない）。基本では出る日に表に入っていなければ「名前 休み」（その日にだれかが入っているときだけ） */
+  const sigOf = (list) => list.slice().sort().join("|");
+  function baseSig(cfg, date, n) {
+    const b = baseFor(cfg, date), out = [];
+    if (b) { for (const k of ["e", "l"]) for (const x of b[k] || []) { const e = splitName(x); if (e.n === n) out.push(`${k}:${e.t}`); } for (const x of b.d || []) { const e = splitName(x); if (e.n === n) out.push(`d:${e.t}`); } return sigOf(out); }
+    const m = (cfg.members || []).find((x) => x.name === n), p = m ? String((m.pat || {})[wdOf(date)] || "") : "";
+    if (/早/.test(p)) out.push("e:"); if (/遅/.test(p)) out.push("l:"); if (p === "日") out.push("d:");
+    return sigOf(out);
+  }
+  function calItems(month, ym, cfg) {
     const out = [];
     for (const date of daysOfMonth(ym)) {
-      const d = dayOf(month, date), by = {}, order = [];
+      const d = dayOf(month, date), by = {}, order = [], sig = {};
+      const put = (n, s) => { (sig[n] = sig[n] || []).push(s); };
+      for (const k of ["e", "l"]) for (const sl of Object.values(d[k] || {})) { const n = slotName(sl); if (n) put(n, `${k}:${(sl && sl.t) || ""}`); }
+      for (const x of d.d || []) { const e = splitName(x); if (e.n) put(e.n, `d:${e.t}`); }
       const add = (n, txt) => { if (!n) return; if (!by[n]) { by[n] = []; order.push(n); } by[n].push(txt); };
       for (const k of ["e", "l"]) for (const [i, sl] of Object.entries(d[k] || {}).sort((a, b) => Number(a[0]) - Number(b[0]))) {
         const n = slotName(sl), t = (sl && sl.t) || ""; add(n, `${KIND[k]}番${MARK[Number(i)] || ""}${t ? `(${t})` : ""}`);
       }
       for (const x of d.d || []) { const e = splitName(x); add(e.n, `日勤${e.t ? `(${e.t})` : ""}`); }
-      for (const n of order) out.push({ date, name: n, title: `${n} ${by[n].join("・")}` });
+      for (const n of order) if (!cfg || sigOf(sig[n]) !== baseSig(cfg, date, n)) out.push({ date, name: n, title: `${n} ${by[n].join("・")}` });
+      if (cfg && order.length) for (const m of cfg.members || []) if (!by[m.name] && baseSig(cfg, date, m.name)) out.push({ date, name: m.name, title: `${m.name} 休み` });
     }
     return out;
   }
   // その日に入っている人（早・遅・日勤）
   const workers = (month, date) => new Set(entries(month, date).map((e) => e.n));
   const wishOf = (month, name, date) => (((month && month.wish) || {})[name] || {})[date] || "";
-  // 休み＝その日にどこにも入っていない人（写真の「休み：」の行）
-  const offList = (month, cfg, date) => (cfg.members || []).map((m) => m.name).filter((n) => !workers(month, date).has(n));
+  // 休み＝その日どこにも入っていない人。ただし早番・遅番・日勤など「出る」希望の人は休みに出さない（2026-11-07 依頼者「希望を早番にしたのに休みにも入っている」）
+  const offList = (month, cfg, date) => (cfg.members || []).map((m) => m.name).filter((n) => !workers(month, date).has(n) && !(wishOf(month, n, date) && !OFF_WISH[wishOf(month, n, date)]));
+  /* 自動でシフトを作る（2026-11-07 依頼者「希望が完了したらシフト作成を行ってほしい。そのボタン」）：
+     基本パターンで下書き → 決まりどおりに並べ替え → 遅番の次の日の早番を替える → 残った空きに入れられる人（その日の日勤の人・空いている人）を入れる → もう一度決まりどおりに。
+     手で入れた枠はそのまま（空いている枠だけ埋める）。希望休の人・遅番の次の日の早番は入れない */
+  function autoShift(month, cfg, ym) {
+    // 1. 希望の勤務（早番・遅番・日勤・ﾏﾝｼｮﾝのみ・時刻）を先に入れる（希望休は入れない）
+    let m = clone(month || {}); m.days = m.days || {};
+    const day = (date) => { const d = (m.days[date] = Object.assign({ e: {}, l: {}, d: [] }, m.days[date] || {})); d.e = Object.assign({}, d.e); d.l = Object.assign({}, d.l); d.d = (d.d || []).slice(); return d; };
+    for (const date of daysOfMonth(ym)) for (const mb of cfg.members || []) {
+      const w = wishOf(m, mb.name, date); if (!w || OFF_WISH[w] || workers(m, date).has(mb.name)) continue;
+      const need = needOf(cfg, date), d = day(date), ks = ["e", "l"].filter((k) => w.includes(KIND[k]));
+      if (!ks.length) { d.d.push(/^\d/.test(w) ? `${mb.name}(${w})` : mb.name); continue; }
+      for (const k of ks) { const want = ruleSlot(cfg, mb.name, k, date); let i = want && !slotName(d[k][want]) ? want : 0;
+        for (let x = need[k]; !i && x >= 1; x--) if (!slotName(d[k][x])) i = x;
+        if (i) d[k][i] = { n: mb.name }; }
+    }
+    // 2. 基本シフトで下書き → 決まりの番号 → 遅番の次の日の早番を替える
+    m = draft(m, cfg, ym); m = fixRules(m, cfg, ym); m = fixLateEarly(m, cfg, ym).month;
+    // 3. 足りない枠：その日の日勤の人 → 早遅（その日の反対の番の人。野津・橋本さんを先に）→ 休日出勤（12日連続にならない人）。
+    //    遅番の次の日の早番はさける（野津・橋本さんは除く）。どうしても入れない枠だけ、それを外してもう一度さがす
+    const filled = [], free = new Set(cfg.turnFree || []);
+    const turnNG = (n, date, k) => k === "e" ? lateBefore(m, date, n, cfg) : earlyAfter(m, date, n, cfg);
+    const inKind_ = (date, k, n) => Object.values(dayOf(m, date)[k] || {}).some((x) => slotName(x) === n);
+    const inDay = (date, n) => (dayOf(m, date).d || []).some((x) => splitName(x).n === n);
+    const run = (n, date) => { let c = 1; for (let x = addDay(date, -1); workers(m, x).has(n); x = addDay(x, -1)) c++; for (let x = addDay(date, 1); workers(m, x).has(n); x = addDay(x, 1)) c++; return c; };
+    const worked = (n) => daysOfMonth(ym).filter((x) => workers(m, x).has(n)).length;
+    for (const h of holes(m, cfg, ym)) {
+      const { date, kind: k } = h, other = k === "e" ? "l" : "e", wd = wdOf(date);
+      const okW = (n) => n && !OFF_WISH[wishOf(m, n, date)] && !inKind_(date, k, n);
+      let pick = null;
+      for (const strict of [true, false]) {
+        const ok = (n) => okW(n) && (!strict || !turnNG(n, date, k));
+        const fromD = (dayOf(m, date).d || []).map((x) => splitName(x).n).find(ok);
+        if (fromD) { pick = { n: fromD, how: "日勤から" }; break; }
+        const dual = Object.values(dayOf(m, date)[other] || {}).map(slotName).filter(ok).sort((a, b) => (free.has(b) ? 1 : 0) - (free.has(a) ? 1 : 0))[0];
+        if (dual) { pick = { n: dual, how: "早遅" }; break; }
+        const hw = (cfg.members || []).map((x) => x.name).filter((n) => ok(n) && !workers(m, date).has(n) && run(n, date) < 12)
+          .sort((a, b) => (kindFits(patOf(cfg, (cfg.members || []).find((x) => x.name === b), wd), k) ? 1 : 0) - (kindFits(patOf(cfg, (cfg.members || []).find((x) => x.name === a), wd), k) ? 1 : 0) || worked(a) - worked(b))[0];
+        if (hw) { pick = { n: hw, how: "休日出勤" }; break; }
+      }
+      if (!pick) continue;
+      const d = day(date); d[k][h.idx] = { n: pick.n };
+      if (pick.how === "日勤から") d.d = d.d.filter((x) => splitName(x).n !== pick.n);
+      filled.push({ date, kind: k, idx: h.idx, name: pick.n, how: pick.how, turn: turnNG(pick.n, date, k) });
+    }
+    m = fixRules(m, cfg, ym);
+    return { month: m, filled, holes: holes(m, cfg, ym), conflicts: conflicts(m, cfg, ym), turns: lateEarly(m, cfg, ym) };
+  }
   // 穴＝その曜日に要る枠のうち、だれも入っていない枠
   function holes(month, cfg, ym) {
     const out = [];
@@ -191,7 +259,8 @@
   // 基本シフトで早と遅の両方に入る曜日（橋本さん・野津さんの「早・遅」）の次の日は、依頼者の基本シフトどおりなので数えない
   const addDay = (date, n) => new Date(Date.parse(date + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
   const inKind = (month, date, k, n) => Object.values(dayOf(month, date)[k] || {}).some((s) => slotName(s) === n);
-  const dualDay = (cfg, n, date) => { const m = (cfg.members || []).find((x) => x.name === n); return !!m && patOf(cfg, m, wdOf(date)) === "早・遅"; };
+  // 遅番の次の日に早番でもよい人（2026-11-07 依頼者「野津・橋本を除いて」＝設定の turnFree）と、基本シフトで早・遅の両方の曜日
+  const dualDay = (cfg, n, date) => { if ((cfg.turnFree || []).includes(n)) return true; const m = (cfg.members || []).find((x) => x.name === n); return !!m && patOf(cfg, m, wdOf(date)) === "早・遅"; };
   const lateBefore = (month, date, n, cfg) => { const p = addDay(date, -1); return inKind(month, p, "l", n) && !dualDay(cfg, n, p); };
   const earlyAfter = (month, date, n, cfg) => !dualDay(cfg, n, date) && inKind(month, addDay(date, 1), "e", n);
   function lateEarly(month, cfg, ym) {
@@ -363,5 +432,5 @@
     return wb;
   }
   const fileName = (ym, groupName) => `シフト表_${groupName || ""}_${Number(ym.slice(0, 4))}年${Number(ym.slice(5, 7))}月.xlsx`;
-  return { calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  return { autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

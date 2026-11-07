@@ -1,12 +1,14 @@
 
 "use strict";
-const APP_VERSION="2026.11.08b";
+const APP_VERSION="2026.11.08d";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
 const GRP=[{k:"staff",n:"職員",ls:[["leave","休み"],["late","遅刻"],["early","早退"],["shift","時間変更"],["hwork","休日出勤"],["sother","その他"]]},{k:"user",n:"利用者",ls:[["help","ヘルプ"],["hcancel","ヘルプキャンセル"],["user","休み"],["ride","送迎変更"],["extra","利用日外利用"],["monitor","モニタリング"],["shien","支援会議"],["liberta","リベルタ利用"],["uother","その他"]]},{k:"other",n:"その他予定",ls:[["other","その他予定"]]}];
 const grpOf=k=>(GRP.find(g=>g.ls.some(l=>l[0]===k))||GRP[2]);
 const NAME_FIRST=k=>k==="sother"||k==="uother";   // 職員・利用者の「その他」は名前を上に、タイトル・時間・場所はその下（2026-11-07 依頼者）
+/* 一覧・月のマスに出す題名：職員・利用者の「その他」は「名前 内容」（以前に入れた「PM検診」も「横田 PM検診」と出す。2026-11-07 依頼者） */
+const ttl=e=>{if(!e||!NAME_FIRST(e.label))return(e&&e.title)||"";const nm=(e.label==="sother"?(e.tanto||[])[0]:(e.users||[])[0])||"",t=String(e.title||"").trim();return nm&&!(t===nm||t.startsWith(nm+" ")||t.startsWith(nm+"　"))?`${nm} ${t}`:t};
 const isOth=k=>k==="other"||k==="sother"||k==="uother";   // タイトル・時間・場所を入れる「その他」のラベル
 const LMAP=Object.fromEntries(LABELS.map(l=>[l.k,l]));
 const HOL={
@@ -128,7 +130,7 @@ function renderNotices(){
   $("notices").innerHTML=n.map(([c,t,a])=>`<div class="note ${c}"><p>${t}</p>${a}</div>`).join("");
 }
 function chip(e){const span=e.date!==e.endDate;
-  return`<button class="ev-chip${span?" span":""}${e.pending?" pend":""}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})" aria-label="${esc(e.title)}">${bizMismatch(e).length?`<i class="mis-dot" title="別の事業の人が入っています">⚠</i>`:""}${bizTag(e)}${!span&&!e.allDay?`<b>${esc(e.start)}</b>`:""}<span>${esc(e.title)}</span></button>`}
+  return`<button class="ev-chip${span?" span":""}${e.pending?" pend":""}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})" aria-label="${esc(ttl(e))}">${bizMismatch(e).length?`<i class="mis-dot" title="別の事業の人が入っています">⚠</i>`:""}${bizTag(e)}${!span&&!e.allDay?`<b>${esc(e.start)}</b>`:""}<span>${esc(ttl(e))}</span></button>`}
 function renderGrid(vis){
   fitGrid();
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
@@ -139,7 +141,7 @@ function renderGrid(vis){
 }
 function evRow(e,ps){
   const av=e.members.slice(0,6).map(id=>ps[id]?`<img src="${esc(ps[id].avatarUrl)}" alt="${esc(ps[id].name||"メンバー")}" title="${esc(ps[id].name||"メンバー")}">`:"").join("");
-  return`<li><button class="ev-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(e.title)}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${(e.users||[]).length?`<span>利用者：${esc(e.users.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
+  return`<li><button class="ev-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(ttl(e))}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${(e.users||[]).length?`<span>利用者：${esc(e.users.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
 function renderPanel(vis,ps){
   const d=parse(S.sel),evs=on(vis,S.sel),hol=HOL[S.sel],can=db&&S.canWrite&&core;
   let body;
@@ -164,7 +166,7 @@ function fitGrid(){
 function dsRow(e){
   const tm=e.allDay||e.date!==e.endDate&&!(e.date===S.sel&&e.start)?`<span class="ds-time">終日</span>`:`<span class="ds-time">${esc(e.start)}<small>${esc(e.end)}</small></span>`;
   const sub=[LMAP[e.label]?.n||"その他",e.place,(e.tanto||[]).length?"担当："+e.tanto.join("・"):"",(e.users||[]).length?"利用者："+e.users.join("・"):""].filter(Boolean).map(esc).join(" ・ ");
-  return`<li><button class="ds-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${misTag(e)}${bizTag(e)}${esc(e.title)}</b><small>${sub}</small></span></button></li>`;
+  return`<li><button class="ds-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${misTag(e)}${bizTag(e)}${esc(ttl(e))}</b><small>${sub}</small></span></button></li>`;
 }
 function renderDay(vis){
   const root=$("dayRoot");document.documentElement.classList.toggle("dayopen",!!S.dayOpen);   // 開いている間は裏の月の画面を動かさない
@@ -225,7 +227,7 @@ function drawSearchResults(){
   if(!SR.q.trim()){box.innerHTML=`<div class="empty">名前・題名・場所などで探せます（1年前〜2年先の予定）。<br>空白で区切ると、すべての言葉を含む予定だけ出ます。</div>`;return}
   const list=srList(),g=new Map();for(const e of list){if(!g.has(e.date))g.set(e.date,[]);g.get(e.date).push(e)}
   let h="";for(const[d,evs]of g){const x=parse(d);
-    h+=`<div class="sr-day"><div class="sr-date"><b>${x.getFullYear()}年${x.getMonth()+1}月${x.getDate()}日(${WD[x.getDay()]})</b><span>${evs.length}件の予定</span></div>${evs.map(e=>`<button class="sr-row" data-srev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="ds-bar"></span><span class="ds-body"><span class="sr-t">${bizTag(e)}${hl(e.title)}</span><small>${esc(timeText(e))}${e.place?" ・ "+esc(e.place):""}</small></span></button>`).join("")}</div>`}
+    h+=`<div class="sr-day"><div class="sr-date"><b>${x.getFullYear()}年${x.getMonth()+1}月${x.getDate()}日(${WD[x.getDay()]})</b><span>${evs.length}件の予定</span></div>${evs.map(e=>`<button class="sr-row" data-srev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="ds-bar"></span><span class="ds-body"><span class="sr-t">${bizTag(e)}${hl(ttl(e))}</span><small>${esc(timeText(e))}${e.place?" ・ "+esc(e.place):""}</small></span></button>`).join("")}</div>`}
   box.innerHTML=(SR.err?`<p class="sr-note">${esc(SR.err)}</p>`:"")+(h||`<div class="empty">${SR.loading?"探しています…":"見つかりませんでした"}</div>`)+(SR.loading&&h?`<p class="sr-note">ほかの月も探しています…</p>`:"")+(SR.more?`<p class="sr-note">300件より多く見つかりました。言葉を足してしぼってください。</p>`:"");
 }
 function renderSearch(){
@@ -247,7 +249,7 @@ function renderTrash(){
   const tm=S.cursor.getMonth(),y=S.cursor.getFullYear();
   const del=allEvents().filter(e=>e.deleted&&parse(e.date).getMonth()===tm&&parse(e.date).getFullYear()===y).sort((a,b)=>(b.deletedAt||"").localeCompare(a.deletedAt||""));
   const can=db&&S.canWrite&&core;
-  $("listView").innerHTML=`<h2>ゴミ箱（${y}年${tm+1}月の予定）</h2><p class="sub">削除した予定は30日間ここに残り、元に戻せます。</p>${del.length?`<div class="ev-list">${del.map(e=>`<div class="trash-row"><div class="grow"><div class="t" style="font-weight:700">${esc(e.title)}</div><div class="meta"><span class="time">${parse(e.date).getMonth()+1}/${parse(e.date).getDate()} ${timeText(e)}</span><span>削除：${fmtAt(e.deletedAt)}</span>${e.pending?`<span class="tag-pend">未送信</span>`:""}</div></div><button class="ghost sm" data-restore="${esc(e.id)}" ${can?"":"disabled"}>元に戻す</button></div>`).join("")}</div>`:`<div class="empty">この月に削除された予定はありません。</div>`}`;
+  $("listView").innerHTML=`<h2>ゴミ箱（${y}年${tm+1}月の予定）</h2><p class="sub">削除した予定は30日間ここに残り、元に戻せます。</p>${del.length?`<div class="ev-list">${del.map(e=>`<div class="trash-row"><div class="grow"><div class="t" style="font-weight:700">${esc(ttl(e))}</div><div class="meta"><span class="time">${parse(e.date).getMonth()+1}/${parse(e.date).getDate()} ${timeText(e)}</span><span>削除：${fmtAt(e.deletedAt)}</span>${e.pending?`<span class="tag-pend">未送信</span>`:""}</div></div><button class="ghost sm" data-restore="${esc(e.id)}" ${can?"":"disabled"}>元に戻す</button></div>`).join("")}</div>`:`<div class="empty">この月に削除された予定はありません。</div>`}`;
 }
 
 /* ---------- 受信（読込）：読めなかったときは何も書かない ---------- */
@@ -712,7 +714,7 @@ function save(){
 /* ---------- 同期状況の画面（競合・失敗の解決） ---------- */
 function openSync(){
   const st=core?core.status():null;
-  const sum=e=>e?`<b>${esc(e.title)}</b>${e.deleted?"（削除済み）":""}<br>${esc(e.date)} ${esc(timeText(e))}${e.place?"<br>"+esc(e.place):""}`:"<b>見つかりません</b>（削除または日付変更）";
+  const sum=e=>e?`<b>${esc(ttl(e))}</b>${e.deleted?"（削除済み）":""}<br>${esc(e.date)} ${esc(timeText(e))}${e.place?"<br>"+esc(e.place):""}`:"<b>見つかりません</b>（削除または日付変更）";
   const kindName={upsert:"予定の保存",delete:"予定の削除",restore:"予定の復元",comment:"コメント"};
   const reason={changed:"あなたが開いた後に、他の人がこの予定を変更しました。",deleted:"他の人がこの予定を削除しました。",missing:"予定が見つかりません（他の人が削除または日付を変更しました）。",exists:"同じ予定がすでにあります。"};
   const code={invalid_argument:"権限がないため保存できませんでした。",quota_exceeded:"保存できる量の上限に達しました。管理者に連絡してください。",full:"この日またはこの予定の保存量が上限です（コメントは1件の予定につき100件まで）。",outdated_client:"新しい版のデータのため、この版からは書き込めません。最新版を読み込んでから再送してください。",failed:"データの形が正しくないため保存できませんでした。"};

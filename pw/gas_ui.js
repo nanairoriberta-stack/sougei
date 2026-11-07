@@ -303,16 +303,16 @@ const D = path.join(__dirname, "../gas/out");
     await T.pg.click('[data-bslot="6|l|2"]'); await T.pg.waitForTimeout(200); await T.pg.click('[data-bpick="長島"]'); await T.pg.waitForTimeout(2500);
     assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.cfg.value.base[6].l[1], "長島", "基本シフトを変えると保存");
     await T.pg.click('[data-bslot="6|l|2"]'); await T.pg.waitForTimeout(200); await T.pg.click('[data-bpick="宮永"]'); await T.pg.waitForTimeout(1500);   // 元に戻す
-    // 職員ごとの決まり（橋本さんは遅番3人の日は②。2026-11-03 依頼者）：紙の表の遅①橋本は「決まりとちがう」→ 並べ替え
-    assert.ok((await T.pg.locator(".sh-h2").innerText()).includes("橋本さんは遅番3人の日は②"), "基本シフトの見出しに決まり");
-    assert.ok((await T.pg.locator("[data-rule-list]").innerText()).includes("11/4(水) 橋本さんは遅②の決まりですが遅①に入っています"));
-    assert.ok(await T.pg.locator('[data-slot="2026-11-04|l|1"].rule').count() === 1, "枠に印");
+    // 職員ごとの決まり（2026-11-07 依頼者：橋本さんは遅番は2人でも3人でも①）：紙の表の11/2 遅②橋本は「決まりとちがう」→ 並べ替え
+    assert.ok((await T.pg.locator(".sh-h2").innerText()).includes("橋本さんは遅番3人の日は①"), "基本シフトの見出しに決まり");
+    assert.ok((await T.pg.locator("[data-rule-list]").innerText()).includes("11/2(月) 橋本さんは遅①の決まりですが遅②に入っています"));
+    assert.ok(await T.pg.locator('[data-slot="2026-11-02|l|2"].rule').count() === 1, "枠に印");
     await T.pg.click('[data-act="fixrules"]'); await T.pg.waitForTimeout(2500);
     assert.strictEqual(await T.pg.locator("[data-rule-list]").count(), 0, "並べ替えたら消える");
-    { const fv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.days["2026-11-04"].l;
-      assert.deepStrictEqual([fv[1].n, fv[2].n, fv[3].n], ["宮永", "橋本", "長島"], "サーバーに保存"); }
+    { const fv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.days["2026-11-02"].l;
+      assert.deepStrictEqual([fv[1].n, fv[2].n, fv[3].n], ["橋本", "宮永", "野津"], "サーバーに保存"); }
     await T.pg.click('[data-act="settings"]'); await T.pg.waitForTimeout(200);
-    assert.strictEqual(await T.pg.locator('[data-rn="0"]').inputValue(), "橋本"); assert.strictEqual(await T.pg.locator('[data-rc="0"]').inputValue(), "3"); assert.strictEqual(await T.pg.locator('[data-rs="0"]').inputValue(), "2");
+    assert.strictEqual(await T.pg.locator('[data-rn="0"]').inputValue(), "橋本"); assert.strictEqual(await T.pg.locator('[data-rc="0"]').inputValue(), "2"); assert.strictEqual(await T.pg.locator('[data-rs="0"]').inputValue(), "1");
     await T.pg.locator(".pk.wide").screenshot({ path: "g_shiftpage_rules.png" }); await T.pg.click("[data-set-close]"); await T.pg.waitForTimeout(200);
     // 遅番の次の日は早番にしない（2026-11-03 依頼者）：紙の表は直してある（11/17 遅③ 近藤）。替われる人がいない2件は一覧とLINE文
     assert.ok((await T.pg.locator('[data-slot="2026-11-17|l|3"]').innerText()).includes("近藤(16~22)"), "11/17 遅③は近藤さん");
@@ -395,7 +395,18 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.wish["横田"]["2026-11-20"], "休", "自分の希望が保存");
     await Y.pg.screenshot({ path: "g_shiftpage_mobile.png" });
     assert.deepStrictEqual(real(Y.errs), [], "画面エラーなし"); await Y.pg.context().close();
-    console.log("シフト表: 下書き→穴→LINE文・希望・設定・職員の希望 OK"); }
+    // 男性の表は ?d= が無ければ翌月から開く・「🤖 シフトを自動で作る」で空きが埋まる（2026-11-07 依頼者）
+    { const nx = new Date(); nx.setDate(1); nx.setMonth(nx.getMonth() + 1); const nym = `${nx.getFullYear()}-${String(nx.getMonth() + 1).padStart(2, "0")}`;
+      const Z = await open("shift.html", { width: 1400, height: 1000 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";`, "shift_next.html");
+      await Z.pg.waitForTimeout(500); await Z.pg.fill("#sghNo", "000"); await Z.pg.fill("#sghPin", "5829"); await Z.pg.click("#sghGo"); await Z.pg.waitForTimeout(2500);
+      assert.strictEqual(await Z.pg.locator(".sh-month b").innerText(), `${nx.getFullYear()}年${nx.getMonth() + 1}月`, "男性の表は翌月から");
+      const h0 = await Z.pg.locator(".slot.hole").count(); assert.ok(h0 > 50, "まだ組んでいない月 " + h0);
+      Z.pg.once("dialog", (d) => d.accept()); await Z.pg.click('[data-act="auto"]'); await Z.pg.waitForTimeout(3000);
+      const h1 = await Z.pg.locator(".slot.hole").count(); assert.ok(h1 < 10, `自動で作ると空きが埋まる ${h0}→${h1}`);
+      const sv = api(t, "shift.get", [{ group: "m", ym: nym }]).data.month.value; assert.ok(Object.keys(sv.days || {}).length >= 28, "サーバーに保存");
+      assert.ok((await Z.pg.locator("body").innerText()).includes("自動で作りました"), "結果のお知らせ");
+      assert.deepStrictEqual(real(Z.errs), [], "画面エラーなし"); await Z.pg.context().close(); }
+    console.log("シフト表: 下書き→穴→LINE文・希望・設定・職員の希望・自動で作る OK"); }
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));
   assert.strictEqual(await P.pg.getByRole("button", { name: /AI調整|AIと相談/ }).count(), 0, "料金がかかるAIのボタンは、キーが無ければ出ない");
   console.log("送迎表の表示:", (await P.pg.locator("text=/📅 カレンダー/").first().innerText().catch(() => "なし")), (await P.pg.locator('button[title="保存と同期の状況"]').innerText().catch(() => "なし")), "/ 画面エラー:", P.errs);
@@ -492,6 +503,10 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(so && so.label === "sother" && so.tanto.join() === "八壁" && so.sg && so.sg.type === "staff_plan", "職員のその他：担当と送迎表の予定");
     assert.ok(uo && uo.label === "uother" && uo.users.join() === "中村" && !uo.sg, "利用者のその他：利用者だけ・送迎表には入れない");
     assert.ok((await A.pg.locator("#panel .ev-row", { hasText: "中村 利用者その他の試し" }).innerText()).includes("利用者：中村"), "一覧に利用者");
+    // 以前に入れた「PM検診」（題名に名前なし）も一覧では「横田 PM検診」（2026-11-07 依頼者）
+    api(t, "cal.apply", [{ kind: "upsert", opId: "op_oldso001", id: "ev_oldso001", baseRev: null, ev: { title: "PM検診", date: D21, endDate: D21, allDay: true, start: "", end: "", label: "sother", tanto: ["横田"], place: "", memo: "", members: [] } }]);
+    await A.pg.evaluate(() => window.SGHost.refreshCalendar()); await A.pg.waitForTimeout(1500);
+    assert.ok(await A.pg.locator("#panel .ev-row .t", { hasText: "横田 PM検診" }).count() === 1, "名前が前に付く " + (await A.pg.locator("#panel .ev-row .t").allInnerTexts()).join(","));
     await A.pg.evaluate(() => [...document.querySelectorAll("#panel .ev-row")].find((b) => b.textContent.includes("八壁 職員その他の試し")).click()); await A.pg.waitForTimeout(400);
     assert.deepStrictEqual(await A.pg.evaluate(() => [document.querySelector('input[name="f-grp"]:checked').value, document.querySelector('input[name="f-label"]:checked').value]), ["staff", "sother"], "開き直しても職員のその他のまま");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
