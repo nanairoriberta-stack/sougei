@@ -53,7 +53,7 @@
       else { const q = JSON.parse(now); store.set(pendKey(kind), JSON.stringify({ base: r.value, mine: q.mine })); if (kind === "cfg") S.cfgBase = r.value; else S.monthBase = r.value; setTimeout(() => save(kind), 50); }
       S.failed = "";
       if (r.calLeft > 0) calSync();   // はじめての月など、カレンダーへの書き込みが残っていれば続けて頼む
-    } catch (e) { S.failed = (e && e.message) || "保存できませんでした"; setTimeout(() => save(kind), 15000); }
+    } catch (e) { S.failed = ((e && e.message) || "保存できませんでした") + (e && e.code ? `［${e.code}］` : ""); setTimeout(() => save(kind), 15000); }
     S.saving--; render();
   }
   // シフト表 → 職場カレンダー：残りを少しずつ書く（2026-11-07）。失敗しても次に保存したときにまた書く
@@ -92,7 +92,7 @@
   function render() {
     const root = $("shRoot"); if (!root) return;
     const c = cfg();
-    const status = S.failed ? `<span class="st bad">未送信（自動で送り直します）：${esc(S.failed)}</span>` : S.saving || pendingCount() ? `<span class="st busy">保存中…</span>` : S.loaded ? `<span class="st ok">保存済み ✓${S.calSyncing ? "（カレンダーに反映中…）" : ""}</span>` : "";
+    const status = S.failed ? `<span class="st bad" data-sh-failed title="${esc(S.failed)}">未送信（自動で送り直します）：${esc(S.failed)}</span>` : S.saving || pendingCount() ? `<span class="st busy">保存中…</span>` : S.loaded ? `<span class="st ok">保存済み ✓${S.calSyncing ? "（カレンダーに反映中…）" : ""}</span>` : "";
     const [y, m] = S.ym.split("-").map(Number);
     let html = `<header class="sh-bar"><div class="sh-title">${esc(c.title)}</div>
       <nav class="sh-tabs">${Object.entries(X.GROUPS).map(([k, n]) => `<button data-group="${k}" aria-pressed="${S.group === k}">${n}</button>`).join("")}</nav>

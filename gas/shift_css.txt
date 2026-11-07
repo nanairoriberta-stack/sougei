@@ -51,3 +51,5 @@ label.opt{flex-direction:row;align-items:center;gap:6px;padding:6px;border:1px s
 
 /* 希望のボタン（2026-11-07） */
 .wpen{display:flex;flex-wrap:wrap;gap:6px}.wpen button{padding:6px 10px;border:1px solid #fdba74;border-radius:999px;background:#fff;font-size:13px;cursor:pointer}.wpen button[aria-pressed="true"]{background:#ea580c;border-color:#ea580c;color:#fff;font-weight:700}.wtime{display:inline-flex;gap:4px;align-items:center}.wtime input{padding:4px 6px;border:1px solid var(--line);border-radius:6px}
+
+.st.bad{white-space:normal;word-break:break-all;max-width:100%;display:inline-block;border:1px solid var(--bad);font-weight:700}

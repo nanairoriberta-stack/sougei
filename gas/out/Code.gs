@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.07f',
+  VERSION: '2026.11.07g',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -179,16 +179,19 @@ function resetPins() {
 
 /* ================= 入口：すべての呼び出しはここを通る ================= */
 function api(token, method, args) {
+  var me = null;
   try {
     if (method === 'auth.login') return ok_(login_(args[0], args[1], args[2]));
-    var me = session_(token);
+    me = session_(token);
     if (!me) return err_('auth', 'ログインし直してください');
     var h = HANDLERS[method];
     if (!h) return err_('invalid_argument', '不明な操作です');
     return ok_(h(me, args || []));
   } catch (e) {
-    if (e && e.code) return err_(e.code, e.message || '');
+    // 保存できないときに原因が分かるよう、変更履歴にも残す（2026-11-07 依頼者「シフト表が未送信のまま」。ログインの誤りなどは残さない）
+    if (e && e.code) { if (/^shift\./.test(method) || e.code === 'busy') log_(me || {}, 'エラー', method, (e.code || '') + '：' + (e.message || '')); return err_(e.code, e.message || ''); }
     console.error(e && e.stack || e);
+    log_(me || {}, 'エラー', method, String(e && e.message || e) + ' ' + String(e && e.stack || '').slice(0, 300));
     return err_('unavailable', String(e && e.message || e));
   }
 }
