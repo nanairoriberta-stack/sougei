@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.07j";
+const APP_VERSION="2026.11.08a";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -56,7 +56,9 @@ function homeBiz(){const nm=(window.SGHost&&window.SGHost.me||{}).name;const a=n
 const bizTag=e=>S.biz==="all"&&bizOf(e)==="houkago"?`<span class="tag-biz">放デイ</span>`:"";
 function renderBiz(){document.documentElement.dataset.biz=S.biz;   // タブごとに背景の色を少し変える（全体＝薄い青・生活介護＝薄緑・放課後デイ＝薄ピンク）
   $("bizTabs").innerHTML=BIZ.map(b=>`<button role="tab" data-biz="${b.k}" aria-selected="${S.biz===b.k}">${b.n}</button>`).join("")}
-function gridRange(){const s=addDays(S.cursor,-S.cursor.getDay());return{start:s,end:addDays(s,41)}}
+// 週は月曜始まり（2026-11-07 依頼者「日曜始まりではなく月曜始まりに」）
+const MON0=d=>(d.getDay()+6)%7;
+function gridRange(){const s=addDays(S.cursor,-MON0(S.cursor));return{start:s,end:addDays(s,41)}}
 /* 外側（暗いところ）を押して閉じるのは、押したところも離したところも外側のときだけ。
    入力欄の文字をマウスでなぞって枠の外で離すと閉じていた（2026-11-06 依頼者「ドラッグして枠からはみ出すとポップアップ画面が落ちる」） */
 let PDOWN=null;document.addEventListener("pointerdown",e=>{PDOWN=e.target},true);
@@ -255,7 +257,7 @@ function renderTrash(){
    ・保存したら、サーバーが返した「その日の文書」で表を直す（PATCH。月の読み直しを待たない）。
      読み直しと行き違っても、予定ごとに新しい版（rev）が勝つので、古い表示に戻らない */
 const MC=new Map(),PATCH=new Map(),MCKEY="tc:mc1";let SNAP=[];
-const rangeOf=c=>{const s=addDays(c,-c.getDay());return{start:s,end:addDays(s,41)}};
+const rangeOf=c=>{const s=addDays(c,-MON0(c));return{start:s,end:addDays(s,41)}};
 const keyOfRange=r=>ymd(r.start)+"|"+ymd(r.end);
 function setDocs(docs){SNAP=docs;const t=Date.now();for(const[k,v]of PATCH)if(t-v.at>120000)PATCH.delete(k);S.server=C.mergeDays(docs.concat([...PATCH.values()].map(v=>v.d)))}
 function mcPut(k,docs){MC.delete(k);MC.set(k,{docs,at:Date.now()});while(MC.size>8)MC.delete(MC.keys().next().value)}

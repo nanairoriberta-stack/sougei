@@ -280,6 +280,8 @@ const D = path.join(__dirname, "../gas/out");
     const T = await open("shift.html", { width: 1400, height: 1000 }, sb, "shift.html");
     await T.pg.waitForTimeout(500); await T.pg.fill("#sghNo", "000"); await T.pg.fill("#sghPin", "5829"); await T.pg.click("#sghGo"); await T.pg.waitForTimeout(2500);
     assert.ok((await T.pg.locator(".sh-title").innerText()).includes("男性職員"), "男性の表");
+    assert.deepStrictEqual(await T.pg.$$eval(".sh-grid thead th", (o) => o.map((x) => x.textContent)), ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"], "シフト表も月曜始まり");
+    assert.strictEqual(await T.pg.evaluate(() => { const r = document.querySelector(".sh-grid tbody tr"); const cs = [...r.children]; return cs.findIndex((c) => c.dataset.day === "2026-11-01"); }), 6, "11/1(日)は1週目のいちばん右");
     assert.ok(await T.pg.locator('[data-act="calendar"]').isVisible(), "シフト表からカレンダーへ戻るボタン");
     assert.strictEqual(await T.pg.locator(".sh-month b").innerText(), "2026年11月");
     // 2026年11月（男性）は依頼者の紙のシフト表が最初から入っている
@@ -412,6 +414,10 @@ const D = path.join(__dirname, "../gas/out");
   await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
   const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await pickLabel(A.pg, label); await A.pg.waitForTimeout(300); };
   const save = async (ms) => { await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(ms || 1500); };
+  { // 週は月曜始まり（2026-11-07 依頼者）：曜日の見出しは 月〜日、マスの1つ目は月曜
+    assert.strictEqual((await A.pg.locator(".dow").innerText()).replace(/\s+/g, ""), "月火水木金土日", "見出しは月曜から");
+    const first = await A.pg.locator("#grid .cell[data-day]").first().getAttribute("data-day");
+    assert.strictEqual(new Date(first + "T00:00:00").getDay(), 1, "いちばん左上は月曜 " + first); }
   { // ラベルを変えても選んだ名前はそのまま（職員の中・利用者の中）。打った名前が候補にそのままあれば選ばなくてよい（2026-11-07 依頼者）
     const chipsOf = (k) => A.pg.$$eval(`.sgbox [data-sgrm="${k}"]`, (o) => o.map((x) => x.dataset.name));
     await add("help"); await pick("users", "中村"); await A.pg.waitForTimeout(200);

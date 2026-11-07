@@ -26,7 +26,7 @@
 
 <main class="app gutter" id="app">
   <section id="monthView" class="cal" aria-label="月間カレンダー">
-    <div class="dow"><div class="su">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div class="sa">土</div></div>
+    <div class="dow"><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div class="sa">土</div><div class="su">日</div></div>
     <div class="grid" id="grid"></div>
   </section>
   <section id="listView" class="agenda" hidden aria-label="予定リスト"></section>

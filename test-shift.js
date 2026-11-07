@@ -132,9 +132,10 @@ console.log("shift OK", S.holes(dr, cfg, ym).length, "の穴が下書きのあ�
   const all = []; ws.eachRow((row, r) => row.eachCell((c, col) => all.push({ r, col, t: txt(c) })));
   const find = (re) => all.find((x) => re.test(x.t));
   assert.strictEqual(txt(ws.getCell(1, 1)), "2026年11月　リベルタけやき坂とおり シフト表（男性職員）");
-  assert.deepStrictEqual([1, 3, 5, 7, 9, 11, 13].map((c) => txt(ws.getCell(2, c))), ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"]);
-  const d2 = find(/^2$/); assert.ok(d2 && d2.col === 3, "11/2は月曜の列");
-  assert.strictEqual(txt(ws.getCell(d2.r + 1, 3)), "早①：橋本"); assert.strictEqual(txt(ws.getCell(d2.r + 3, 4)), "遅③：野津");
+  assert.deepStrictEqual([1, 3, 5, 7, 9, 11, 13].map((c) => txt(ws.getCell(2, c))), ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"], "月曜始まり（2026-11-07 依頼者）");
+  const d2 = find(/^2$/); assert.ok(d2 && d2.col === 1, "11/2は月曜の列（いちばん左）");
+  assert.ok(find(/^1$/).col === 13, "11/1(日)はいちばん右");
+  assert.strictEqual(txt(ws.getCell(d2.r + 1, 1)), "早①：橋本"); assert.strictEqual(txt(ws.getCell(d2.r + 3, 2)), "遅③：野津");
   assert.ok(find(/^早③：余村慎\(6~9\)$/), "時間の補足");
   const hole = find(/^遅③：空き$/); assert.ok(hole && ws.getCell(hole.r, hole.col).fill.fgColor.argb === "FFFEF3C7", "空きは黄色");
   assert.ok(find(/^休み：秋山、近藤、野津$/), "休みの行");

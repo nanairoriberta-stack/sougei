@@ -319,9 +319,9 @@
     const [y, m] = ym.split("-").map(Number);
     ws.mergeCells(1, 1, 1, 14); cell(1, 1, `${y}年${m}月　${cfg.title || ("シフト表" + (groupName ? `（${groupName}）` : ""))}`, { font: { bold: true, size: 14 } }); ws.getRow(1).height = 24;
     {
-      for (let wd = 0; wd < 7; wd++) { ws.mergeCells(2, wd * 2 + 1, 2, wd * 2 + 2); const x = cell(2, wd * 2 + 1, `${WD[wd]}曜日`, { font: { bold: true, color: { argb: "FFFFFFFF" } }, align: { horizontal: "center" }, fill: wd === 0 ? "FFBE123C" : wd === 6 ? "FF1D4ED8" : "FF1E40AF" }); x.border = { top: med, bottom: med, left: med, right: med }; }
+      for (let ci = 0; ci < 7; ci++) { const wd = (ci + 1) % 7; ws.mergeCells(2, ci * 2 + 1, 2, ci * 2 + 2); const x = cell(2, ci * 2 + 1, `${WD[wd]}曜日`, { font: { bold: true, color: { argb: "FFFFFFFF" } }, align: { horizontal: "center" }, fill: wd === 0 ? "FFBE123C" : wd === 6 ? "FF1D4ED8" : "FF1E40AF" }); x.border = { top: med, bottom: med, left: med, right: med }; }
     }
-    const days = daysOfMonth(ym), lead = wdOf(days[0]), cells = Array(lead).fill(null).concat(days);
+    const days = daysOfMonth(ym), lead = (wdOf(days[0]) + 6) % 7, cells = Array(lead).fill(null).concat(days);   // 月曜始まり（2026-11-07 依頼者）
     while (cells.length % 7) cells.push(null);
     let r = 3;
     for (let w = 0; w < cells.length; w += 7) {
@@ -330,8 +330,8 @@
       const r0 = r, rEnd = r0 + rows + 2;
       // 日勤・休みの行は折り返す。高さは長い日に合わせる（2列分の幅に全角でおよそ13文字。名前が多い月でも切れない）
       const lines = (k) => Math.max(1, ...week.filter(Boolean).map((date) => { const t = k === "d" ? `日勤：${(dayOf(month, date).d || []).join("、")}` : `休み：${offList(month, cfg, date).join("、")}`; return Math.ceil(t.length / 13); }));
-      week.forEach((date, wd) => {
-        const c1 = wd * 2 + 1, c2 = c1 + 1;
+      week.forEach((date, ci) => {
+        const wd = date ? wdOf(date) : (ci + 1) % 7, c1 = ci * 2 + 1, c2 = c1 + 1;   // ci＝列（月曜から）、wd＝曜日（色に使う）
         if (!date) { for (let rr = r0; rr <= rEnd; rr++) { cell(rr, c1, "", { fill: GRAY }); cell(rr, c2, "", { fill: GRAY }); } box(r0, c1, rEnd, c2); return; }
         const d = dayOf(month, date), need = needOf(cfg, date), dd = d.note ? `　${d.note}` : "";
         ws.mergeCells(r0, c1, r0, c2); cell(r0, c1, `${Number(date.slice(8))}${dd}`, { font: { bold: true, color: { argb: wd === 0 ? "FFBE123C" : wd === 6 ? "FF1D4ED8" : "FF18201D" } }, align: { horizontal: "center" } });
