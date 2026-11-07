@@ -12,9 +12,9 @@ const LOCK_WAIT_MAX = 90000;   // ロック待ちの上限（超えたら後で�
 const MAX_BYTES = 240000;      // 1文書の上限（基盤は256KiB）
 const MAX_COMMENTS = 100;
 const TRASH_DAYS = 30;
-const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien", "extra", "sother", "uother", "late", "early", "hcancel"];  // late=遅刻・early=早退（2026-11-06。中身は職員時間変更）  // sother=職員のその他・uother=利用者のその他（2026-11-05）
+const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien", "extra", "sother", "uother", "late", "early", "hcancel", "liberta"];  // late=遅刻・early=早退（2026-11-06。中身は職員時間変更）  // sother=職員のその他・uother=利用者のその他（2026-11-05）
   // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
-const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "user_extra", "help", "hwork", "shift", "help_cancel"];   // help_cancel＝いつものヘルプをその日だけなし（2026-11-07）
+const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "user_extra", "help", "hwork", "shift", "help_cancel", "liberta"];   // liberta＝リベルタ（ﾏﾝｼｮﾝ）の泊まり なし／あり（2026-11-07）   // help_cancel＝いつものヘルプをその日だけなし（2026-11-07）
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 const PERM = ["invalid_argument", "quota_exceeded", "transform_error", "full", "outdated_client"];
@@ -93,7 +93,8 @@ function normSg(x) {
     ...(x.type === "shift" && x.noRide === true ? { noRide: true } : {}),
     ...(x.type === "shift" && TIME_RE.test(x.afrom) && TIME_RE.test(x.ato) ? { afrom: x.afrom, ato: x.ato } : {}),   // その日の中抜け（不在の時間。2026-11-05）
     ...(x.type === "shift" && x.noAway === true ? { noAway: true } : {}),
-    ...(x.type === "help_cancel" && TIME_RE.test(x.at) ? { at: x.at } : {}) };   // ヘルプキャンセル：その時刻のヘルプだけ（無ければその日のその人のヘルプ全部）   // その日は中抜けなし   // 職員時間変更「ﾏﾝｼｮﾝのみ」：送迎表には載るが送迎はしない（2026-10-31）  // 送迎：その日の迎え先・送り先  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
+    ...(x.type === "help_cancel" && TIME_RE.test(x.at) ? { at: x.at } : {}),
+    ...(x.type === "liberta" ? { lib: x.lib === "on" ? "on" : "off", lfrom: x.lfrom === "pm" ? "pm" : "am", lto: x.lto === "am" ? "am" : "pm" } : {}) };   // リベルタ：なし/あり・開始日の朝から/夜から・終了日の朝まで/夜まで   // ヘルプキャンセル：その時刻のヘルプだけ（無ければその日のその人のヘルプ全部）   // その日は中抜けなし   // 職員時間変更「ﾏﾝｼｮﾝのみ」：送迎表には載るが送迎はしない（2026-10-31）  // 送迎：その日の迎え先・送り先  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
 }
 const strip = e => { const x = clone(e); x.prev = null; return x; };
 

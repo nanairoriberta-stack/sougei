@@ -394,3 +394,21 @@ console.log('extra OK');
   assert.deepStrictEqual(r2.blocks.map((b) => b.label), ['森井ヘルプ'], '森井さんのヘルプは残す');
   console.log('help cancel OK', nm, mine.length + '件');
 }
+// ===== リベルタ利用（ﾏﾝｼｮﾝの泊まり なし/あり。〇日の夜から〜〇日の朝。2026-11-07 依頼者） =====
+{
+  const T = require('./calcore.js'), nk = U('中村');
+  const ev = { id: 'evlib1', rev: 1, date: '2026-11-02', endDate: '2026-11-04', allDay: true, title: '中村 リベルタなし（2日夜〜4日朝）', label: 'liberta', sg: T.normSg({ type: 'liberta', users: ['中村'], lib: 'off', lfrom: 'pm', lto: 'am' }) };
+  assert.deepStrictEqual([ev.sg.lib, ev.sg.lfrom, ev.sg.lto], ['off', 'pm', 'am']);
+  const on = (date) => C.reconcile(m, sheet, [ev], date);
+  assert.deepStrictEqual(on('2026-11-02').libertaOff[nk.id], { pm: true }, '開始日は夜だけ');
+  assert.deepStrictEqual(on('2026-11-03').libertaOff[nk.id], { am: true, pm: true }, '間の日は朝・夜');
+  assert.deepStrictEqual(on('2026-11-04').libertaOff[nk.id], { am: true }, '終了日は朝だけ');
+  assert.ok(!(on('2026-11-05').libertaOff || {})[nk.id], '次の日は入らない');
+  const r = on('2026-11-03'); assert.ok(!((C.reconcile(m, r, [], '2026-11-03').libertaOff || {})[nk.id]), '予定を消すと元に戻る');
+  assert.match(C.summary(m, r, [ev], '2026-11-03')[0].time, /リベルタ朝・夜なし/);
+  const one = C.reconcile(m, sheet, [{ ...ev, id: 'evlib2', endDate: '2026-11-02', sg: T.normSg({ type: 'liberta', users: ['中村'], lib: 'on', lfrom: 'am', lto: 'am' }) }], '2026-11-02');
+  assert.deepStrictEqual(one.libertaOn[nk.id], { am: true }, '同じ日の朝だけ・あり');
+  // パターン読込などで消えても入れ直す
+  assert.deepStrictEqual(C.reconcile(m, Object.assign({}, r, { libertaOff: {} }), [ev], '2026-11-03').libertaOff[nk.id], { am: true, pm: true });
+  console.log('liberta OK');
+}
