@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.07d',
+  VERSION: '2026.11.07f',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -211,6 +211,7 @@ var HANDLERS = {
   'sg.exportAlerts': function (me, a) { return exportAlerts_(String((a[0] || {}).ns || '')); },
   'shift.get': function (me, a) { return shiftGet_(me, a[0] || {}); },
   'shift.save': function (me, a) { return shiftSave_(me, a[0] || {}); },
+  'shift.syncCal': function (me, a) { return shiftSyncCalApi_(me, a[0] || {}); },
   'sg.linkReqs': function (me, a) { return linkReqsOf_(String(a[0] || '')); },   // 生活介護の画面に、りんく・ぷれいす版からの依頼を出す（表示だけ）
   'docs.query': function (me, a) { return docsQuery_(a[0] || {}); },
   'docs.get': function (me, a) { return docGetPublic_(String(a[0])); },
@@ -825,7 +826,68 @@ function shiftSave_(me, a) {
       docSet_(path, merged, rev, { k: path }, idx);
       log_(me, 'シフト表', SGShift.GROUPS[q.group] + (kind === 'cfg' ? '（設定）' : ' ' + q.ym), canEdit ? (kind === 'cfg' ? '設定の変更' : 'シフトの変更') : '希望の変更');
     }
-    return { rev: rev, value: merged };
+    // 組んだ勤務を職場カレンダーにも（2026-11-07 依頼者「自動で随時反映」）。失敗してもシフト表の保存は止めない
+    var calLeft = 0;
+    if (kind === 'month') { try { calLeft = shiftSyncCal_(q.group, q.ym, merged, idx); } catch (e) { Logger.log('シフト表→カレンダー：' + (e && e.message || e)); } }
+    return { rev: rev, value: merged, calLeft: calLeft };
+  });
+}
+/* シフト表 → 職場カレンダー（2026-11-07 依頼者）。1人1日1件の「職員その他」の予定（例「余村慎 早番①」、終日）。
+   送迎表には反映しない（sg なし。送迎表の勤務時間はいつもどおり）。ID は sh<m|f><YYYYMMDD>_<名前の目印>。
+   前回カレンダーに書いた内容を shift/<g>/<YYYY-MM>/cal に覚えておき、変わった日の文書だけ書き直す（速さのため）。
+   シフト表から消えた人・日は削除（ゴミ箱へ）。カレンダーで直しても、次にシフト表を保存したときシフト表の内容に戻る */
+function shNameKey_(n) { var h = 5381; n = String(n); for (var i = 0; i < n.length; i++) h = ((h * 33) ^ n.charCodeAt(i)) >>> 0; return h.toString(36); }
+// シフト表の予定は、その日の文書のうち1つ（_2）にまとめる（書く文書の数を1日1つにして速く）。IDの終わりで決める
+function shCalId_(pre, date, name) {
+  var base = pre + date.slice(8) + '_' + shNameKey_(name);
+  for (var k = 0; k < 200; k++) { var id = k ? base + 'x' + k : base; if (/_2$/.test(TCCore.dayPath(date, id))) return id; }
+  return base;
+}
+var SH_SYNC_MAX = 8;   // 1回に書き直す日の文書の数（はじめての月は何回かに分けて書く。残りは画面が続けて頼む shift.syncCal）
+function shiftSyncCal_(group, ym, month, idx) {
+  var items = SGShift.calItems(month || {}, ym), pre = 'sh' + group + ym.replace('-', '');
+  var want = {};
+  items.forEach(function (it) { want[shCalId_(pre, it.date, it.name)] = it; });
+  var lastPath = 'shift/' + group + '/' + ym + '/cal', lastDoc = docGet_(lastPath, idx), last = (lastDoc && lastDoc.value) || {};
+  var byPath = {}, touch = function (id, date) { var p = TCCore.dayPath(date, id); (byPath[p] = byPath[p] || { date: date, ids: [] }).ids.push(id); };
+  Object.keys(want).forEach(function (id) { if (last[id] !== want[id].title) touch(id, want[id].date); });
+  Object.keys(last).forEach(function (id) { if (!want[id]) touch(id, ym + '-' + id.slice(pre.length, pre.length + 2)); });
+  var all = Object.keys(byPath).sort(); if (!all.length) return 0;
+  var paths = all.slice(0, SH_SYNC_MAX), done = {};
+  var now = new Date().toISOString(), n = 0;
+  paths.forEach(function (p) {
+    byPath[p].ids.forEach(function (id) { done[id] = 1; });
+    var d = docGet_(p, idx), events = TCCore.normDay(d ? d.value : null), changed = false;
+    byPath[p].ids.forEach(function (id) {
+      var ex = events[id], it = want[id];
+      if (it) {
+        if (ex && !ex.deleted && ex.title === it.title && ex.label === 'sother') return;
+        var ev = TCCore.normEvent({ title: it.title, date: it.date, endDate: it.date, allDay: true, label: 'sother', biz: 'seikatsu', tanto: [it.name],
+          memo: 'シフト表から自動で入った予定です。直すときはシフト表で直してください（ここで直しても、次にシフト表を保存すると戻ります）',
+          createdBy: ex ? ex.createdBy : 'shift', createdAt: ex ? ex.createdAt : now, updatedBy: 'shift', updatedAt: now, rev: (ex ? ex.rev : 0) + 1, lastOp: 'shift' + now.replace(/\D/g, '') }, id, 0);
+        if (ev) { events[id] = ev; changed = true; n++; }
+      } else if (ex && !ex.deleted) {
+        var del = JSON.parse(JSON.stringify(ex)); del.deleted = true; del.deletedAt = now; del.deletedBy = 'shift'; del.rev = ex.rev + 1; del.updatedAt = now;
+        events[id] = TCCore.normEvent(del, id, 0); changed = true; n++;
+      }
+    });
+    if (!changed) return;
+    var doc = TCCore.buildDay(p, events, now); if (!doc) return;   // 1日の文書が大きすぎるときは書かない（ほかの予定を守る）
+    docSet_(p, doc, (d ? d.rev : 0) + 1, { date: doc.date, maxEnd: doc.maxEnd }, idx);
+  });
+  // 書いた分だけ「前回書いた内容」を進める（残りは次の呼び出しで書く）
+  var keep = JSON.parse(JSON.stringify(last));
+  Object.keys(done).forEach(function (id) { if (want[id]) keep[id] = want[id].title; else delete keep[id]; });
+  docSet_(lastPath, keep, (lastDoc ? lastDoc.rev : 0) + 1, { k: lastPath }, idx);
+  return all.length - paths.length;   // まだ書いていない日の文書の数
+}
+// 画面から：シフト表の残りをカレンダーに書く（はじめての月など。1回に SH_SYNC_MAX 日分）
+function shiftSyncCalApi_(me, a) {
+  var q = shiftArgs_(a);
+  if (shiftGroups_(me).indexOf(q.group) < 0 && !isShiftMember_(me.name)) throw { code: 'invalid_argument', message: 'このシフト表に入れる権限がありません' };
+  return withLock_(function () {
+    var idx = docIndex_(), cur = docGet_(q.monthPath, idx), month = cur ? cur.value : SGShift.monthOf(q.group, q.ym, null);
+    return { left: shiftSyncCal_(q.group, q.ym, month, idx) };
   });
 }
 /* りんく・ぷれいす版のその日の依頼（生活介護の画面で表示するため）。生活介護のその日の表がまだ保存されていなくても出せるように

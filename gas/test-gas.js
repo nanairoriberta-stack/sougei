@@ -602,6 +602,29 @@ async function bootstrap() {
     const r2 = await admin.call("shift.save", Object.assign({ kind: "month", base, baseKnown: true, mine: { days: { "2026-11-03": { l: { 1: { n: "長島" } } } } } }, q));
     assert.strictEqual(r2.value.days["2026-11-02"].e[1].n, "橋本", "先に保存した日が消えない");
     assert.strictEqual(r2.value.days["2026-11-03"].l[1].n, "長島");
+    // 組んだ勤務は職場カレンダーにも自動で入る（職員その他・終日・送迎表には反映しない）。直すと付いていき、外すと消える（2026-11-07 依頼者）
+    assert.ok(r2.calLeft > 0, "はじめての月はカレンダーへの書き込みを何回かに分ける（1回が長くならないように） " + r2.calLeft);
+    let loops = 0; while ((await yoko.call("shift.syncCal", q)).left > 0) loops++;   // 画面が続けて頼む（表の職員でもよい）
+    assert.ok(loops >= 1 && loops < 20, "残りを書く " + loops);
+    const calOf = async (date) => Object.values((await admin.call("docs.query", { col: "days", from: date, to: date })).reduce((a, d) => Object.assign(a, d.events), {})).filter((e) => /^shm/.test(e.id));
+    let c2 = await calOf("2026-11-02"); const hb = c2.find((e) => /^橋本 /.test(e.title) && !e.deleted);
+    assert.ok(hb && /早番①/.test(hb.title) && hb.label === "sother" && hb.allDay && !hb.sg && hb.tanto[0] === "橋本", "カレンダーに「橋本 早番①」 " + c2.map((e) => e.title).join(","));
+    assert.ok(c2.filter((e) => !e.deleted).length >= 4, "その日のほかの人の勤務も入る（紙の表の分）");
+    const allNov = (await admin.call("docs.query", { col: "days", from: "2026-11-01", to: "2026-11-30" })).reduce((a, d) => a + Object.values(d.events).filter((e) => /^shm/.test(e.id) && !e.deleted).length, 0);
+    assert.ok(allNov > 100, "11月の全員分 " + allNov);
+    const cur2 = (await admin.call("shift.get", q)).month.value, nx = JSON.parse(JSON.stringify(cur2)), D4 = "2026-11-04";
+    const was = ((nx.days[D4] || {}).e || {})[1]; nx.days[D4] = nx.days[D4] || { e: {}, l: {}, d: [] }; nx.days[D4].e = Object.assign({}, nx.days[D4].e, { 1: { n: "近藤", t: "6~9" } });
+    await admin.call("shift.save", Object.assign({ kind: "month", base: cur2, baseKnown: true, mine: nx }, q));
+    const c4 = await calOf(D4);
+    assert.ok(c4.some((e) => !e.deleted && /^近藤 .*早番①\(6~9\)/.test(e.title)), "入れ替えると付いていく " + c4.filter((e) => !e.deleted).map((e) => e.title).join(","));
+    if (was && was.n && was.n !== "近藤") assert.ok(!c4.some((e) => !e.deleted && e.title.startsWith(was.n + " ") && /早番①/.test(e.title)), "外した人（" + was.n + "）の早番①は消える");
+    const sk = (await admin.call("docs.query", { col: "days", from: "2026-11-02", to: "2026-11-02" })); assert.ok(sk.length >= 1);
+    // 同じ内容で保存し直しても、カレンダーは書き直さない（変わった日だけ）
+    const revBefore = JSON.stringify((await admin.call("docs.query", { col: "days", from: "2026-11-01", to: "2026-11-30" })).map((d) => d.date + d.shard + Object.values(d.events).map((e) => e.rev).join()));
+    const cur3 = (await admin.call("shift.get", q)).month.value; const nx3 = JSON.parse(JSON.stringify(cur3)); nx3.days["2026-11-20"] = nx3.days["2026-11-20"] || { e: {}, l: {}, d: [] }; nx3.days["2026-11-20"].note = "メモ";
+    await admin.call("shift.save", Object.assign({ kind: "month", base: cur3, baseKnown: true, mine: nx3 }, q));
+    const revAfter = JSON.stringify((await admin.call("docs.query", { col: "days", from: "2026-11-01", to: "2026-11-30" })).map((d) => d.date + d.shard + Object.values(d.events).map((e) => e.rev).join()));
+    assert.strictEqual(revAfter, revBefore, "勤務が変わらなければカレンダーはそのまま");
     // 表の職員：自分の希望だけ。ほかの欄・ほかの人の希望は送っても使わない
     const cur = (await yoko.call("shift.get", q)).month.value;
     const evil = JSON.parse(JSON.stringify(cur)); evil.days = {}; evil.wish = Object.assign({}, cur.wish, { "横田": { "2026-11-08": "休" }, "秋山": Object.assign({}, (cur.wish || {})["秋山"], { "2026-11-10": "休" }) }); evil.wishNote = { "横田": "8日 休みたい" };

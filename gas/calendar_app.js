@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.07d";
+const APP_VERSION="2026.11.07f";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -617,7 +617,7 @@ function drawSheet(){
     <div class="field"><span class="lbl">ラベル</span><div class="labels grppick">${GRP.map(g=>`<label style="--c:var(--l-${g.ls[0][0]})"><input type="radio" name="f-grp" id="f-grp-${g.k}" value="${g.k}" ${grpOf(d.label).k===g.k?"checked":""} ${ro?"disabled":""}><span>${g.n}</span></label>`).join("")}</div>
       ${grpOf(d.label).ls.length>1?`<div class="labels lblpick" data-lbl2="${grpOf(d.label).k}">${grpOf(d.label).ls.map(([k,n])=>`<label style="--c:var(--l-${k})"><input type="radio" name="f-label" id="f-label-${k}" value="${k}" ${d.label===k?"checked":""} ${ro||(!canLabel(k)&&d.label!==k)?"disabled":""}><span><i class="dot" style="background:var(--c)"></i>${n}</span></label>`).join("")}</div>`:`<input type="radio" name="f-label" id="f-label-other" value="other" checked hidden>`}</div>
     ${isOth(d.label)&&!NAME_FIRST(d.label)?"":box}
-    ${isOth(d.label)?`<div class="field"><label for="f-title">タイトル</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="例：週次定例" ${v()}></div>`:""}
+    ${isOth(d.label)?`<div class="field"><label for="f-title">タイトル</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="${NAME_FIRST(d.label)?"例：研修（名前は前に自動で付きます）":"例：週次定例"}" ${v()}></div>`:""}
     <label class="check" ${isOth(d.label)?"":"hidden"}><input type="checkbox" id="f-allday" ${d.allDay?"checked":""} ${ro?"disabled":""}>終日</label>
     <div class="row">
       <div class="field"><label for="f-date">開始日</label><input class="input" type="date" id="f-date" value="${esc(d.date)}" ${v()}></div>
@@ -675,6 +675,9 @@ function save(){
   if(!ed.base)for(const k of["staff","users"])if(oneOnly(d.label,k)&&(d.w[k]||[]).length>1)return showErr("1つの予定に1人です。ほかの人は×で外して、別の予定で入れてください。");
   // その他予定だけタイトルを入れてもらう。ほかのラベルは入力した内容から毎回付け直す（直したときに古い題名が残らない）
   if(!isOth(d.label))d.title=autoTitle(d.label,d.sg,d)||LMAP[d.label]?.n||d.title;
+  // 職員・利用者の「その他」は、ほかの予定と同じ「名前 内容」の題名にする（2026-11-07 依頼者「名前 〇〇みたいに他の表示と合わせて」）
+  if(NAME_FIRST(d.label)){const nm=((d.label==="sother"?d.w.staff:d.w.users)||[])[0]||"",t=String(d.title||"").trim();
+    if(nm&&!(t===nm||t.startsWith(nm+" ")||t.startsWith(nm+"　")))d.title=t?`${nm} ${t}`:`${nm} その他`;}
   if(!d.title)return showErr("タイトルを入力してください。");
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d.date))return showErr("開始日を選んでください。");
   if(d.endDate<d.date)return showErr("終了日は開始日以降にしてください。");

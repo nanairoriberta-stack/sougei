@@ -341,6 +341,13 @@ const D = path.join(__dirname, "../gas/out");
     await T.pg.click('td[data-day="2026-11-12"] .dnum'); await T.pg.waitForTimeout(300);
     assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("12(木)：休"), "今月の希望の列");
     assert.ok((await T.pg.locator("[data-conf-list]").innerText()).includes("11/12(木) 秋山さんは「休」の希望ですが入っています"));
+    // 希望はボタンで選んで日付を押す（2026-11-07）：早ﾏﾝｼｮﾝのみ・その他（時刻）・同じ日をもう一度押すと消える
+    assert.deepStrictEqual(await T.pg.$$eval("[data-wpen]", (o) => o.map((x) => x.textContent)), ["休み", "AM休", "PM休", "早番", "遅番", "日勤", "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝｼｮﾝのみ", "その他(時刻)", "消す"], "希望のボタン");
+    await T.pg.click('[data-wpen="早ﾏﾝのみ"]'); await T.pg.waitForTimeout(150); await T.pg.click('td[data-day="2026-11-13"] .dnum'); await T.pg.waitForTimeout(250);
+    await T.pg.click('[data-wpen="time"]'); await T.pg.waitForTimeout(150); await T.pg.fill("#shPenFrom", "09:00"); await T.pg.fill("#shPenTo", "15:00"); await T.pg.click('td[data-day="2026-11-14"] .dnum'); await T.pg.waitForTimeout(250);
+    await T.pg.click('[data-wpen="休"]'); await T.pg.waitForTimeout(150); await T.pg.click('td[data-day="2026-11-15"] .dnum'); await T.pg.waitForTimeout(200); await T.pg.click('td[data-day="2026-11-15"] .dnum'); await T.pg.waitForTimeout(250);
+    { const pat = (await T.pg.locator(".sh-pat").innerText()).split("\n").find((l) => l.startsWith("秋山")) || ""; assert.ok(pat.includes("13(金)：早ﾏﾝのみ") && pat.includes("14(土)：9:00~15:00") && !pat.includes("15(日)"), "ボタンの希望 " + pat); }
+    await T.pg.click('[data-wpen="休"]'); await T.pg.waitForTimeout(100);
     await T.pg.waitForTimeout(2500);
     const sv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value;
     assert.deepStrictEqual(sv.days["2026-11-03"].e[3], { n: "余村慎", t: "6~9" }, "サーバーに保存");
@@ -461,11 +468,11 @@ const D = path.join(__dirname, "../gas/out");
     await add("uother"); await setDay(); await A.pg.fill("#f-title", "利用者その他の試し"); if (await A.pg.isChecked("#f-allday")) { await A.pg.uncheck("#f-allday"); await A.pg.waitForTimeout(200); } await A.pg.fill("#f-start", "10:00"); await A.pg.fill("#f-end", "11:00");
     await pick("users", "中村"); await save(2500);
     const evs = Object.values(api(t, "docs.query", [{ col: "days", from: D21, to: D21 }]).data).flatMap((x) => Object.values((x && x.events) || {}));
-    const so = evs.find((e) => e.title === "職員その他の試し"), uo = evs.find((e) => e.title === "利用者その他の試し");
+    const so = evs.find((e) => e.title === "八壁 職員その他の試し"), uo = evs.find((e) => e.title === "中村 利用者その他の試し");   // 題名は「名前 内容」（2026-11-07）
     assert.ok(so && so.label === "sother" && so.tanto.join() === "八壁" && so.sg && so.sg.type === "staff_plan", "職員のその他：担当と送迎表の予定");
     assert.ok(uo && uo.label === "uother" && uo.users.join() === "中村" && !uo.sg, "利用者のその他：利用者だけ・送迎表には入れない");
-    assert.ok((await A.pg.locator("#panel .ev-row", { hasText: "利用者その他の試し" }).innerText()).includes("利用者：中村"), "一覧に利用者");
-    await A.pg.evaluate(() => [...document.querySelectorAll("#panel .ev-row")].find((b) => b.textContent.includes("職員その他の試し")).click()); await A.pg.waitForTimeout(400);
+    assert.ok((await A.pg.locator("#panel .ev-row", { hasText: "中村 利用者その他の試し" }).innerText()).includes("利用者：中村"), "一覧に利用者");
+    await A.pg.evaluate(() => [...document.querySelectorAll("#panel .ev-row")].find((b) => b.textContent.includes("八壁 職員その他の試し")).click()); await A.pg.waitForTimeout(400);
     assert.deepStrictEqual(await A.pg.evaluate(() => [document.querySelector('input[name="f-grp"]:checked').value, document.querySelector('input[name="f-label"]:checked').value]), ["staff", "sother"], "開き直しても職員のその他のまま");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
   }

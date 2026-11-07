@@ -124,6 +124,20 @@
     for (const x of d.d || []) { const e = splitName(x); if (e.n) out.push(e); }
     return out;
   }
+  // カレンダーに出す勤務（2026-11-07 依頼者「男性・女性のシフト表は全体カレンダーに自動で随時反映」）。1人1日1件：「余村慎 早番①」「橋本 早番②・遅番①」「近藤 日勤(9~18)」
+  function calItems(month, ym) {
+    const out = [];
+    for (const date of daysOfMonth(ym)) {
+      const d = dayOf(month, date), by = {}, order = [];
+      const add = (n, txt) => { if (!n) return; if (!by[n]) { by[n] = []; order.push(n); } by[n].push(txt); };
+      for (const k of ["e", "l"]) for (const [i, sl] of Object.entries(d[k] || {}).sort((a, b) => Number(a[0]) - Number(b[0]))) {
+        const n = slotName(sl), t = (sl && sl.t) || ""; add(n, `${KIND[k]}番${MARK[Number(i)] || ""}${t ? `(${t})` : ""}`);
+      }
+      for (const x of d.d || []) { const e = splitName(x); add(e.n, `日勤${e.t ? `(${e.t})` : ""}`); }
+      for (const n of order) out.push({ date, name: n, title: `${n} ${by[n].join("・")}` });
+    }
+    return out;
+  }
   // その日に入っている人（早・遅・日勤）
   const workers = (month, date) => new Set(entries(month, date).map((e) => e.n));
   const wishOf = (month, name, date) => (((month && month.wish) || {})[name] || {})[date] || "";
@@ -348,5 +362,5 @@
     return wb;
   }
   const fileName = (ym, groupName) => `シフト表_${groupName || ""}_${Number(ym.slice(0, 4))}年${Number(ym.slice(5, 7))}月.xlsx`;
-  return { lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  return { calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

@@ -52,8 +52,16 @@
       if (now === raw) { store.del(pendKey(kind)); if (kind === "cfg") { S.cfgBase = r.value; S.cfg = clone(r.value); } else { S.monthBase = r.value; S.month = clone(r.value); } }
       else { const q = JSON.parse(now); store.set(pendKey(kind), JSON.stringify({ base: r.value, mine: q.mine })); if (kind === "cfg") S.cfgBase = r.value; else S.monthBase = r.value; setTimeout(() => save(kind), 50); }
       S.failed = "";
+      if (r.calLeft > 0) calSync();   // はじめての月など、カレンダーへの書き込みが残っていれば続けて頼む
     } catch (e) { S.failed = (e && e.message) || "保存できませんでした"; setTimeout(() => save(kind), 15000); }
     S.saving--; render();
+  }
+  // シフト表 → 職場カレンダー：残りを少しずつ書く（2026-11-07）。失敗しても次に保存したときにまた書く
+  let syncing = false;
+  async function calSync() {
+    if (syncing) return; syncing = true; S.calSyncing = true; render();
+    try { for (let i = 0; i < 20; i++) { const r = await H.call("shift.syncCal", { group: S.group, ym: S.ym }); if (!r || !(r.left > 0)) break; } } catch (e) {}
+    syncing = false; S.calSyncing = false; render();
   }
   const pendingCount = () => ["cfg", "month"].filter((k) => store.get(pendKey(k))).length;
 
@@ -67,12 +75,16 @@
   // 基本シフトを変える（設定に保存。曜日ごと）
   function setBase(wd, fn) { const c = clone(cfg()); c.base = Object.assign({}, c.base); const b = Object.assign({ e: [], l: [], d: [] }, c.base[wd]); fn(b); c.base[wd] = b; S.cfg = c; changed("cfg"); }
   function setDayWorkers(date, names) { dayObj(date).d = names; changed("month"); }
-  const WISH_CYCLE = ["休", "PM休", "AM休", "早", "遅", "日", ""];
+  // 希望はボタンで選んでから日付を押す（2026-11-07 依頼者「休みや勤務をボタン式に。早番・遅番・マンション早のみなど＋その他で任意の時間」）。
+  // 同じ希望の日をもう一度押すと消える。「消す」を選んで押しても消える。その他は「9:00~15:00」のように時刻で持つ
+  const WISH_BTNS = [["休", "休み"], ["AM休", "AM休"], ["PM休", "PM休"], ["早", "早番"], ["遅", "遅番"], ["日", "日勤"], ["早ﾏﾝのみ", "早ﾏﾝｼｮﾝのみ"], ["遅ﾏﾝのみ", "遅ﾏﾝｼｮﾝのみ"], ["time", "その他(時刻)"], ["", "消す"]];
+  S.pen = "休"; S.penFrom = ""; S.penTo = "";
+  const penValue = () => S.pen === "time" ? (S.penFrom && S.penTo ? `${S.penFrom.replace(/^0/, "")}~${S.penTo.replace(/^0/, "")}` : S.penFrom ? `${S.penFrom.replace(/^0/, "")}~` : "") : S.pen;
   function cycleWish(date) {
     const who = S.wishWho; if (!who) return;
+    const v = penValue(); if (S.pen === "time" && !v) { alert("その他は、上で時刻（何時から）を入れてから日付を押してください"); return; }
     S.month = S.month || {}; S.month.wish = Object.assign({}, S.month.wish); const w = Object.assign({}, S.month.wish[who]);
-    const next = WISH_CYCLE[(WISH_CYCLE.indexOf(w[date] || "") + 1) % WISH_CYCLE.length];
-    if (next) w[date] = next; else delete w[date];
+    if (!v || w[date] === v) delete w[date]; else w[date] = v;
     S.month.wish[who] = w; changed("month");
   }
 
@@ -80,7 +92,7 @@
   function render() {
     const root = $("shRoot"); if (!root) return;
     const c = cfg();
-    const status = S.failed ? `<span class="st bad">未送信（自動で送り直します）：${esc(S.failed)}</span>` : S.saving || pendingCount() ? `<span class="st busy">保存中…</span>` : S.loaded ? `<span class="st ok">保存済み ✓</span>` : "";
+    const status = S.failed ? `<span class="st bad">未送信（自動で送り直します）：${esc(S.failed)}</span>` : S.saving || pendingCount() ? `<span class="st busy">保存中…</span>` : S.loaded ? `<span class="st ok">保存済み ✓${S.calSyncing ? "（カレンダーに反映中…）" : ""}</span>` : "";
     const [y, m] = S.ym.split("-").map(Number);
     let html = `<header class="sh-bar"><div class="sh-title">${esc(c.title)}</div>
       <nav class="sh-tabs">${Object.entries(X.GROUPS).map(([k, n]) => `<button data-group="${k}" aria-pressed="${S.group === k}">${n}</button>`).join("")}</nav>
@@ -91,7 +103,9 @@
       <button data-act="draft" title="職員ごとの曜日のパターン（下の表）と希望から、空いている枠だけを埋めます">基本パターンで下書き</button>
       <button data-act="line" class="primary">空きを見てLINE文を作る</button><button data-act="excel" data-excel title="この月のシフト表を、紙と同じカレンダーの形でExcelに出します（A4横）">Excelで出力</button><button data-act="settings">設定（職員・枠の数）</button>` : `<span class="note">あなたの希望を入れられます（日付を押すたびに 休→PM休→AM休→早→遅→日→なし）</span>`) + `</div>`;
     if (S.mode === "wish") html += `<div class="sh-wishbar">希望を入れる人：${S.canEdit ? `<select id="shWho">${c.members.map((x) => `<option ${x.name === S.wishWho ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<b>${esc(S.wishWho)}</b>`}
-      <span class="note">日付のマスを押すたびに 休→PM休→AM休→早→遅→日→なし</span>
+      <span class="wpen" data-wpen-bar>${WISH_BTNS.map(([k, n]) => `<button type="button" data-wpen="${esc(k)}" aria-pressed="${S.pen === k}">${esc(n)}</button>`).join("")}</span>
+      ${S.pen === "time" ? `<span class="wtime"><input type="time" id="shPenFrom" step="300" value="${esc(S.penFrom)}" aria-label="何時から">〜<input type="time" id="shPenTo" step="300" value="${esc(S.penTo)}" aria-label="何時まで"></span>` : ""}
+      <span class="note">ボタンを選んでから日付のマスを押してください（同じ希望の日をもう一度押すと消えます）</span>
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
     const hs = X.holes(S.month, c, S.ym), holeSet = new Set(hs.map((h) => `${h.date}|${h.kind}|${h.idx}`));
     const conf = X.conflicts(S.month, c, S.ym), confSet = new Set(conf.map((x) => `${x.date}|${x.name}`));
@@ -203,6 +217,7 @@
     if (at("[data-mon]")) { const [y, m] = S.ym.split("-").map(Number), d = new Date(y, m - 1 + Number(at("[data-mon]").dataset.mon), 1); S.ym = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; load(); return; }
     if (at("[data-mode]")) { S.mode = at("[data-mode]").dataset.mode; render(); return; }
     if (!S.loaded) return;
+    if (at("[data-wpen]")) { S.pen = at("[data-wpen]").dataset.wpen; render(); return; }
     if (S.mode === "wish" && at("td.day")) { if (!S.canEdit && S.wishWho !== S.myName) return; cycleWish(at("td.day").dataset.day); return; }
     if (at("[data-slot]") && S.canEdit) { const [date, k, i] = at("[data-slot]").dataset.slot.split("|"); S.pick = { date, k, i: Number(i) }; drawPick(); return; }
     if (at("[data-dk]") && S.canEdit) { S.pick = { date: at("[data-dk]").dataset.dk, k: "d" }; drawPick(); return; }
@@ -251,6 +266,8 @@
   }
   document.addEventListener("change", (e) => {
     if (e.target.id === "shWho") { S.wishWho = e.target.value; render(); }
+    if (e.target.id === "shPenFrom") S.penFrom = e.target.value;
+    if (e.target.id === "shPenTo") S.penTo = e.target.value;
     if (e.target.id === "shNames") { S.withNames = e.target.checked; render(); }
     if (e.target.id === "shWishNote") { S.month = S.month || {}; S.month.wishNote = Object.assign({}, S.month.wishNote, { [S.wishWho]: e.target.value.trim() }); changed("month"); }
   });
