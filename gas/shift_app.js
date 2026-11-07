@@ -131,11 +131,17 @@
       <div class="wlist" data-wish-list>${(() => { const w = ((S.month && S.month.wish) || {})[S.wishWho] || {}, ds = Object.keys(w).sort();
         return ds.length ? ds.map((d) => `<span class="wi">${esc(X.label(d))} ${esc(wishText(w[d]))}${S.canEdit || S.wishWho === S.myName ? `<button type="button" data-wish-del="${d}" aria-label="消す">×</button>` : ""}</span>`).join("") : `<span class="note">${esc(S.wishWho)}さんの今月の希望はまだありません</span>`; })()}</div>
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
+    // シフトの確定（2026-11-07 依頼者「管理者以外は確定までは見えないように。最終確定ボタン」）
+    const fixed = X.isFixed(S.month, S.ym), hidden = !S.canEdit && (!!(S.month && S.month.hidden) || !fixed), fx = (S.month && S.month.fixed) || null;
+    if (S.canEdit) html += fixed ? `<div class="sh-fix on" data-fix="on">✅ この月のシフトは<b>確定</b>しています（表の職員にも見え、職場カレンダーにも出ます）${fx && fx.at ? `<small>${esc(String(fx.at).slice(5, 10).replace("-", "/"))} ${esc(fx.by || "")}</small>` : ""}<button data-act="unfix">確定を取り消す</button></div>`
+      : `<div class="sh-fix" data-fix="off">この月のシフトは<b>まだ確定していません</b>。組む人（管理者など）だけに見えています。表の職員には希望だけが見え、職場カレンダーにも出ません。<button data-act="fix" class="primary" data-fix-btn>✅ このシフトで確定する</button></div>`;
+    else if (hidden) html += `<div class="sh-fix" data-unfixed>この月のシフトはまだ確定していません。確定すると、ここに勤務が出ます（今は希望だけ入れられます）。</div>`;
     const hs = X.holes(S.month, c, S.ym), holeSet = new Set(hs.map((h) => `${h.date}|${h.kind}|${h.idx}`));
     const conf = X.conflicts(S.month, c, S.ym), confSet = new Set(conf.map((x) => `${x.date}|${x.name}`));
     const le = X.lateEarly(S.month, c, S.ym), leSet = new Set(le.map((x) => `${x.date}|e|${x.slot}`)), leFix = le.length ? X.fixLateEarly(S.month, c, S.ym) : { fixed: [], left: [] };
     const ri = X.ruleIssues(S.month, c, S.ym), riSet = new Set(ri.map((x) => `${x.date}|${x.kind}|${x.now}`));
     const days = X.daysOfMonth(S.ym), lead = (X.wdOf(days[0]) + 6) % 7;   // 月曜始まり（2026-11-07 依頼者）
+    html += `<div class="sh-legend" data-legend><span class="e">赤＝早番</span>・<span class="l">青＝遅番</span>（①②③は番号）</div>`;
     html += `<table class="sh-grid"><thead><tr>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th class="${i === 0 ? "su" : i === 6 ? "sa" : ""}">${X.WD[i]}曜日</th>`).join("")}</tr></thead><tbody>`;
     const cells = Array(lead).fill(null).concat(days);
     while (cells.length % 7) cells.push(null);
@@ -144,17 +150,17 @@
         if (!date) return `<td class="empty"></td>`;
         const d = X.daysOfMonth ? (S.month && S.month.days || {})[date] || {} : {}, need = X.needOf(c, date);
         const slot = (k, i) => { const s = (d[k] || {})[i], n = X.slotName(s), hole = holeSet.has(`${date}|${k}|${i}`), bad = n && confSet.has(`${date}|${n}`);
-          return `<button class="slot ${k}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i>${X.KIND[k]}${X.MARK[i] || i}</i>${n ? esc(n) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
+          return `<button class="slot ${k}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i><b class="kk">${X.KIND[k]}</b>${X.MARK[i] || i}</i>${n ? esc(n) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
         const maxE = Math.max(need.e, ...Object.keys(d.e || {}).map(Number), 0), maxL = Math.max(need.l, ...Object.keys(d.l || {}).map(Number), 0);
         const rows = Math.max(maxE, maxL);
-        let grid = "";
-        for (let i = 1; i <= rows; i++) grid += `<div class="pair">${i <= maxE ? slot("e", i) : `<span></span>`}${i <= maxL ? slot("l", i) : `<span></span>`}</div>`;
+        let grid = "";   // スマホでは早番（赤）・遅番（青）を1列に並べ、名前が見えるようにする（2026-11-07 依頼者「スマホだと名前わからない」）
+        if (!hidden) for (let i = 1; i <= rows; i++) grid += `<div class="pair">${i <= maxE ? slot("e", i) : `<span></span>`}${i <= maxL ? slot("l", i) : `<span></span>`}</div>`;
         const wishes = c.members.map((x) => [x.name, X.wishOf(S.month, x.name, date)]).filter((x) => x[1]);
         const off = X.offList(S.month, c, date);
         const wd = X.wdOf(date);
-        return `<td class="day${wd === 0 ? " su" : wd === 6 ? " sa" : ""}${S.mode === "wish" ? " wishmode" : ""}" data-day="${date}"><div class="dnum">${Number(date.slice(8))}${d.note ? `<span class="dnote">${esc(d.note)}</span>` : ""}</div>${grid}
-          <div class="line"><button class="dk" data-dk="${date}" ${S.mode === "wish" ? "tabindex=-1" : ""}>日勤：${esc((d.d || []).join("、"))}</button></div>
-          <div class="line off">休み：${off.map((n) => `<span class="${X.wishOf(S.month, n, date) ? "w" : ""}">${esc(n)}</span>`).join("、")}</div>
+        return `<td class="day${wd === 0 ? " su" : wd === 6 ? " sa" : ""}${S.mode === "wish" ? " wishmode" : ""}" data-day="${date}"><div class="dnum">${Number(date.slice(8))}${d.note ? `<span class="dnote">${esc(d.note)}</span>` : ""}</div><div class="slots">${grid}</div>
+          ${hidden ? "" : `<div class="line"><button class="dk" data-dk="${date}" ${S.mode === "wish" ? "tabindex=-1" : ""}>日勤：${esc((d.d || []).join("、"))}</button></div>
+          <div class="line off">休み：${off.map((n) => `<span class="${X.wishOf(S.month, n, date) ? "w" : ""}">${esc(n)}</span>`).join("、")}</div>`}
           ${wishes.length ? `<div class="line wish">希望：${wishes.map(([n, w]) => `<span class="${/休/.test(w) ? "woff" : ""}">${esc(n)} ${esc(w)}</span>`).join("、")}</div>` : ""}</td>`;
       }).join("") + "</tr>";
     }
@@ -274,6 +280,13 @@
     if (act === "fixturn") { const r = X.fixLateEarly(S.month, cfg(), S.ym); S.month = r.month; changed("month");
       toast(`遅番の次の日の早番を替えました：${r.fixed.map((x) => x.late ? `${X.label(x.late.date)} 遅${X.MARK[x.late.slot]}→${x.late.to}` : `${X.label(x.date)} 早${X.MARK[x.slot]}→${x.to}`).join("、")}`); return; }
     if (act === "fixrules") { const n = X.ruleIssues(S.month, cfg(), S.ym).length; S.month = X.fixRules(S.month, cfg(), S.ym); changed("month"); toast(`決まりどおりに並べ替えました（${n}件）`); return; }
+    if (act === "fix") {
+      const hn = X.holes(S.month, cfg(), S.ym).length;
+      if (!confirm(`${S.ym.replace("-", "年")}月のシフトを確定します。${hn ? `\n※まだ空きが ${hn}枠 あります。` : ""}\n確定すると、表の職員にも見え、職場カレンダーにも出ます。よろしいですか？`)) return;
+      S.month = S.month || {}; S.month.fixed = { at: new Date().toISOString(), by: me().name || "" }; changed("month"); toast("確定しました。職員にも見え、カレンダーにも出ます"); return; }
+    if (act === "unfix") {
+      if (!confirm("確定を取り消します。表の職員には勤務が見えなくなり、職場カレンダーからも消えます。よろしいですか？")) return;
+      S.month = S.month || {}; S.month.fixed = false; changed("month"); toast("確定を取り消しました"); return; }
     if (act === "auto") {
       if (!confirm(`${S.ym.replace("-", "年")}月のシフトを自動で作ります。\n希望・基本パターン・決まり・「遅番の次の日は早番にしない」を見て、空いている枠を埋めます。\n手で入れた枠はそのままです。よろしいですか？`)) return;
       const before = X.holes(S.month, cfg(), S.ym).length, r = X.autoShift(S.month, cfg(), S.ym); S.month = r.month; changed("month");

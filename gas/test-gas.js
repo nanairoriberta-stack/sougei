@@ -635,6 +635,31 @@ async function bootstrap() {
     assert.ok(!(r3.value.wish["秋山"] || {})["2026-11-10"], "ほかの人の希望は入らない");
     assert.strictEqual(r3.value.days["2026-11-02"].e[1].n, "橋本", "シフトは消えない");
     assert.strictEqual(r3.value.wishNote["横田"], "8日 休みたい");
+    // 確定（2026-11-07 依頼者「管理者以外は確定までは見えないように。最終確定ボタン」）：12月は確定するまで表の職員には勤務が見えず、カレンダーにも出ない
+    { const q12 = { group: "m", ym: "2026-12" }, D = "2026-12-01";
+      const a0 = (await admin.call("shift.get", q12)).month.value, a1 = JSON.parse(JSON.stringify(a0 || {})); a1.days = { [D]: { e: { 1: { n: "近藤" } }, l: {}, d: [] } };
+      await admin.call("shift.save", Object.assign({ kind: "month", base: a0, baseKnown: true, mine: a1 }, q12));
+      while ((await admin.call("shift.syncCal", q12)).left > 0);
+      const y0 = (await yoko.call("shift.get", q12)).month.value || {};
+      assert.ok(y0.hidden && !Object.keys(y0.days || {}).length, "確定前は表の職員に勤務が見えない");
+      assert.strictEqual((await admin.call("shift.get", q12)).month.value.days[D].e[1].n, "近藤", "組む人には見える");
+      const cal12 = async () => (await admin.call("docs.query", { col: "days", from: "2026-12-01", to: "2026-12-31" })).reduce((a, d) => a + Object.values(d.events).filter((e) => /^shm/.test(e.id) && !e.deleted).length, 0);
+      assert.strictEqual(await cal12(), 0, "確定前はカレンダーに出ない");
+      const yw = JSON.parse(JSON.stringify(y0)); yw.wish = { "横田": { "2026-12-05": "休" } };
+      const ry = await yoko.call("shift.save", Object.assign({ kind: "month", base: y0, baseKnown: true, mine: yw }, q12));
+      assert.ok(ry.value.hidden && !Object.keys(ry.value.days).length, "保存の返事にも勤務は入れない");
+      const a2 = (await admin.call("shift.get", q12)).month.value;
+      assert.strictEqual(a2.days[D].e[1].n, "近藤", "表の職員の希望の保存で勤務は消えない"); assert.strictEqual(a2.wish["横田"]["2026-12-05"], "休");
+      const a3 = JSON.parse(JSON.stringify(a2)); a3.fixed = { at: "2026-11-25T09:00:00Z", by: "管理者" };
+      await admin.call("shift.save", Object.assign({ kind: "month", base: a2, baseKnown: true, mine: a3 }, q12)); while ((await admin.call("shift.syncCal", q12)).left > 0);
+      assert.strictEqual((await yoko.call("shift.get", q12)).month.value.days[D].e[1].n, "近藤", "確定すると表の職員にも見える");
+      assert.ok(await cal12() > 0, "確定するとカレンダーに出る");
+      const a4 = (await admin.call("shift.get", q12)).month.value, a5 = JSON.parse(JSON.stringify(a4)); a5.fixed = false;
+      await admin.call("shift.save", Object.assign({ kind: "month", base: a4, baseKnown: true, mine: a5 }, q12)); while ((await admin.call("shift.syncCal", q12)).left > 0);
+      assert.strictEqual(await cal12(), 0, "確定を取り消すとカレンダーから消える");
+      assert.ok((await yoko.call("shift.get", q12)).month.value.hidden, "また見えなくなる");
+      const lg = g.sheets.get("変更履歴").data.slice(1).map((r) => r.join(" | "));
+      assert.ok(lg.some((l) => l.includes("2026-12") && l.includes("シフトを確定")) && lg.some((l) => l.includes("確定を取り消し")), "変更履歴に確定・取り消し"); }
     await yoko.call("shift.save", Object.assign({ kind: "cfg", base: null, baseKnown: true, mine: { members: [] } }, q)).then(() => assert.fail("設定は変えられない"), (e) => assert.strictEqual(e.code, "invalid_argument"));
     // 設定（職員・曜日ごとの枠の数）
     await hachi.call("shift.save", { group: "f", ym: "2026-11", kind: "cfg", base: null, baseKnown: true, mine: { members: [{ name: "女性A", pat: { 1: "早" } }], need: { 1: { e: 2, l: 2 } } } });

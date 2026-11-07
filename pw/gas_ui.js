@@ -393,6 +393,14 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await Y.pg.locator(".sh-wishbar").innerText()).includes("横田"), "自分の希望");
     assert.strictEqual(await Y.pg.locator("#shWho").count(), 0, "表の職員は自分（ログインした人）が選ばれている"); await Y.pg.click('td[data-day="2026-11-20"] .dnum'); await Y.pg.waitForTimeout(200); await Y.pg.click('[data-wpick="休"]'); await Y.pg.waitForTimeout(2500);
     assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.wish["横田"]["2026-11-20"], "休", "自分の希望が保存");
+    // スマホでは早番（赤）・遅番（青）を1列にして名前が見える（2026-11-07 依頼者「スマホだと名前わからない」）
+    { const sl = Y.pg.locator('[data-slot="2026-11-04|e|1"]'), bx = await sl.boundingBox(), td = await Y.pg.locator('td[data-day="2026-11-04"]').boundingBox();
+      assert.ok(bx.width > td.width * 0.8, "スマホは1列（枠いっぱい） " + bx.width + "/" + td.width);
+      assert.ok(await sl.evaluate((e) => e.scrollWidth <= e.clientWidth + 1), "名前が切れない");
+      assert.ok(!(await sl.innerText()).includes("早"), "「早」の字は出さない（色で分かる） " + await sl.innerText());
+      assert.strictEqual(await sl.evaluate((e) => getComputedStyle(e).color), "rgb(220, 38, 38)", "早番は赤");
+      assert.strictEqual(await Y.pg.locator('[data-slot="2026-11-04|l|1"]').evaluate((e) => getComputedStyle(e).color), "rgb(29, 78, 216)", "遅番は青");
+      assert.ok(await Y.pg.locator("[data-legend]").isVisible(), "赤＝早番・青＝遅番の説明"); }
     await Y.pg.screenshot({ path: "g_shiftpage_mobile.png" });
     assert.deepStrictEqual(real(Y.errs), [], "画面エラーなし"); await Y.pg.context().close();
     // 男性の表は ?d= が無ければ翌月から開く・「🤖 シフトを自動で作る」で空きが埋まる（2026-11-07 依頼者）
@@ -405,6 +413,12 @@ const D = path.join(__dirname, "../gas/out");
       const h1 = await Z.pg.locator(".slot.hole").count(); assert.ok(h1 < 10, `自動で作ると空きが埋まる ${h0}→${h1}`);
       const sv = api(t, "shift.get", [{ group: "m", ym: nym }]).data.month.value; assert.ok(Object.keys(sv.days || {}).length >= 28, "サーバーに保存");
       assert.ok((await Z.pg.locator("body").innerText()).includes("自動で作りました"), "結果のお知らせ");
+      // 確定ボタン（2026-11-07 依頼者）：まだ確定していない → 確定 → 取り消し
+      assert.ok(await Z.pg.locator('[data-fix="off"]').isVisible(), "まだ確定していない");
+      Z.pg.once("dialog", (d) => d.accept()); await Z.pg.click("[data-fix-btn]"); await Z.pg.waitForTimeout(2500);
+      assert.ok(await Z.pg.locator('[data-fix="on"]').isVisible(), "確定した");
+      assert.ok(api(t, "shift.get", [{ group: "m", ym: nym }]).data.month.value.fixed.at, "サーバーに確定が残る");
+      await Z.pg.locator("[data-fix]").screenshot({ path: "g_shift_fixed.png" });
       assert.deepStrictEqual(real(Z.errs), [], "画面エラーなし"); await Z.pg.context().close(); }
     console.log("シフト表: 下書き→穴→LINE文・希望・設定・職員の希望・自動で作る OK"); }
   console.log(await P.pg.evaluate(() => ({ react: !!window.React, root: document.getElementById("root").innerHTML.length, kv: !!window.__sgkv, setkv: typeof window.__sgSetKV, st: window.__sgkv && window.__sgkv.status() })));

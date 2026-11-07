@@ -432,5 +432,8 @@
     return wb;
   }
   const fileName = (ym, groupName) => `シフト表_${groupName || ""}_${Number(ym.slice(0, 4))}年${Number(ym.slice(5, 7))}月.xlsx`;
-  return { autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  /* シフトの確定（2026-11-07 依頼者「管理者以外は休日出勤が誰がどこに出るとか、シフト確定までは見えないように。最終確定ボタン」）。
+     month.fixed = {at, by}（確定）／false（取り消した）。2026年11月までで fixed の欄が無い月は、以前から使っていた表なので確定とみなす */
+  const isFixed = (month, ym) => { const f = month && month.fixed; return f === undefined || f === null ? String(ym) <= "2026-11" : !!f; };
+  return { isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

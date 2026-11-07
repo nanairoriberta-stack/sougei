@@ -44,6 +44,10 @@ label.opt{flex-direction:row;align-items:center;gap:6px;padding:6px;border:1px s
 .sh-toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#18201d;color:#fff;padding:10px 16px;border-radius:8px;z-index:60}
 [hidden]{display:none!important}
 @media (max-width:760px){.sh{padding:6px 4px 60px}.sh-grid{font-size:11px}.slot{font-size:10.5px}.line{font-size:10px}.sh-grid th{font-size:11px}}
+/* スマホ：早番は赤・遅番は青の名前を1列に（「早」「遅」の字は出さず ①②③ だけ）。名前は折り返して全部見せる */
+@media (max-width:760px){.slots{display:flex;flex-direction:column;gap:1px}.slots .pair{display:contents}.slots .pair>span{display:none}.slot.e{order:1}.slot.l{order:2}
+.slot{white-space:normal;overflow:visible;padding:1px 2px;line-height:1.25;font-size:11px}.slot .kk{display:none}.slot i{font-size:9px;margin-right:1px}
+.slot.e,.slot.e i{color:#dc2626;font-weight:600}.slot.l,.slot.l i{color:#1d4ed8;font-weight:600}.sh-legend{display:block}.slot.hole{color:#92400e}.sh-grid td{padding:2px 1px}.sh-grid th{font-size:10px;padding:2px 0}}
 @media print{@page{size:A4 landscape;margin:8mm}.sh-h2,.sh-base{display:none}body{background:#fff}.sh-tools,.sh-wishbar,.sh-holes,.st,.sh-cal,.sh-month button,.sh-tabs,#sghChip,.sgh-chip{display:none!important}.sh-bar{background:#fff;color:#000;border:1px solid #000}.slot.hole{outline:0;background:none}.sh{padding:0}}
 
 .conf.rulex{color:#c2410c}.rrow{flex-wrap:wrap;gap:4px;align-items:center}.rrow select{padding:4px}
@@ -54,3 +58,6 @@ label.opt{flex-direction:row;align-items:center;gap:6px;padding:6px;border:1px s
 
 .st.bad{white-space:normal;word-break:break-all;max-width:100%;display:inline-block;border:1px solid var(--bad);font-weight:700}
 .wquick{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}.wquick select{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:14px}.wquick .primary{padding:7px 16px;border-radius:8px;border:0;background:#ea580c;color:#fff;font-weight:700}.wlist{display:flex;flex-wrap:wrap;gap:6px;width:100%}.wi{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid #fdba74;border-radius:999px;padding:3px 4px 3px 10px;font-size:13px}.wi button{border:0;background:#fee2e2;color:#b91c1c;border-radius:999px;width:22px;height:22px;cursor:pointer}
+
+@media (min-width:761px){.sh-legend{display:none}}.sh-legend{font-size:11px;margin:4px 2px}.sh-legend .e{color:#dc2626;font-weight:700}.sh-legend .l{color:#1d4ed8;font-weight:700}
+.sh-fix{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #fdba74;font-size:13px}.sh-fix.on{background:#ecfdf5;border-color:#6ee7b7}.sh-fix small{color:var(--sub)}.sh-fix button{margin-left:auto}

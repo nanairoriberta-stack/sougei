@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.08d',
+  VERSION: '2026.11.08f',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -809,7 +809,13 @@ function shiftGet_(me, a) {
   var mine = shiftMemberName_(cfg, me.name), member = !!mine;
   if (!canEdit && !member) throw { code: 'invalid_argument', message: 'このシフト表を見る権限がありません（「職員ID」シートG列か、表の職員に入っている人だけ）' };
   // その月がまだ保存されていなければ、紙から写した最初の中身（SGShift.monthOf。2026年11月・男性）
-  return { cfg: { rev: c ? c.rev : 0, value: c ? c.value : null }, month: { rev: m ? m.rev : 0, value: SGShift.monthOf(q.group, q.ym, m ? m.value : null) }, canEdit: canEdit, member: member, myName: mine || me.name };
+  var mv = SGShift.monthOf(q.group, q.ym, m ? m.value : null);
+  return { cfg: { rev: c ? c.rev : 0, value: c ? c.value : null }, month: { rev: m ? m.rev : 0, value: canEdit ? mv : shiftHide_(mv, q.ym) }, canEdit: canEdit, member: member, myName: mine || me.name };
+}
+// 確定していない月は、組む人（管理者など）だけが勤務を見られる。表の職員には希望だけ渡す（2026-11-07 依頼者）
+function shiftHide_(v, ym) {
+  if (!v || SGShift.isFixed(v, ym)) return v;
+  var o = JSON.parse(JSON.stringify(v)); o.days = {}; o.hidden = true; return o;
 }
 function shiftSave_(me, a) {
   var q = shiftArgs_(a), kind = a.kind === 'cfg' ? 'cfg' : 'month', canEdit = shiftGroups_(me).indexOf(q.group) >= 0;
@@ -832,12 +838,12 @@ function shiftSave_(me, a) {
     if (!SGKV.eq(merged, theirs)) {
       rev = rev + 1;
       docSet_(path, merged, rev, { k: path }, idx);
-      log_(me, 'シフト表', SGShift.GROUPS[q.group] + (kind === 'cfg' ? '（設定）' : ' ' + q.ym), canEdit ? (kind === 'cfg' ? '設定の変更' : 'シフトの変更') : '希望の変更');
+      log_(me, 'シフト表', SGShift.GROUPS[q.group] + (kind === 'cfg' ? '（設定）' : ' ' + q.ym), canEdit ? (kind === 'cfg' ? '設定の変更' : (!!(merged && merged.fixed) !== !!(theirs && theirs.fixed) ? (merged && merged.fixed ? 'シフトを確定' : '確定を取り消し') : 'シフトの変更')) : '希望の変更');
     }
     // 組んだ勤務を職場カレンダーにも（2026-11-07 依頼者「自動で随時反映」）。失敗してもシフト表の保存は止めない
     var calLeft = 0;
     if (kind === 'month') { try { calLeft = shiftSyncCal_(q.group, q.ym, merged, idx); } catch (e) { Logger.log('シフト表→カレンダー：' + (e && e.message || e)); } }
-    return { rev: rev, value: merged, calLeft: calLeft };
+    return { rev: rev, value: canEdit ? merged : shiftHide_(merged, q.ym), calLeft: calLeft };
   });
 }
 /* シフト表 → 職場カレンダー（2026-11-07 依頼者）。1人1日1件の「職員その他」の予定（例「余村慎 早番①」、終日）。
@@ -853,7 +859,8 @@ function shCalId_(pre, date, name) {
 }
 var SH_SYNC_MAX = 8;   // 1回に書き直す日の文書の数（はじめての月は何回かに分けて書く。残りは画面が続けて頼む shift.syncCal）
 function shiftSyncCal_(group, ym, month, idx) {
-  var cd = docGet_('shift/' + group + '/cfg', idx), items = SGShift.calItems(month || {}, ym, SGShift.cfgOf(group, cd ? cd.value : null)), pre = 'sh' + group + ym.replace('-', '');
+  // 確定するまではカレンダーに出さない（確定を取り消したら消す。2026-11-07 依頼者）
+  var cd = docGet_('shift/' + group + '/cfg', idx), items = SGShift.isFixed(month, ym) ? SGShift.calItems(month || {}, ym, SGShift.cfgOf(group, cd ? cd.value : null)) : [], pre = 'sh' + group + ym.replace('-', '');
   var want = {};
   items.forEach(function (it) { want[shCalId_(pre, it.date, it.name)] = it; });
   var lastPath = 'shift/' + group + '/' + ym + '/cal', lastDoc = docGet_(lastPath, idx), last = (lastDoc && lastDoc.value) || {};
