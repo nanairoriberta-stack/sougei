@@ -124,11 +124,7 @@
       <button data-act="draft" title="職員ごとの曜日のパターン（下の表）と希望から、空いている枠だけを埋めます">基本パターンで下書き</button>
       <button data-act="line" class="primary">空きを見てLINE文を作る</button><button data-act="excel" data-excel title="この月のシフト表を、紙と同じカレンダーの形でExcelに出します（A4横）">Excelで出力</button><button data-act="settings">設定（職員・枠の数）</button>` : `<span class="note">あなたの希望を入れられます（日付を押すたびに 休→PM休→AM休→早→遅→日→なし）</span>`) + `</div>`;
     if (S.mode === "wish") html += `<div class="sh-wishbar">希望を入れる人：${S.canEdit ? `<select id="shWho">${c.members.map((x) => `<option ${x.name === S.wishWho ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<b>${esc(S.wishWho)}</b>`}
-      <span class="wpen" data-wpen-bar>${WISH_BTNS.map(([k, n]) => `<button type="button" data-wpen="${esc(k)}" aria-pressed="${S.pen === k}">${esc(n)}</button>`).join("")}</span>
-      ${S.pen === "time" ? `<span class="wtime"><input type="time" id="shPenFrom" step="300" value="${esc(S.penFrom)}" aria-label="何時から">〜<input type="time" id="shPenTo" step="300" value="${esc(S.penTo)}" aria-label="何時まで"></span>` : ""}
-      <span class="wquick"><label>日にち <select id="shWishDay">${X.daysOfMonth(S.ym).map((d) => `<option value="${d}" ${d === S.wishDay ? "selected" : ""}>${esc(X.label(d))}</option>`).join("")}</select></label>
-        <button type="button" class="primary" data-wish-add>入れる</button></span>
-      <span class="note">職員・日にち・希望を選んで「入れる」。下のカレンダーの日付を押しても入ります（同じ希望の日をもう一度押すと消えます）</span>
+      <span class="note">日付のマスを押すと、休み・早番などを選べます</span>
       <div class="wlist" data-wish-list>${(() => { const w = ((S.month && S.month.wish) || {})[S.wishWho] || {}, ds = Object.keys(w).sort();
         return ds.length ? ds.map((d) => `<span class="wi">${esc(X.label(d))} ${esc(wishText(w[d]))}${S.canEdit || S.wishWho === S.myName ? `<button type="button" data-wish-del="${d}" aria-label="消す">×</button>` : ""}</span>`).join("") : `<span class="note">${esc(S.wishWho)}さんの今月の希望はまだありません</span>`; })()}</div>
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
@@ -186,6 +182,14 @@
   function drawPick() {
     const p = S.pick, el = $("shPick"); if (!el) return;
     if (!p) { el.innerHTML = ""; return; }
+    if (p.wish) {   // 希望：日付を押すと出る（2026-11-07 依頼者「日付選んでポップアップで」）
+      const cur = X.wishOf(S.month, S.wishWho, p.date);
+      el.innerHTML = `<div class="ov" data-close-pick><div class="pk" data-wish-pick><h3>${X.label(p.date)} ${esc(S.wishWho)}さんの希望</h3>
+        <div class="opts">${WISH_BTNS.filter(([k]) => k && k !== "time").map(([k, n]) => `<button class="opt${cur === k ? " on" : ""}" data-wpick="${esc(k)}">${esc(n)}</button>`).join("")}</div>
+        <h4>その他（時刻）</h4><div class="wtime"><input type="time" id="shPenFrom" step="300" value="${esc(S.penFrom)}" aria-label="何時から">〜<input type="time" id="shPenTo" step="300" value="${esc(S.penTo)}" aria-label="何時まで"><button class="opt" data-wpick-time>この時刻で入れる</button></div>
+        <div class="acts">${cur ? `<button data-wpick="">希望を消す（今：${esc(wishText(cur))}）</button>` : ""}<button data-close-pick>閉じる</button></div></div></div>`;
+      return;
+    }
     if (p.wd != null) {   // 基本シフトのマス
       const c = cfg(), b = (c.base || {})[p.wd] || {};
       if (p.k === "d") {
@@ -242,10 +246,10 @@
     if (at("[data-mon]")) { const [y, m] = S.ym.split("-").map(Number), d = new Date(y, m - 1 + Number(at("[data-mon]").dataset.mon), 1); S.ym = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; load(); return; }
     if (at("[data-mode]")) { S.mode = at("[data-mode]").dataset.mode; render(); return; }
     if (!S.loaded) return;
-    if (at("[data-wpen]")) { S.pen = at("[data-wpen]").dataset.wpen; render(); return; }
-    if (at("[data-wish-add]")) { if (!S.canEdit && S.wishWho !== S.myName) return; S.wishDay = ($("shWishDay") || {}).value || S.wishDay; cycleWish(S.wishDay, true); return; }
     if (at("[data-wish-del]")) { if (!S.canEdit && S.wishWho !== S.myName) return; const d = at("[data-wish-del]").dataset.wishDel, who = S.wishWho; S.month.wish = Object.assign({}, S.month.wish); const w = Object.assign({}, S.month.wish[who]); delete w[d]; S.month.wish[who] = w; changed("month"); return; }
-    if (S.mode === "wish" && at("td.day")) { if (!S.canEdit && S.wishWho !== S.myName) return; cycleWish(at("td.day").dataset.day); return; }
+    if (at("[data-wpick]") && S.pick && S.pick.wish) { S.pen = at("[data-wpick]").dataset.wpick; cycleWish(S.pick.date, true); S.pick = null; drawPick(); return; }
+    if (at("[data-wpick-time]") && S.pick && S.pick.wish) { S.penFrom = ($("shPenFrom") || {}).value || ""; S.penTo = ($("shPenTo") || {}).value || ""; if (!S.penFrom) { alert("何時からを入れてください"); return; } S.pen = "time"; cycleWish(S.pick.date, true); S.pick = null; drawPick(); return; }
+    if (S.mode === "wish" && at("td.day") && !at(".ov")) { if (!S.canEdit && S.wishWho !== S.myName) return; S.pick = { date: at("td.day").dataset.day, wish: true }; drawPick(); return; }
     if (at("[data-slot]") && S.canEdit) { const [date, k, i] = at("[data-slot]").dataset.slot.split("|"); S.pick = { date, k, i: Number(i) }; drawPick(); return; }
     if (at("[data-dk]") && S.canEdit) { S.pick = { date: at("[data-dk]").dataset.dk, k: "d" }; drawPick(); return; }
     if (at("[data-pick]")) { const p = S.pick; setSlot(p.date, p.k, p.i, at("[data-pick]").dataset.pick, ($("shTime") || {}).value ? $("shTime").value.trim() : ""); S.pick = null; drawPick(); return; }
@@ -294,7 +298,6 @@
   document.addEventListener("change", (e) => {
     if (e.target.id === "shWho") { S.wishWho = e.target.value; render(); }
     if (e.target.id === "shPenFrom") S.penFrom = e.target.value;
-    if (e.target.id === "shWishDay") S.wishDay = e.target.value;
     if (e.target.id === "shPenTo") S.penTo = e.target.value;
     if (e.target.id === "shNames") { S.withNames = e.target.checked; render(); }
     if (e.target.id === "shWishNote") { S.month = S.month || {}; S.month.wishNote = Object.assign({}, S.month.wishNote, { [S.wishWho]: e.target.value.trim() }); changed("month"); }

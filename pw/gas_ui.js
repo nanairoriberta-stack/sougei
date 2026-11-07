@@ -338,28 +338,30 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await T.pg.locator('[data-slot="2026-11-03|e|3"]').innerText()).includes("余村慎(6~9)"));
     // 希望を入れる：秋山 11/12(木) 休 → 早③に入っているので「希望とちがう」
     await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", "秋山");
-    await T.pg.click('td[data-day="2026-11-12"] .dnum'); await T.pg.waitForTimeout(300);
+    const wp = async (date, v) => { await T.pg.click(`td[data-day="${date}"] .dnum`); await T.pg.waitForTimeout(200); await T.pg.click(`[data-wpick="${v}"]`); await T.pg.waitForTimeout(250); };
+    await wp("2026-11-12", "休");
     assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("12(木)：休"), "今月の希望の列");
     assert.ok((await T.pg.locator("[data-conf-list]").innerText()).includes("11/12(木) 秋山さんは「休」の希望ですが入っています"));
-    // 希望はボタンで選んで日付を押す（2026-11-07）：早ﾏﾝｼｮﾝのみ・その他（時刻）・同じ日をもう一度押すと消える
-    assert.deepStrictEqual(await T.pg.$$eval("[data-wpen]", (o) => o.map((x) => x.textContent)), ["休み", "AM休", "PM休", "早番", "遅番", "日勤", "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝｼｮﾝのみ", "その他(時刻)", "消す"], "希望のボタン");
-    await T.pg.click('[data-wpen="早ﾏﾝのみ"]'); await T.pg.waitForTimeout(150); await T.pg.click('td[data-day="2026-11-13"] .dnum'); await T.pg.waitForTimeout(250);
-    await T.pg.click('[data-wpen="time"]'); await T.pg.waitForTimeout(150); await T.pg.fill("#shPenFrom", "09:00"); await T.pg.fill("#shPenTo", "15:00"); await T.pg.click('td[data-day="2026-11-14"] .dnum'); await T.pg.waitForTimeout(250);
-    await T.pg.click('[data-wpen="休"]'); await T.pg.waitForTimeout(150); await T.pg.click('td[data-day="2026-11-15"] .dnum'); await T.pg.waitForTimeout(200); await T.pg.click('td[data-day="2026-11-15"] .dnum'); await T.pg.waitForTimeout(250);
-    { const pat = (await T.pg.locator(".sh-pat").innerText()).split("\n").find((l) => l.startsWith("秋山")) || ""; assert.ok(pat.includes("13(金)：早ﾏﾝのみ") && pat.includes("14(土)：9:00~15:00") && !pat.includes("15(日)"), "ボタンの希望 " + pat); }
-    await T.pg.click('[data-wpen="休"]'); await T.pg.waitForTimeout(100);
-    // かんたん入力：職員・日にち・希望を選んで「入れる」・×で消す（2026-11-07 依頼者）
-    await T.pg.click('[data-wpen="遅"]'); await T.pg.waitForTimeout(100); await T.pg.selectOption("#shWishDay", "2026-11-20"); await T.pg.click("[data-wish-add]"); await T.pg.waitForTimeout(250);
-    assert.ok((await T.pg.locator("[data-wish-list]").innerText()).includes("11/20(金) 遅番"), "かんたん入力 " + await T.pg.locator("[data-wish-list]").innerText());
-    await T.pg.click('[data-wish-del="2026-11-20"]'); await T.pg.waitForTimeout(250);
-    assert.ok(!(await T.pg.locator("[data-wish-list]").innerText()).includes("11/20"), "×で消える");
+    // 希望は日付を押すと出る小さな画面で選ぶ（2026-11-07 依頼者「日付選んでポップアップで」）：早ﾏﾝｼｮﾝのみ・その他（時刻）・消す
+    await T.pg.click('td[data-day="2026-11-13"] .dnum'); await T.pg.waitForTimeout(200);
+    assert.ok((await T.pg.locator("[data-wish-pick] h3").innerText()).includes("11/13(金) 秋山さんの希望"), "その日・その人の希望の画面");
+    assert.deepStrictEqual(await T.pg.$$eval("[data-wish-pick] [data-wpick]", (o) => o.map((x) => x.textContent)), ["休み", "AM休", "PM休", "早番", "遅番", "日勤", "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝｼｮﾝのみ"], "希望のボタン");
+    await T.pg.click('[data-wpick="早ﾏﾝのみ"]'); await T.pg.waitForTimeout(250);
+    assert.strictEqual(await T.pg.locator("[data-wish-pick]").count(), 0, "選ぶと閉じる");
+    await T.pg.click('td[data-day="2026-11-14"] .dnum'); await T.pg.waitForTimeout(200); await T.pg.fill("#shPenFrom", "09:00"); await T.pg.fill("#shPenTo", "15:00"); await T.pg.click("[data-wpick-time]"); await T.pg.waitForTimeout(250);
+    await wp("2026-11-15", "休"); await T.pg.click('td[data-day="2026-11-15"] .dnum'); await T.pg.waitForTimeout(200);
+    assert.ok((await T.pg.locator('[data-wpick=""]').innerText()).includes("今：休み"), "今の希望が分かる"); await T.pg.click('[data-wpick=""]'); await T.pg.waitForTimeout(250);
+    { const pat = (await T.pg.locator(".sh-pat").innerText()).split("\n").find((l) => l.startsWith("秋山")) || ""; assert.ok(pat.includes("13(金)：早ﾏﾝのみ") && pat.includes("14(土)：9:00~15:00") && !pat.includes("15(日)"), "ポップアップの希望 " + pat); }
+    assert.ok((await T.pg.locator("[data-wish-list]").innerText()).includes("11/13(金) 早ﾏﾝｼｮﾝのみ"), "その人の希望の一覧");
+    await T.pg.click('[data-wish-del="2026-11-13"]'); await T.pg.waitForTimeout(250);
+    assert.ok(!(await T.pg.locator("[data-wish-list]").innerText()).includes("11/13"), "×で消える");
     // 送っている間に月を切り替えても「未送信」にならず、11月の分が保存される（2026-11-07 実機：null is not an object (evaluating 'q.mine')）
-    await T.pg.selectOption("#shWishDay", "2026-11-21"); await T.pg.click("[data-wish-add]"); await T.pg.click('[data-mon="1"]'); await T.pg.waitForTimeout(3500);
+    await T.pg.click('td[data-day="2026-11-21"] .dnum'); await T.pg.waitForTimeout(150); await T.pg.click('[data-wpick="遅"]'); await T.pg.click('[data-mon="1"]'); await T.pg.waitForTimeout(3500);
     assert.strictEqual(await T.pg.locator("[data-sh-failed]").count(), 0, "未送信にならない");
     assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.wish["秋山"]["2026-11-21"], "遅", "11月の分が保存された");
     assert.strictEqual(await T.pg.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("sh:pend:")).length), 0, "送れていない分が残っていない");
     await T.pg.click('[data-mon="-1"]'); await T.pg.waitForTimeout(1500);
-    await T.pg.selectOption("#shWishDay", "2026-11-21"); await T.pg.click('[data-wpen=""]'); await T.pg.click("[data-wish-add]"); await T.pg.waitForTimeout(300); await T.pg.click('[data-wpen="休"]');
+    await T.pg.click('[data-wish-del="2026-11-21"]'); await T.pg.waitForTimeout(300);
     await T.pg.waitForTimeout(2500);
     const sv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value;
     assert.deepStrictEqual(sv.days["2026-11-03"].e[3], { n: "余村慎", t: "6~9" }, "サーバーに保存");
@@ -387,7 +389,7 @@ const D = path.join(__dirname, "../gas/out");
     if (await Y.pg.locator("#sghNew").count()) { await Y.pg.fill("#sghOld", String(yk[3])); await Y.pg.fill("#sghNew", "3871"); await Y.pg.fill("#sghNew2", "3871"); await Y.pg.click("#sghPinF .go"); await Y.pg.waitForTimeout(2500); }
     assert.strictEqual(await Y.pg.locator('[data-act="draft"]').count(), 0, "組むボタンはない");
     assert.ok((await Y.pg.locator(".sh-wishbar").innerText()).includes("横田"), "自分の希望");
-    await Y.pg.click('td[data-day="2026-11-20"] .dnum'); await Y.pg.waitForTimeout(2500);
+    assert.strictEqual(await Y.pg.locator("#shWho").count(), 0, "表の職員は自分（ログインした人）が選ばれている"); await Y.pg.click('td[data-day="2026-11-20"] .dnum'); await Y.pg.waitForTimeout(200); await Y.pg.click('[data-wpick="休"]'); await Y.pg.waitForTimeout(2500);
     assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.wish["横田"]["2026-11-20"], "休", "自分の希望が保存");
     await Y.pg.screenshot({ path: "g_shiftpage_mobile.png" });
     assert.deepStrictEqual(real(Y.errs), [], "画面エラーなし"); await Y.pg.context().close();
