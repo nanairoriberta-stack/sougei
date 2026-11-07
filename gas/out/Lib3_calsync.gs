@@ -10,7 +10,7 @@ const toMinX = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); r
 const appTime = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); return m ? `${Number(m[1])}:${m[2]}` : ""; };
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const TYPE_LABEL = { staff_off: "職員の休み・不在", staff_plan: "職員の予定", user_absent: "利用者の欠席", user_time: "送迎の変更", user_extra: "利用日外利用", help: "ヘルプ", hwork: "休日出勤", shift: "職員時間変更" };
+const TYPE_LABEL = { staff_off: "職員の休み・不在", staff_plan: "職員の予定", user_absent: "利用者の欠席", user_time: "送迎の変更", user_extra: "利用日外利用", help: "ヘルプ", hwork: "休日出勤", shift: "職員時間変更", help_cancel: "ヘルプキャンセル" };
 const HOLD_ID = "__hold__";                                  // 送迎表の「保留」欄（担当がまだ決まっていないヘルプ）
 
 function specsFor(master, events, date) {
@@ -35,7 +35,7 @@ function specsFor(master, events, date) {
     out.push({ id: ev.id, rev: ev.rev, type: ev.sg.type, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(ev.sg.meet), send: appTime(ev.sg.send), noMeet: ev.sg.noMeet || "", noSend: ev.sg.noSend || "", missing,
       reason: ev.sg.reason || "", note: ev.sg.note || "", deptId: dept ? dept.id : "",
-      wstart: appTime(ev.sg.wstart), wend: appTime(ev.sg.wend), meetPlace: ev.sg.meetPlace || "", sendPlace: ev.sg.sendPlace || "", noRide: !!ev.sg.noRide, afrom: appTime(ev.sg.afrom), ato: appTime(ev.sg.ato), noAway: !!ev.sg.noAway });
+      wstart: appTime(ev.sg.wstart), wend: appTime(ev.sg.wend), meetPlace: ev.sg.meetPlace || "", sendPlace: ev.sg.sendPlace || "", noRide: !!ev.sg.noRide, afrom: appTime(ev.sg.afrom), ato: appTime(ev.sg.ato), noAway: !!ev.sg.noAway, at: appTime(ev.sg.at) });
   }
   return out;
 }
@@ -119,8 +119,28 @@ function revert(next, rec) {
   }
   const ids = new Set(rec.blocks || []);
   if (ids.size) next.blocks = (next.blocks || []).filter((b) => !ids.has(b.id));
+  // ヘルプキャンセルで消したヘルプを戻す（同じ名前・時刻のヘルプがもうあれば二重にしない）
+  if ((rec.cancelled || []).length) {
+    const have = new Set((next.blocks || []).map((b) => b.id)), haveK = new Set((next.blocks || []).map(hcKey));
+    const back = rec.cancelled.filter((b) => !have.has(b.id) && !haveK.has(hcKey(b)));
+    if (back.length) next.blocks = (next.blocks || []).concat(back.map(clone));
+  }
 }
 
+/* ヘルプキャンセル（2026-11-07 依頼者「常設ヘルプのキャンセルもカレンダーから」）：その日のその利用者のヘルプ（週間パターンから入ったものなど。カレンダーのヘルプ cal_・りんく依頼 lk_ は除く）を消す。
+   時刻を選んだときはその時刻のヘルプだけ。名前は「中村ヘルプ」「井上入浴」「黒田入浴（ヘルプ）」のように名前のすぐ後に区切りがあるものだけ（森 と 森井 を混ぜない）。
+   消したコマは記録して、予定を消したら元に戻す。パターン読込などでまた入ったら、また消す（heal） */
+const HC_SEP = /^(ヘルプ|入浴|家事|通院|トイレ|対応|付き?添い?|受診|[（(・･\s　]|$)/;
+function helpCancelHits(sheet, spec) {
+  const names = spec.users.map((u) => u.name).filter(Boolean), at = toMinX(spec.at);
+  return (sheet.blocks || []).filter((b) => {
+    if (!b || b.kind !== "help" || /^(cal_|lk_)/.test(String(b.id || ""))) return false;
+    if (at != null && toMinX(b.time) !== at) return false;
+    const lb = String(b.label || "").trim();
+    return names.some((n) => lb.startsWith(n) && HC_SEP.test(lb.slice(n.length)));
+  });
+}
+const hcKey = (b) => `${String(b.label || "").trim()}@${toMinX(b.time)}`;
 function applySpec(next, spec, keepStaff) {
   const rec = { rev: spec.rev, title: spec.title, type: spec.type, staffOv: {}, userAbsent: {}, userTime: {}, noRide: {}, userExtra: {}, blocks: [] };
   const put = (field, id, val) => {
@@ -148,6 +168,10 @@ function applySpec(next, spec, keepStaff) {
   if (spec.type === "staff_off" || spec.type === "shift") spec.staff.forEach((s) => {
     for (const [t2, it] of offItems(next, spec, s)) { it.staffId = HOLD_ID; (rec.held = rec.held || []).push({ t: t2, id: it.id, staff: s.id }); }
   });
+  if (spec.type === "help_cancel") {
+    const hits = helpCancelHits(next, spec);
+    if (hits.length) { const ids = new Set(hits.map((b) => b.id)); rec.cancelled = hits.map(clone); next.blocks = (next.blocks || []).filter((b) => !ids.has(b.id)); }
+  }
   if (spec.type === "user_absent") spec.users.forEach((u) => put("userAbsent", u.id, true));
   // 利用日外利用：その日だけ利用日にする（送迎表の「今日だけ利用」）。迎え・送りが未割当として出るので担当者が気づける
   if (spec.type === "user_extra") spec.users.forEach((u) => put("userExtra", u.id, true));
@@ -267,6 +291,11 @@ function reconcile(master, sheet, events, date) {
     heal(next || sheet, cur, work);
     healPlaces(() => next || sheet, work, sp.id);
     healHeld(() => next || sheet, work, sp);
+    if (sp.type === "help_cancel") {   // パターン読込などでまた入ったヘルプは、また消す（元に戻すために記録も足す）
+      const hits = helpCancelHits(next || sheet, sp);
+      if (hits.length) { const n = work(), ids = new Set(hits.map((b) => b.id)), r2 = n.calApplied[sp.id], ks = new Set((r2.cancelled || []).map(hcKey));
+        r2.cancelled = (r2.cancelled || []).concat(hits.filter((b) => !ks.has(hcKey(b))).map(clone)); n.blocks = (n.blocks || []).filter((b) => !ids.has(b.id)); }
+    }
     const bl = blocksOf(sp); const have = new Set(((next || sheet).blocks || []).map((b) => b.id));
     if (bl.some((b) => !have.has(b.id))) { const n = work(); n.blocks = (n.blocks || []).filter((b) => !bl.some((x) => x.id === b.id)).concat(bl); }
   }
@@ -288,6 +317,7 @@ function summary0(master, sheet, events, date) {
     time: s.half ? (s.half === "am" ? "AM休（午後から出勤）" : "PM休（午前で退勤）") :
       s.type === "help" ? `${s.from}〜${s.note ? `・${s.note}` : ""}${s.staff.length ? "" : "・担当は未定（保留欄）"}` :
       s.type === "shift" ? [s.wstart && `出勤${s.wstart}`, s.wend && `退勤${s.wend}`, s.afrom && `中抜け${s.afrom}〜${s.ato}`, s.noAway && "中抜けなし", s.noRide && "送迎なし"].filter(Boolean).join("・") || "部署の変更" :
+      s.type === "help_cancel" ? `${s.at ? s.at + "の" : "その日の"}ヘルプをなしに${(() => { const r = ((sheet && sheet.calApplied) || {})[s.id]; const n = ((r && r.cancelled) || []).length; return n ? `（${n}件）` : "（送迎表にまだ無い）"; })()}` :
       s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) : s.type === "user_time" || s.type === "user_extra" ? [s.type === "user_extra" ? "今日だけ利用" : "", s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
 }
 

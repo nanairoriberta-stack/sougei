@@ -386,7 +386,7 @@ const D = path.join(__dirname, "../gas/out");
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
   await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300);
   assert.deepStrictEqual(await A.pg.$$eval('input[name="f-grp"]', (o) => o.map((x) => x.value)), ["staff", "user", "other"], "ラベルの1段目の並び");
-  assert.deepStrictEqual(await A.pg.$$eval('input[name="f-label"]', (o) => o.map((x) => x.value)), ["help", "user", "ride", "extra", "monitor", "shien", "uother"], "利用者の中の並び");
+  assert.deepStrictEqual(await A.pg.$$eval('input[name="f-label"]', (o) => o.map((x) => x.value)), ["help", "hcancel", "user", "ride", "extra", "monitor", "shien", "uother"], "利用者の中の並び");
   assert.strictEqual(await A.pg.evaluate(() => { const c = document.querySelector('input[name="f-label"]:checked'); return c && c.value + (document.activeElement === c ? ":focus" : ""); }), "help:focus", "開いたときはヘルプ");
   await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
   const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await pickLabel(A.pg, label); await A.pg.waitForTimeout(300); };
@@ -394,7 +394,7 @@ const D = path.join(__dirname, "../gas/out");
   { // ラベルを変えても選んだ名前はそのまま（職員の中・利用者の中）。打った名前が候補にそのままあれば選ばなくてよい（2026-11-07 依頼者）
     const chipsOf = (k) => A.pg.$$eval(`.sgbox [data-sgrm="${k}"]`, (o) => o.map((x) => x.dataset.name));
     await add("help"); await pick("users", "中村"); await A.pg.waitForTimeout(200);
-    for (const L of ["user", "ride", "extra", "monitor", "uother", "help"]) { await pickLabel(A.pg, L); await A.pg.waitForTimeout(250); assert.deepStrictEqual(await chipsOf("users"), ["中村"], "利用者の中でラベルを変えても中村のまま: " + L); }
+    for (const L of ["hcancel", "user", "ride", "extra", "monitor", "uother", "help"]) { await pickLabel(A.pg, L); await A.pg.waitForTimeout(250); assert.deepStrictEqual(await chipsOf("users"), ["中村"], "利用者の中でラベルを変えても中村のまま: " + L); }
     await pickLabel(A.pg, "late"); await A.pg.waitForTimeout(250);
     if ((await chipsOf("staff")).length) { await A.pg.click('.sgbox [data-sgrm="staff"]'); await A.pg.waitForTimeout(200); }
     await pick("staff", "日野"); await A.pg.waitForTimeout(200);
@@ -545,6 +545,17 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
     console.log("遅刻・早退・家族迎えの時刻:", [la.title, ea.title, fm.title].join(" / ")); }
+  { // ヘルプキャンセル（いつものヘルプをその日だけなし。2026-11-07 依頼者）
+    const D25 = "2026-11-27";
+    await add("hcancel"); await A.pg.fill("#f-date", D25); await A.pg.fill("#f-enddate", D25);
+    assert.strictEqual(await A.pg.evaluate(() => document.querySelector('input[name="f-grp"]:checked').value), "user", "利用者の中");
+    await pick("users", "中村"); await A.pg.check('input[name="w-hc"][value="time"]'); await A.pg.waitForTimeout(300);
+    await save(600); assert.match(await A.pg.locator("#f-err").textContent(), /時刻を入れて/, "時刻を選ぶなら時刻が要る");
+    await A.pg.fill("#w-hct", "16:00"); await save(2000);
+    const ev = Object.values(api(t, "docs.query", [{ col: "days", from: D25, to: D25 }]).data.reduce((a, d) => Object.assign(a, d.events), {})).find((e) => e.label === "hcancel");
+    assert.ok(ev && ev.title === "中村 16:00のヘルプキャンセル" && ev.sg.type === "help_cancel" && ev.sg.at === "16:00" && ev.allDay, "ヘルプキャンセルの予定 " + JSON.stringify(ev && { t: ev.title, sg: ev.sg }));
+    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
+    console.log("ヘルプキャンセル:", ev.title); }
   // 送迎：迎えは「受診後送り」、送りは時間変更
   await add("ride"); assert.strictEqual(await A.pg.locator("#f-title").count(), 0, "その他予定以外はタイトルの欄なし"); await pick("users", "森");
   const meetOpts = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
@@ -604,7 +615,7 @@ const D = path.join(__dirname, "../gas/out");
   assert.ok(s2.blocks.some((x) => x.calId && x.kind === "block" && x.staffId === S("日野") && x.label === "モニタリング（森）" && x.time === "13:30"), "モニタリング → 対応者の予定");
   const tl = await A.pg.locator(".ev-row .t").allInnerTexts();
   { // 並び：ラベルの順（2026-11-05〜 職員（休み→時間変更→休日出勤→その他）→利用者（ヘルプ→休み→送迎変更→…→その他）→その他予定）
-    const order = ["leave", "late", "early", "shift", "hwork", "sother", "help", "user", "ride", "extra", "monitor", "shien", "uother", "other"];
+    const order = ["leave", "late", "early", "shift", "hwork", "sother", "help", "hcancel", "user", "ride", "extra", "monitor", "shien", "uother", "other"];
     const labs = await A.pg.$$eval("#panel .ev-row", (rows) => rows.map((r) => (r.getAttribute("style") || "").replace(/.*--l-([a-z]+).*/, "$1")));
     const idx = labs.map((l) => order.indexOf(l)); assert.deepStrictEqual(idx, [...idx].sort((x, y) => x - y), "ラベルの順に並ぶ: " + labs.join(","));
     console.log("並び:", labs.join(" → "));

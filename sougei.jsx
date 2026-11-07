@@ -1314,7 +1314,7 @@ function calNoteLines(master, events, date, edition) {
     const sg = e.sg || {}, t = sg.type || "", title = String(e.title || "").trim();
     if (!title || t === "help" || t === "staff_plan" || t === "user_absent") continue;
     const line = title + (e.allDay || !e.start ? "" : ` ${hm(e.date === date ? e.start : "0:00")}〜${hm((e.endDate || e.date) === date ? e.end : "24:00")}`);
-    if (t === "user_time" || t === "user_extra") { if ((sg.users || []).some((n) => users.includes(n))) out.user.push(line); continue; }
+    if (t === "user_time" || t === "user_extra" || t === "help_cancel") { if ((sg.users || []).some((n) => users.includes(n))) out.user.push(line); continue; }   // ヘルプキャンセルも特記事項(利用者)に
     if (t === "staff_off" || t === "hwork" || t === "shift") { if ((sg.staff || []).some((n) => staff.includes(n))) out.staff.push(line); continue; }
     if (t) continue;
     // 送迎表に反映しない予定（その他予定・TimeTreeから写した予定など）：名前で分ける

@@ -1,10 +1,10 @@
 
 "use strict";
-const APP_VERSION="2026.11.07c";
+const APP_VERSION="2026.11.07d";
 const C=window.TCCore;
-const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
+const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
-const GRP=[{k:"staff",n:"職員",ls:[["leave","休み"],["late","遅刻"],["early","早退"],["shift","時間変更"],["hwork","休日出勤"],["sother","その他"]]},{k:"user",n:"利用者",ls:[["help","ヘルプ"],["user","休み"],["ride","送迎変更"],["extra","利用日外利用"],["monitor","モニタリング"],["shien","支援会議"],["uother","その他"]]},{k:"other",n:"その他予定",ls:[["other","その他予定"]]}];
+const GRP=[{k:"staff",n:"職員",ls:[["leave","休み"],["late","遅刻"],["early","早退"],["shift","時間変更"],["hwork","休日出勤"],["sother","その他"]]},{k:"user",n:"利用者",ls:[["help","ヘルプ"],["hcancel","ヘルプキャンセル"],["user","休み"],["ride","送迎変更"],["extra","利用日外利用"],["monitor","モニタリング"],["shien","支援会議"],["uother","その他"]]},{k:"other",n:"その他予定",ls:[["other","その他予定"]]}];
 const grpOf=k=>(GRP.find(g=>g.ls.some(l=>l[0]===k))||GRP[2]);
 const NAME_FIRST=k=>k==="sother"||k==="uother";   // 職員・利用者の「その他」は名前を上に、タイトル・時間・場所はその下（2026-11-07 依頼者）
 const isOth=k=>k==="other"||k==="sother"||k==="uother";   // タイトル・時間・場所を入れる「その他」のラベル
@@ -339,7 +339,7 @@ function staffInfo(name,date,biz){if(!name)return{};const sd=SGN.staffDept||{};
 /* 休みの形：1日・AM休み・PM休み・中抜け・時間休み。中抜け・時間休みは時刻で（理由の欄に種類を持つ） */
 const LEAVE_T={naka:"中抜け",hours:"時間休み"};
 const hoursText=d=>{const m=minOf(d.end)-minOf(d.start);if(!(m>0))return"時間休み";const h=Math.floor(m/60),r=m%60;return`${h?h+"時間":""}${r===30&&h?"半":r?r+"分":""}休み`};
-const SGT_SHORT={staff_off:"職員の休み",staff_plan:"職員の予定",user_absent:"欠席",user_time:"送迎の変更",user_extra:"利用日外利用",help:"ヘルプ",hwork:"休日出勤",shift:"職員時間変更"};
+const SGT_SHORT={staff_off:"職員の休み",staff_plan:"職員の予定",user_absent:"欠席",user_time:"送迎の変更",user_extra:"利用日外利用",help:"ヘルプ",hwork:"休日出勤",shift:"職員時間変更",help_cancel:"ヘルプキャンセル"};
 const PICK={user:["体調不良","受診","家族の用事","ショートステイ"],shift:["早出","早出残業","遅出","残業","遅刻・早退"]};
 const NO_MEET={fam:"家族送り",clinic:"受診後送り"},NO_SEND={fam:"家族迎え"};   // 以前の選び方（fam/clinic）。今は送迎表のルールの「家族送り・家族迎えなど」（names.list の noRide）から選ぶ
 /* 迎え・送りの「送迎なし」の理由（2026-11-05 依頼者「家族送りなどもルールで追加・変更・削除できるように」）。選んだ値は "r:理由"。送迎表の「迎えなし・送りなし」の理由としてそのまま出る */
@@ -350,7 +350,7 @@ const nrReason=(k,m)=>!m||m==="same"||m==="time"?"":String(m).startsWith("r:")?S
 // 選択肢：ルールの理由（今の予定が以前の理由ならそれも残す＝開いて保存しても消えない）
 const nrOpts=(k,cur)=>{const l=nrList(k).slice(),c=nrReason(k,cur);if(c&&!l.includes(c))l.push(c);return l.map(t=>["r:"+t,t])};
 const nrList=k=>{const d=k==="meet"?["家族送り","受診後送り"]:["家族迎え"];const l=SGN.noRide&&Array.isArray(SGN.noRide[k])?SGN.noRide[k]:d;return l.length?l:d};
-const LABEL_OF_SG={staff_off:"leave",user_absent:"user",user_time:"ride",user_extra:"extra",help:"help",hwork:"hwork",shift:"shift",staff_plan:"other"};
+const LABEL_OF_SG={staff_off:"leave",user_absent:"user",user_time:"ride",user_extra:"extra",help:"help",hwork:"hwork",shift:"shift",staff_plan:"other",help_cancel:"hcancel"};
 const PLAN_LABELS=["monitor","shien"];
 const LE_LABELS=["late","early"];   // 遅刻（○時出勤）・早退（○時早退）＝中身は職員時間変更（2026-11-06 依頼者）             // モニタリング・支援会議：利用者・時間・場所・対応者。対応者の予定として送迎表に入る
 let SGN={staff:[],users:[],depts:[],places:[],yomi:{},staffDept:{},noRide:null,loaded:false};
@@ -375,6 +375,7 @@ function workOf(d){
   return{staff:[...(sg.staff||d.tanto||[])],users:[...(sg.users||d.users||[])],reason:sg.type==="staff_off"?"":reason,kinmu,dest:sg.type==="help"&&sg.note!==(sg.users||[])[0]?sg.note||"":"",dept:sg.dept||"",
     leave:sg.half||(sg.type==="staff_off"&&!d.allDay?(sg.reason==="時間休み"?"hours":"naka"):"day"),
     meetM:sg.noMeet?"r:"+nrSplit(sg.noMeet)[0]:sg.meet?"time":"same",sendM:sg.noSend?"r:"+nrSplit(sg.noSend)[0]:sg.send?"time":"same",meet:sg.meet||"",send:sg.send||"",mplace:sg.meetPlace||"",splace:sg.sendPlace||"",
+    hcM:sg.at?"time":"all",hct:sg.at||"",
     lt:sg.type==="shift"?sg.wstart||"":"",et:sg.type==="shift"?sg.wend||"":"",
     nrmt:nrSplit(sg.noMeet)[1],nrst:nrSplit(sg.noSend)[1],
     awM:sg.afrom?"time":sg.noAway?"none":"same",afrom:sg.afrom||"",ato:sg.ato||"",
@@ -391,6 +392,7 @@ function sgOf(label,w){
   if(label==="help")return Object.assign(base,{type:"help",staff:[],note:w.dest.trim()});   // 職員は選ばない（送迎表の保留欄に入り、担当者が割り当てる）
   if(label==="late")return Object.assign(base,{type:"shift",users:[],wstart:w.lt||"",reason:"遅刻"});
   if(label==="early")return Object.assign(base,{type:"shift",users:[],wend:w.et||"",reason:"早退"});
+  if(label==="hcancel")return Object.assign(base,{type:"help_cancel",staff:[]},w.hcM==="time"&&w.hct?{at:w.hct}:{});
   if(label==="hwork")return Object.assign(base,{type:"hwork",users:[],dept:w.dept});
   if(label==="shift")return Object.assign(base,{type:"shift",users:[],dept:w.dept,reason:[w.kinmu,w.reason].filter(Boolean).join("・"),wstart:w.wsM==="time"?w.wstart:"",wend:w.weM==="time"?w.wend:""},KINMU_NORIDE.has(w.kinmu)?{noRide:true}:{},
     w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{});
@@ -405,6 +407,7 @@ function fixTimes(d){
   const w=d.w;
   if(d.label==="leave"&&w.leave==="time")w.leave="naka";   // 以前の「時間で」は中抜け
   if(d.label==="leave")d.allDay=!LEAVE_T[w.leave];
+  else if(d.label==="hcancel")d.allDay=true;
   else if(d.label==="user"||d.label==="ride"||d.label==="extra"||d.label==="shift"||LE_LABELS.includes(d.label))d.allDay=true;
   else if(d.label==="help"){d.allDay=false;d.endDate=d.date;if(d.start)d.end=addMin(d.start,Number(w.hdur)||60)}   // ヘルプは開始時刻と時間（30分・1時間など）
   else if(d.label==="hwork"||PLAN_LABELS.includes(d.label))d.allDay=false;
@@ -460,6 +463,9 @@ function drawSg(){
   else if(L==="leave")h=(staffSelf(d)?self:who("staff","休む職員","職員の名前で検索"))
     +`<div class="sgsub"><span class="lbl2">休みの形</span>${radios("w-leave",w.leave==="time"?"naka":w.leave,[["day","1日"],["am","AM休み"],["pm","PM休み"],["naka","中抜け"],["hours","時間休み"]])}</div>`
     +hint((w.leave==="am"?"勤務時間の真ん中＋30分から出勤として送迎表に入ります（8:30〜17:30なら13:30から）。":w.leave==="pm"?"勤務時間の真ん中−30分で退勤として送迎表に入ります（8:30〜17:30なら12:30まで）。":LEAVE_T[w.leave]||w.leave==="time"?"下の開始〜終了の時刻を、送迎表でその職員の不在として入れます。":"送迎表でその日は休みになります。何日も続く休みは終了日を変えてください。")+"休みの時間にかかる、この職員の担当の便・ヘルプは送迎表の「保留」に移ります（予定を消すと元に戻ります）。");
+  else if(L==="hcancel")h=who("users","利用者","利用者の名前で検索")
+    +tm("w-hc",w.hcM||"all","w-hct",w.hct,"どのヘルプ",[["all","その日のこの人のヘルプ全部"],["time","時刻を選ぶ"]])
+    +hint("週間パターンから入っている、いつものヘルプをその日だけなしにします（送迎表のその日のヘルプのコマが消えます）。予定を消すと元に戻ります。何日も続くときは終了日を変えてください。")
   else if(L==="user")h=who("users","利用者","利用者の名前で検索")+text("w-reason",w.reason,"例：通院",PICK.user,"理由（任意）")
     +hint("送迎表でその日は欠席になります。何日も続くときは終了日を変えてください。迎え・送りだけ変わるときは「送迎」のラベルを使ってください。");
   else if(L==="hwork")h=(staffSelf(d)?self:who("staff","出勤する職員","職員の名前で検索"))+dept()
@@ -520,8 +526,8 @@ function readSg(){
   typedPick("staff");typedPick("users");
   const rv=n=>{const x=document.querySelector(`input[name="${n}"]:checked`);return x?x.value:null};
   const iv=id=>{const x=$(id);return x?x.value.trim():null};
-  for(const[n,k]of[["w-kinmu","kinmu"],["w-leave","leave"],["w-meet","meetM"],["w-send","sendM"],["w-ws","wsM"],["w-we","weM"],["w-hdur","hdur"],["w-aw","awM"]]){const v=rv(n);if(v!=null)w[k]=v}
-  for(const[id,k]of[["w-dest","dest"],["w-mplace","mplace"],["w-splace","splace"],["w-reason","reason"],["w-meett","meet"],["w-sendt","send"],["w-dept","dept"],["w-wst","wstart"],["w-wet","wend"],["w-awf","afrom"],["w-awt","ato"],["w-lt","lt"],["w-et","et"],["w-nrmt","nrmt"],["w-nrst","nrst"]]){const v=iv(id);if(v!=null)w[k]=v}
+  for(const[n,k]of[["w-kinmu","kinmu"],["w-leave","leave"],["w-meet","meetM"],["w-send","sendM"],["w-ws","wsM"],["w-we","weM"],["w-hdur","hdur"],["w-aw","awM"],["w-hc","hcM"]]){const v=rv(n);if(v!=null)w[k]=v}
+  for(const[id,k]of[["w-dest","dest"],["w-mplace","mplace"],["w-splace","splace"],["w-reason","reason"],["w-meett","meet"],["w-sendt","send"],["w-dept","dept"],["w-wst","wstart"],["w-wet","wend"],["w-awf","afrom"],["w-awt","ato"],["w-lt","lt"],["w-et","et"],["w-nrmt","nrmt"],["w-nrst","nrst"],["w-hct","hct"]]){const v=iv(id);if(v!=null)w[k]=v}
   if($("w-plan"))w.plan=$("w-plan").checked;
   if($("w-dept")&&w.dept&&w.dept===usualDept((w.staff||[])[0],ed.d.date,bizOf(ed.d)))w.dept="";   // いつもの部署のままなら「変更なし」
   if($("f-place"))ed.d.place=$("f-place").value.trim();   // 場所が項目の中にあるラベル（モニタリング・支援会議）でも書きかけを残す
@@ -538,6 +544,7 @@ function autoTitle(label,sg,d){
   if(sg.type==="user_time")return`${nm(sg.users)} ${[sg.meet&&`迎え${sg.meet}`,sg.noMeet,sg.meetPlace&&`迎え先${sg.meetPlace}`,sg.send&&`送り${sg.send}`,sg.noSend,sg.sendPlace&&`送り先${sg.sendPlace}`].filter(Boolean).join("・")}`;
   if(sg.type==="help")return`${nm(sg.users)} ヘルプ${sg.note?`（${sg.note}）`:""}`;
   if(sg.type==="hwork")return`${nm(sg.staff)} 休日出勤`;
+  if(sg.type==="help_cancel")return`${nm(sg.users)} ${sg.at?hm1(sg.at)+"の":""}ヘルプキャンセル`;
   if(sg.type==="shift"&&label==="late")return`${nm(sg.staff)} ${hm1(sg.wstart)}出勤（遅刻）`;
   if(sg.type==="shift"&&label==="early")return`${nm(sg.staff)} ${hm1(sg.wend)}早退`;
   if(sg.type==="shift"){const[k,rr]=splitKinmu(sg.reason);if(k)return`${nm(sg.staff)} ${k}${rr?`（${rr}）`:""}`;return`${nm(sg.staff)} ${[sg.wstart&&`出勤${sg.wstart}`,sg.wend&&`退勤${sg.wend}`,sg.afrom&&`中抜け${sg.afrom}〜${sg.ato}`,sg.noAway&&"中抜けなし"].filter(Boolean).join("・")||"部署変更"}${r}`}
@@ -555,6 +562,7 @@ function checkSg(d,sg){
     if(!sg.staff.length)return"送迎表に載せるときは、担当の職員を選んでください。";}
   if(sg.type.startsWith("user")&&!sg.users.length)return"利用者を選んでください。";
   if(sg.type==="help"&&!sg.users.length)return"利用者を選んでください。";
+  if(sg.type==="help_cancel"){if(!sg.users.length)return"利用者を選んでください。";if(w.hcM==="time"&&!w.hct)return"キャンセルするヘルプの時刻を入れてください。";}
   if(sg.type==="shift"&&LE_LABELS.includes(d.label)){if(!(d.label==="late"?sg.wstart:sg.wend))return d.label==="late"?"何時に出勤するか入れてください。":"何時に早退するか入れてください。";}
   else if(sg.type==="shift"){
     if(w.wsM==="same"&&w.weM==="same"&&!w.dept&&!w.kinmu&&(w.awM||"same")==="same")return"出勤・退勤・中抜けのどれを変えるか（または部署）を選んでください。";
@@ -845,7 +853,7 @@ document.addEventListener("change",e=>{if(ed&&e.target.name==="f-biz"){ed.d.biz=
   // ラベル・休みの形などを変えたら、入力欄を作り直す（入力済みの値は残す）
   if(e.target.name==="w-kinmu"){readForm();ed.d.w.kinmu=e.target.value;applyKinmu(ed.d.w,ed.d);drawSheet();draftSave();return}   // 勤務を選ぶと出勤・退勤の時刻が入る
   if(e.target.name==="f-grp"){readForm();const g=GRP.find(x=>x.k===e.target.value);if(g&&grpOf(ed.d.label).k!==g.k){ed.lastIn=ed.lastIn||{};ed.lastIn[grpOf(ed.d.label).k]=ed.d.label;ed.d.label=ed.lastIn[g.k]||g.ls[0][0];fixTimes(ed.d)}drawSheet();draftSave();return}   // 1段目：その中で前に選んだラベル（無ければ最初）
-  if(e.target.name==="f-label"||e.target.id==="w-plan"||["w-leave","w-meet","w-send","w-ws","w-we","w-hdur","w-aw"].includes(e.target.name)){
+  if(e.target.name==="f-label"||e.target.id==="w-plan"||["w-leave","w-meet","w-send","w-ws","w-we","w-hdur","w-aw","w-hc"].includes(e.target.name)){
     readForm();drawSheet();draftSave();return}
   if(e.target.id==="f-allday"){$("w-start").hidden=$("w-end").hidden=e.target.checked}
   if(e.target.id==="f-date"){const x=$("f-enddate");if(!x.value||x.value<e.target.value)x.value=e.target.value}

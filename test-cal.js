@@ -368,3 +368,29 @@ console.log('extra OK');
   assert.ok(!(x.userTime || {})[mo.id], '送りの時刻（便）は変えない');
   console.log('late/early/family time OK');
 }
+// ===== ヘルプキャンセル（いつものヘルプをその日だけなし。2026-11-07 依頼者） =====
+{
+  const D = '2026-11-02', T = require('./calcore.js');
+  const hs = sheet.blocks.filter((b) => b.kind === 'help');
+  const nm = ['中村', '黒田', '井上'].find((n) => hs.some((b) => String(b.label).startsWith(n))); assert.ok(nm, '月曜のパターンにヘルプがある');
+  const mine = hs.filter((b) => String(b.label).startsWith(nm)); const t0 = mine[0].time;
+  assert.ok(T.normSg({ type: 'help_cancel', users: [nm], at: '16:00' }).at === '16:00' && !('at' in T.normSg({ type: 'help', users: [nm], at: '16:00' })), 'at はキャンセルだけ');
+  const ev = (sg) => [{ id: 'evhc1', rev: 1, date: D, endDate: D, allDay: true, title: nm + ' ヘルプキャンセル', label: 'hcancel', sg: T.normSg(sg) }];
+  const all = C.reconcile(m, sheet, ev({ type: 'help_cancel', users: [nm] }), D);
+  assert.strictEqual(all.blocks.filter((b) => b.kind === 'help' && String(b.label).startsWith(nm)).length, 0, 'その日のその人のヘルプは全部なし');
+  assert.strictEqual(all.blocks.length, sheet.blocks.length - mine.length, 'ほかのコマはそのまま');
+  assert.ok(/ヘルプをなしに（\d+件）/.test(C.summary(m, all, ev({ type: 'help_cancel', users: [nm] }), D)[0].time));
+  const one = C.reconcile(m, sheet, ev({ type: 'help_cancel', users: [nm], at: t0.padStart(5, '0') }), D);   // 画面の時刻は 08:00 の形
+  assert.strictEqual(one.blocks.filter((b) => String(b.label).startsWith(nm) && b.time === t0).length, 0, '時刻を選ぶとその時刻だけ');
+  assert.strictEqual(one.blocks.filter((b) => String(b.label).startsWith(nm)).length, mine.filter((b) => b.time !== t0).length);
+  // パターン読込でまた入っても消える・予定を消すと元に戻る
+  const re = C.reconcile(m, Object.assign({}, all, { blocks: [...all.blocks, ...mine.map((b) => ({ ...b, id: b.id + 'x' }))] }), ev({ type: 'help_cancel', users: [nm] }), D);
+  assert.strictEqual(re.blocks.filter((b) => String(b.label).startsWith(nm)).length, 0, 'パターン読込でまた入っても消す');
+  const back = C.reconcile(m, re, [], D);
+  assert.strictEqual(back.blocks.filter((b) => String(b.label).startsWith(nm)).length, mine.length, '予定を消すと元に戻る（二重にならない）');
+  // 名前が似た人は消さない（森 と 森井）
+  const s2 = Object.assign({}, sheet, { blocks: [{ id: 'm1', kind: 'help', time: '10:00', label: '森井ヘルプ', staffId: S('日野').id }, { id: 'm2', kind: 'help', time: '11:00', label: '森ヘルプ', staffId: S('日野').id }] });
+  const r2 = C.reconcile(m, s2, [{ id: 'evhc2', rev: 1, date: D, endDate: D, allDay: true, title: '森 ヘルプキャンセル', sg: T.normSg({ type: 'help_cancel', users: ['森'] }) }], D);
+  assert.deepStrictEqual(r2.blocks.map((b) => b.label), ['森井ヘルプ'], '森井さんのヘルプは残す');
+  console.log('help cancel OK', nm, mine.length + '件');
+}
