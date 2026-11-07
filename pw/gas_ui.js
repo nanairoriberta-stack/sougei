@@ -311,6 +311,15 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await T.pg.locator("[data-rule-list]").count(), 0, "並べ替えたら消える");
     { const fv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.days["2026-11-02"].l;
       assert.deepStrictEqual([fv[1].n, fv[2].n, fv[3].n], ["橋本", "宮永", "野津"], "サーバーに保存"); }
+    // 遅①と遅③を入れ替える（2026-11-07 依頼者）：遅①を押して、遅③にいる人を選ぶ
+    await T.pg.click('[data-slot="2026-11-02|l|1"]'); await T.pg.waitForTimeout(200);
+    assert.ok((await T.pg.locator('[data-pick="野津"] [data-swap]').innerText()).includes("遅③に入っています"), "入れ替えの案内");
+    await T.pg.click('[data-pick="野津"]'); await T.pg.waitForTimeout(2500);
+    { const fv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.days["2026-11-02"].l;
+      assert.deepStrictEqual([fv[1].n, fv[2].n, fv[3].n], ["野津", "宮永", "橋本"], "遅①と遅③が入れ替わる（二重にならない）"); }
+    await T.pg.click('[data-slot="2026-11-02|l|3"]'); await T.pg.waitForTimeout(200); await T.pg.click('[data-pick="野津"]'); await T.pg.waitForTimeout(2500);   // 元に戻す
+    { const fv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.days["2026-11-02"].l;
+      assert.deepStrictEqual([fv[1].n, fv[2].n, fv[3].n], ["橋本", "宮永", "野津"], "もう一度で元に戻る"); }
     await T.pg.click('[data-act="settings"]'); await T.pg.waitForTimeout(200);
     assert.strictEqual(await T.pg.locator('[data-rn="0"]').inputValue(), "橋本"); assert.strictEqual(await T.pg.locator('[data-rc="0"]').inputValue(), "2"); assert.strictEqual(await T.pg.locator('[data-rs="0"]').inputValue(), "1");
     await T.pg.locator(".pk.wide").screenshot({ path: "g_shiftpage_rules.png" }); await T.pg.click("[data-set-close]"); await T.pg.waitForTimeout(200);

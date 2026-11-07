@@ -90,6 +90,9 @@
   const dayObj = (date) => { S.month = S.month || {}; S.month.days = S.month.days || {}; return (S.month.days[date] = Object.assign({ e: {}, l: {}, d: [] }, S.month.days[date] || {})); };
   function setSlot(date, k, i, name, t) {
     const d = dayObj(date); d[k] = Object.assign({}, d[k]);
+    // 同じ日の同じ番（例：遅番）のほかの枠にいる人を選んだら入れ替える（2026-11-07 依頼者「遅番①と③の人を入れ替えたい」）。時間の補足はそれぞれの人に付いていく
+    const other = name ? Object.keys(d[k]).find((j) => Number(j) !== Number(i) && X.slotName(d[k][j]) === name) : null;
+    if (other) { const mine = d[k][i], theirs = d[k][other]; d[k][i] = theirs; if (X.slotName(mine)) d[k][other] = mine; else delete d[k][other]; changed("month"); toast(`${X.KIND[k]}${X.MARK[i] || i}と${X.KIND[k]}${X.MARK[other] || other}を入れ替えました`); return; }
     if (name) d[k][i] = t ? { n: name, t } : { n: name }; else delete d[k][i];
     changed("month");
   }
@@ -224,8 +227,9 @@
     }
     const s = (d[p.k] || {})[p.i], curN = X.slotName(s);
     el.innerHTML = `<div class="ov" data-close-pick><div class="pk"><h3>${X.label(p.date)} ${X.KIND[p.k]}${X.MARK[p.i] || p.i}</h3>
-      <div class="opts">${c.members.map((x) => { const w = X.wishOf(S.month, x.name, p.date), inDay = busy.has(x.name) && x.name !== curN;
-        return `<button class="opt${x.name === curN ? " on" : ""}" data-pick="${esc(x.name)}">${esc(x.name)}${w ? `<em class="${/休/.test(w) ? "woff" : ""}">希望：${esc(w)}</em>` : ""}${inDay ? `<em>この日ほかに入っています</em>` : ""}</button>`; }).join("")}</div>
+      <div class="opts">${c.members.map((x) => { const w = X.wishOf(S.month, x.name, p.date), sameK = Object.keys(d[p.k] || {}).find((j) => Number(j) !== p.i && X.slotName(d[p.k][j]) === x.name), inDay = !sameK && busy.has(x.name) && x.name !== curN;
+        return `<button class="opt${x.name === curN ? " on" : ""}" data-pick="${esc(x.name)}">${esc(x.name)}${w ? `<em class="${/休/.test(w) ? "woff" : ""}">希望：${esc(w)}</em>` : ""}${inDay ? `<em>この日ほかに入っています</em>` : ""}${sameK ? `<em class="swap" data-swap>${X.KIND[p.k]}${X.MARK[sameK] || sameK}に入っています（押すと入れ替え）</em>` : ""}</button>`; }).join("")}</div>
+      <p class="note">同じ日の${X.KIND[p.k]}番のほかの枠の人を押すと、この枠と入れ替わります</p>
       <label class="tm">時間（通しなら空欄。例：6~9、16~22）<input id="shTime" maxlength="12" value="${esc((s && s.t) || "")}"></label>
       <div class="acts"><button data-pick-clear>空きにする</button><button data-close-pick>閉じる</button></div></div></div>`;
   }
