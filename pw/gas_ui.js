@@ -348,6 +348,18 @@ const D = path.join(__dirname, "../gas/out");
     await T.pg.click('[data-wpen="休"]'); await T.pg.waitForTimeout(150); await T.pg.click('td[data-day="2026-11-15"] .dnum'); await T.pg.waitForTimeout(200); await T.pg.click('td[data-day="2026-11-15"] .dnum'); await T.pg.waitForTimeout(250);
     { const pat = (await T.pg.locator(".sh-pat").innerText()).split("\n").find((l) => l.startsWith("秋山")) || ""; assert.ok(pat.includes("13(金)：早ﾏﾝのみ") && pat.includes("14(土)：9:00~15:00") && !pat.includes("15(日)"), "ボタンの希望 " + pat); }
     await T.pg.click('[data-wpen="休"]'); await T.pg.waitForTimeout(100);
+    // かんたん入力：職員・日にち・希望を選んで「入れる」・×で消す（2026-11-07 依頼者）
+    await T.pg.click('[data-wpen="遅"]'); await T.pg.waitForTimeout(100); await T.pg.selectOption("#shWishDay", "2026-11-20"); await T.pg.click("[data-wish-add]"); await T.pg.waitForTimeout(250);
+    assert.ok((await T.pg.locator("[data-wish-list]").innerText()).includes("11/20(金) 遅番"), "かんたん入力 " + await T.pg.locator("[data-wish-list]").innerText());
+    await T.pg.click('[data-wish-del="2026-11-20"]'); await T.pg.waitForTimeout(250);
+    assert.ok(!(await T.pg.locator("[data-wish-list]").innerText()).includes("11/20"), "×で消える");
+    // 送っている間に月を切り替えても「未送信」にならず、11月の分が保存される（2026-11-07 実機：null is not an object (evaluating 'q.mine')）
+    await T.pg.selectOption("#shWishDay", "2026-11-21"); await T.pg.click("[data-wish-add]"); await T.pg.click('[data-mon="1"]'); await T.pg.waitForTimeout(3500);
+    assert.strictEqual(await T.pg.locator("[data-sh-failed]").count(), 0, "未送信にならない");
+    assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.wish["秋山"]["2026-11-21"], "遅", "11月の分が保存された");
+    assert.strictEqual(await T.pg.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("sh:pend:")).length), 0, "送れていない分が残っていない");
+    await T.pg.click('[data-mon="-1"]'); await T.pg.waitForTimeout(1500);
+    await T.pg.selectOption("#shWishDay", "2026-11-21"); await T.pg.click('[data-wpen=""]'); await T.pg.click("[data-wish-add]"); await T.pg.waitForTimeout(300); await T.pg.click('[data-wpen="休"]');
     await T.pg.waitForTimeout(2500);
     const sv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value;
     assert.deepStrictEqual(sv.days["2026-11-03"].e[3], { n: "余村慎", t: "6~9" }, "サーバーに保存");

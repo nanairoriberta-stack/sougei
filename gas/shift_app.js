@@ -31,36 +31,55 @@
       if (!S.wishWho || !cfg().members.some((m) => m.name === S.wishWho)) S.wishWho = cfg().members.some((m) => m.name === S.myName) ? S.myName : ((cfg().members[0] || {}).name || "");
       if (!S.canEdit) S.mode = "wish";
       S.loaded = true;
-      if (pc) save("cfg", JSON.parse(pc).base); if (pm) save("month", JSON.parse(pm).base);
+      if (pc) save("cfg", JSON.parse(pc).base, pendKey("cfg")); if (pm) save("month", JSON.parse(pm).base, pendKey("month"));
+      if (!S.resent) { S.resent = true; setTimeout(resendAll, 1500); }
     } catch (e) { S.err = (e && e.message) || "読み込めませんでした。通信を確かめて、もう一度開いてください"; S.loaded = false; }
     render();
   }
-  const timers = {};
+  const timers = {}, inflight = {}, again = {};
+  // 送る先（男性/女性・月）は変更したときの表で決める。送っている間に月や男女を切り替えても、別の月の分と混ざらない
+  // （2026-11-07 実機「未送信（自動で送り直します）：null is not an object (evaluating 'q.mine')」＝送っている間に12月へ切り替えて、11月の分を12月の名前で探していた）
   function changed(kind) {
-    const base = kind === "cfg" ? S.cfgBase : S.monthBase, mine = kind === "cfg" ? S.cfg : S.month;
-    const prev = store.get(pendKey(kind));
-    store.set(pendKey(kind), JSON.stringify({ base: prev ? JSON.parse(prev).base : base, mine }));   // まず端末に残す
-    render(); clearTimeout(timers[kind]); timers[kind] = setTimeout(() => save(kind), 500);
+    const base = kind === "cfg" ? S.cfgBase : S.monthBase, mine = kind === "cfg" ? S.cfg : S.month, key = pendKey(kind), g = S.group, ym = S.ym;
+    const prev = store.get(key);
+    store.set(key, JSON.stringify({ base: prev ? JSON.parse(prev).base : base, mine, g, ym, kind }));   // まず端末に残す（どの表のどの月か も一緒に）
+    render(); clearTimeout(timers[key]); timers[key] = setTimeout(() => save(kind, undefined, key), 500);
   }
-  async function save(kind, baseOverride) {
-    const raw = store.get(pendKey(kind)); if (!raw) return;
+  async function save(kind, baseOverride, keyArg) {
+    const key = keyArg || pendKey(kind);
+    if (inflight[key]) { again[key] = true; return; }   // 同じ分を同時に2回送らない（終わってから送り直す）
+    const raw = store.get(key); if (!raw) return;
     const p = JSON.parse(raw), base = baseOverride !== undefined ? baseOverride : p.base;
-    S.saving++; render();
+    const km = /^sh:pend:(m|f):(\d{4}-\d{2}):(cfg|month)$/.exec(key) || [];   // 以前の端末の分は、名前から男女・月を読む
+    const g = p.g || km[1] || S.group, ym = p.ym || km[2] || S.ym, here = () => g === S.group && ym === S.ym;
+    inflight[key] = true; S.saving++; render();
     try {
-      const r = await H.call("shift.save", { group: S.group, ym: S.ym, kind, base, baseKnown: true, mine: p.mine });
-      const now = store.get(pendKey(kind));
-      if (now === raw) { store.del(pendKey(kind)); if (kind === "cfg") { S.cfgBase = r.value; S.cfg = clone(r.value); } else { S.monthBase = r.value; S.month = clone(r.value); } }
-      else { const q = JSON.parse(now); store.set(pendKey(kind), JSON.stringify({ base: r.value, mine: q.mine })); if (kind === "cfg") S.cfgBase = r.value; else S.monthBase = r.value; setTimeout(() => save(kind), 50); }
+      const r = await H.call("shift.save", { group: g, ym, kind, base, baseKnown: true, mine: p.mine });
+      const now = store.get(key);
+      if (!now || now === raw) {   // 送った後に変わっていない（または別の送信で済んだ）
+        store.del(key);
+        if (here()) { if (kind === "cfg") { S.cfgBase = r.value; S.cfg = clone(r.value); } else { S.monthBase = r.value; S.month = clone(r.value); } }
+      } else {                      // 送っている間にさらに直した → その分を、今の内容を土台にして続けて送る
+        const q = JSON.parse(now); store.set(key, JSON.stringify(Object.assign({}, q, { base: r.value })));
+        if (here()) { if (kind === "cfg") S.cfgBase = r.value; else S.monthBase = r.value; }
+        again[key] = true;
+      }
       S.failed = "";
-      if (r.calLeft > 0) calSync();   // はじめての月など、カレンダーへの書き込みが残っていれば続けて頼む
-    } catch (e) { S.failed = ((e && e.message) || "保存できませんでした") + (e && e.code ? `［${e.code}］` : ""); setTimeout(() => save(kind), 15000); }
-    S.saving--; render();
+      if (r.calLeft > 0) calSync(g, ym);   // はじめての月など、カレンダーへの書き込みが残っていれば続けて頼む
+    } catch (e) { S.failed = ((e && e.message) || "保存できませんでした") + (e && e.code ? `［${e.code}］` : ""); setTimeout(() => save(kind, undefined, key), 15000); }
+    inflight[key] = false; S.saving--;
+    if (again[key]) { again[key] = false; setTimeout(() => save(kind, undefined, key), 50); }
+    render();
+  }
+  // 端末に残っている、ほかの月・男女の送れていない分も送る（開いたとき）
+  function resendAll() {
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!k || !k.startsWith("sh:pend:")) continue; const km = /^sh:pend:(m|f):(\d{4}-\d{2}):(cfg|month)$/.exec(k); if (km) save(km[3], undefined, k); } } catch (e) {}
   }
   // シフト表 → 職場カレンダー：残りを少しずつ書く（2026-11-07）。失敗しても次に保存したときにまた書く
   let syncing = false;
-  async function calSync() {
+  async function calSync(g, ym) {
     if (syncing) return; syncing = true; S.calSyncing = true; render();
-    try { for (let i = 0; i < 20; i++) { const r = await H.call("shift.syncCal", { group: S.group, ym: S.ym }); if (!r || !(r.left > 0)) break; } } catch (e) {}
+    try { for (let i = 0; i < 20; i++) { const r = await H.call("shift.syncCal", { group: g || S.group, ym: ym || S.ym }); if (!r || !(r.left > 0)) break; } } catch (e) {}
     syncing = false; S.calSyncing = false; render();
   }
   const pendingCount = () => ["cfg", "month"].filter((k) => store.get(pendKey(k))).length;
@@ -80,13 +99,15 @@
   const WISH_BTNS = [["休", "休み"], ["AM休", "AM休"], ["PM休", "PM休"], ["早", "早番"], ["遅", "遅番"], ["日", "日勤"], ["早ﾏﾝのみ", "早ﾏﾝｼｮﾝのみ"], ["遅ﾏﾝのみ", "遅ﾏﾝｼｮﾝのみ"], ["time", "その他(時刻)"], ["", "消す"]];
   S.pen = "休"; S.penFrom = ""; S.penTo = "";
   const penValue = () => S.pen === "time" ? (S.penFrom && S.penTo ? `${S.penFrom.replace(/^0/, "")}~${S.penTo.replace(/^0/, "")}` : S.penFrom ? `${S.penFrom.replace(/^0/, "")}~` : "") : S.pen;
-  function cycleWish(date) {
-    const who = S.wishWho; if (!who) return;
-    const v = penValue(); if (S.pen === "time" && !v) { alert("その他は、上で時刻（何時から）を入れてから日付を押してください"); return; }
+  function cycleWish(date, noToggle) {
+    const who = S.wishWho; if (!who || !date) return;
+    const v = penValue(); if (S.pen === "time" && !v) { alert("その他は、時刻（何時から）を入れてから入れてください"); return; }
     S.month = S.month || {}; S.month.wish = Object.assign({}, S.month.wish); const w = Object.assign({}, S.month.wish[who]);
-    if (!v || w[date] === v) delete w[date]; else w[date] = v;
+    if (!v || (!noToggle && w[date] === v)) delete w[date]; else w[date] = v;
     S.month.wish[who] = w; changed("month");
   }
+  // かんたん入力：職員・日にち・希望を選んで「入れる」（2026-11-07 依頼者「職員、何日、どの休みか出勤形態かをシンプルに選択だけで」）
+  const wishText = (v) => ({ "休": "休み", "早": "早番", "遅": "遅番", "日": "日勤", "早ﾏﾝのみ": "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝのみ": "遅ﾏﾝｼｮﾝのみ" })[v] || v;
 
   /* ---------- 描く ---------- */
   function render() {
@@ -105,7 +126,11 @@
     if (S.mode === "wish") html += `<div class="sh-wishbar">希望を入れる人：${S.canEdit ? `<select id="shWho">${c.members.map((x) => `<option ${x.name === S.wishWho ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<b>${esc(S.wishWho)}</b>`}
       <span class="wpen" data-wpen-bar>${WISH_BTNS.map(([k, n]) => `<button type="button" data-wpen="${esc(k)}" aria-pressed="${S.pen === k}">${esc(n)}</button>`).join("")}</span>
       ${S.pen === "time" ? `<span class="wtime"><input type="time" id="shPenFrom" step="300" value="${esc(S.penFrom)}" aria-label="何時から">〜<input type="time" id="shPenTo" step="300" value="${esc(S.penTo)}" aria-label="何時まで"></span>` : ""}
-      <span class="note">ボタンを選んでから日付のマスを押してください（同じ希望の日をもう一度押すと消えます）</span>
+      <span class="wquick"><label>日にち <select id="shWishDay">${X.daysOfMonth(S.ym).map((d) => `<option value="${d}" ${d === S.wishDay ? "selected" : ""}>${esc(X.label(d))}</option>`).join("")}</select></label>
+        <button type="button" class="primary" data-wish-add>入れる</button></span>
+      <span class="note">職員・日にち・希望を選んで「入れる」。下のカレンダーの日付を押しても入ります（同じ希望の日をもう一度押すと消えます）</span>
+      <div class="wlist" data-wish-list>${(() => { const w = ((S.month && S.month.wish) || {})[S.wishWho] || {}, ds = Object.keys(w).sort();
+        return ds.length ? ds.map((d) => `<span class="wi">${esc(X.label(d))} ${esc(wishText(w[d]))}${S.canEdit || S.wishWho === S.myName ? `<button type="button" data-wish-del="${d}" aria-label="消す">×</button>` : ""}</span>`).join("") : `<span class="note">${esc(S.wishWho)}さんの今月の希望はまだありません</span>`; })()}</div>
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
     const hs = X.holes(S.month, c, S.ym), holeSet = new Set(hs.map((h) => `${h.date}|${h.kind}|${h.idx}`));
     const conf = X.conflicts(S.month, c, S.ym), confSet = new Set(conf.map((x) => `${x.date}|${x.name}`));
@@ -218,6 +243,8 @@
     if (at("[data-mode]")) { S.mode = at("[data-mode]").dataset.mode; render(); return; }
     if (!S.loaded) return;
     if (at("[data-wpen]")) { S.pen = at("[data-wpen]").dataset.wpen; render(); return; }
+    if (at("[data-wish-add]")) { if (!S.canEdit && S.wishWho !== S.myName) return; S.wishDay = ($("shWishDay") || {}).value || S.wishDay; cycleWish(S.wishDay, true); return; }
+    if (at("[data-wish-del]")) { if (!S.canEdit && S.wishWho !== S.myName) return; const d = at("[data-wish-del]").dataset.wishDel, who = S.wishWho; S.month.wish = Object.assign({}, S.month.wish); const w = Object.assign({}, S.month.wish[who]); delete w[d]; S.month.wish[who] = w; changed("month"); return; }
     if (S.mode === "wish" && at("td.day")) { if (!S.canEdit && S.wishWho !== S.myName) return; cycleWish(at("td.day").dataset.day); return; }
     if (at("[data-slot]") && S.canEdit) { const [date, k, i] = at("[data-slot]").dataset.slot.split("|"); S.pick = { date, k, i: Number(i) }; drawPick(); return; }
     if (at("[data-dk]") && S.canEdit) { S.pick = { date: at("[data-dk]").dataset.dk, k: "d" }; drawPick(); return; }
@@ -267,6 +294,7 @@
   document.addEventListener("change", (e) => {
     if (e.target.id === "shWho") { S.wishWho = e.target.value; render(); }
     if (e.target.id === "shPenFrom") S.penFrom = e.target.value;
+    if (e.target.id === "shWishDay") S.wishDay = e.target.value;
     if (e.target.id === "shPenTo") S.penTo = e.target.value;
     if (e.target.id === "shNames") { S.withNames = e.target.checked; render(); }
     if (e.target.id === "shWishNote") { S.month = S.month || {}; S.month.wishNote = Object.assign({}, S.month.wishNote, { [S.wishWho]: e.target.value.trim() }); changed("month"); }
