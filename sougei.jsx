@@ -8850,7 +8850,7 @@ function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePa
   // 行はヘルプ表に登録したものだけ。週間パターンのヘルプは行にしない・週間パターンへ入れる/消すもしない。日々の送迎表の確認（helpBaseWarn）にだけ使う
   const rows = {};
   const WDS = [1, 2, 3, 4, 5, 6, 0];
-  const useWds = WDS.filter((wd) => (patterns || {})[wd] || Object.values(rows).some((r) => r.pattern[wd]));
+  const useWds = WDS.filter((wd) => (patterns || {})[wd] || (rules.helpBase || []).some((r) => (r.byDay || {})[wd]));   // 土日は担当が入っている曜日だけ
   const wds = [...new Set([1, 2, 3, 4, 5, ...useWds])].sort((a, b) => WDS.indexOf(a) - WDS.indexOf(b));
   const keys = Object.keys(rows).sort((a, b) => {
     const ra = rows[a], rb = rows[b];
@@ -10134,7 +10134,8 @@ function AppInner() {
   // ヘルプ表タブ用: 全曜日の週間パターンを読み込む
   const [allPatterns, setAllPatterns] = useState(null);
   useEffect(() => {
-    if (!master || tab !== "helpboard") return;
+    // ヘルプ表は週間パターンとは別になった（2026-11-06）ので、開くたびに全曜日の週間パターンを読みに行かない（2026-11-07 依頼者「毎回ヘルプのページを読み込みに行くのが長い」）
+    if (true || !master || tab !== "helpboard") return;
     let alive = true;
     setAllPatterns(null);
     (async () => {
@@ -11302,7 +11303,7 @@ function AppInner() {
         {tab === "vehicles" && <VehicleTab master={master} update={updateMaster} />}
         {tab === "users" && <UserTab master={master} update={updateMaster} />}
         {(tab === "helpboard" || tab === "rules") && <RuleFromBar master={master} from={ruleFrom} setFrom={setRuleFrom} rawUpdate={updateMaster} />}
-        {tab === "helpboard" && <HelpBoardTab master={master} update={updateRules} patterns={allPatterns || {}} loading={!allPatterns} onDeletePattern={deleteHelpFromPatterns} onAddPattern={addHelpToPatterns} />}
+        {tab === "helpboard" && <HelpBoardTab master={master} update={updateRules} patterns={{}} loading={false} onDeletePattern={deleteHelpFromPatterns} onAddPattern={addHelpToPatterns} />}
         {tab === "rules" && <RulesTab master={master} update={updateRules} />}
         {tab === "depts" && <DeptTab master={master} update={updateMaster} onReseed={async () => {
           if (!(await ask("Excelから抽出した初期マスタ(職員38・利用者40・車両13)を読み込みます。\n現在の職員・利用者・車両・部署は置き換わります。よろしいですか?"))) return;
