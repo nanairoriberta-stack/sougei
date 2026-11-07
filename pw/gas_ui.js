@@ -583,7 +583,14 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(ev && ev.title === "中村 16:00のヘルプキャンセル" && ev.sg.type === "help_cancel" && ev.sg.at === "16:00" && ev.allDay, "ヘルプキャンセルの予定 " + JSON.stringify(ev && { t: ev.title, sg: ev.sg }));
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
     console.log("ヘルプキャンセル:", ev.title); }
-  { // リベルタ利用（なし/あり・〇日の夜から〜〇日の朝。2026-11-07 依頼者）
+  { // リベルタ利用（なし/あり・〇日の夜から〜〇日の朝。2026-11-07 依頼者）。名前の候補はリベルタの利用者だけ
+    await add("liberta"); await A.pg.fill("#f-sgq-users", ""); await A.pg.focus("#f-sgq-users"); await A.pg.waitForTimeout(200);
+    { const cands = await A.pg.$$eval('[data-sgpick="users"]', (o) => o.map((x) => x.dataset.name)), nl = api(t, "names.list", []).data.users;
+      const lib = nl.filter((u) => u.lib).map((u) => u.name);
+      assert.ok(cands.length > 0 && cands.every((n) => lib.includes(n)) && cands.length === lib.length, "候補はリベルタの利用者だけ " + cands.length + "/" + lib.length);
+      const non = nl.find((u) => !u.lib).name; await A.pg.fill("#f-sgq-users", non); await A.pg.waitForTimeout(200);
+      assert.strictEqual(await A.pg.locator(`[data-sgpick="users"][data-name="${non}"]`).count(), 0, "リベルタでない人は出ない"); }
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
     await add("liberta"); await A.pg.fill("#f-date", "2026-11-12"); await A.pg.fill("#f-enddate", "2026-11-12"); await pick("users", "中村");
     await A.pg.check('input[name="w-lf"][value="pm"]'); await A.pg.check('input[name="w-lto"][value="am"]'); await A.pg.waitForTimeout(200);
     await save(600); assert.match(await A.pg.locator("#f-err").textContent(), /同じ日のときは/, "同じ日の夜から朝はエラー");

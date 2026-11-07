@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.08a";
+const APP_VERSION="2026.11.08b";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -470,7 +470,7 @@ function drawSg(){
     +`<div class="sgsub"><span class="lbl2">リベルタに</span>${radios("w-lib",w.lib||"off",[["off","泊まらない（なし）"],["on","泊まる（あり）"]])}</div>`
     +`<div class="sgsub"><span class="lbl2">開始日の</span>${radios("w-lf",w.lf||"am",[["am","朝から"],["pm","夜から"]])}</div>`
     +`<div class="sgsub"><span class="lbl2">終了日の</span>${radios("w-lto",w.lto||"pm",[["am","朝まで"],["pm","夜まで"]])}</div>`
-    +hint(`朝＝迎え（リベルタから／自宅から）、夜＝送り（リベルタへ／自宅へ）。例：12日の夜から14日の朝までリベルタにいない → 開始日12日・夜から、終了日14日・朝まで、「泊まらない」。送迎表の「リベルタ泊の調整」に入ります。`)
+    +hint(`朝＝迎え（リベルタから／自宅から）、夜＝送り（リベルタへ／自宅へ）。例：12日の夜から14日の朝までリベルタにいない → 開始日12日・夜から、終了日14日・朝まで、「泊まらない」。送迎表の「リベルタ泊の調整」に入ります。名前の候補は、送迎表の利用者のタブでリベルタ（朝・夕）にしている人だけです。`)
   else if(L==="hcancel")h=who("users","利用者","利用者の名前で検索")
     +tm("w-hc",w.hcM||"all","w-hct",w.hct,"どのヘルプ",[["all","その日のこの人のヘルプ全部"],["time","時刻を選ぶ"]])
     +hint("週間パターンから入っている、いつものヘルプをその日だけなしにします（送迎表のその日のヘルプのコマが消えます）。予定を消すと元に戻ります。何日も続くときは終了日を変えてください。")
@@ -504,7 +504,8 @@ function sgHits(kind,q){
   const h=$("sghits-"+kind);if(!h||!ed)return;const sel=new Set(ed.d.w[kind]||[]);
   // 利用者の候補：放課後デイの予定は送迎表のりんく・ぷれいす版の利用者、生活介護は現体制版・新体制版の利用者
   const kidsMode=kind!=="staff"&&bizOf(ed.d)==="houkago";
-  const src=kind==="staff"?SGN.staff:kidsMode?(SGN.kids||[]):SGN.users;const qq=String(q||"").trim();
+  let src=kind==="staff"?SGN.staff:kidsMode?(SGN.kids||[]):SGN.users;const qq=String(q||"").trim();
+  if(kind==="users"&&ed.d.label==="liberta"&&libUsers().length)src=libUsers();   // リベルタ利用はリベルタの利用者だけ（2026-11-07 依頼者）
   // 予測：「た」→ 田中・田原（「よみがな」シートの読みの頭）、「田」→ 田中（名前の頭）。頭が合うものを先に
   const qn=kanaNorm(qq),Y=SGN.yomi||{};
   const scored=src.filter(x=>!sel.has(x.name)).map(x=>{const n=kanaNorm(x.name),y=kanaNorm(Y[x.name]||"");
@@ -520,9 +521,10 @@ function sgHits(kind,q){
 }
 /* 名前の欄に打った文字が、候補の名前（またはよみがな）とそのまま同じなら、選ばなくても入れる（2026-11-07 依頼者「打った内容がリストにあるなら選択不要に」）。
    ラベルを変える・保存する・ほかの項目を変えるとき（readSg）に入る。同じよみの人が2人以上いるときは入れない（選んでもらう） */
+const libUsers=()=>(SGN.users||[]).filter(u=>u.lib);
 function typedPick(kind){
   const inp=$("f-sgq-"+kind);if(!inp||!ed)return;const q=kanaNorm(inp.value);if(!q)return;
-  const src=kind==="staff"?SGN.staff:(kind!=="staff"&&bizOf(ed.d)==="houkago")?(SGN.kids||[]):SGN.users,Y=SGN.yomi||{};
+  const src=kind==="staff"?SGN.staff:ed.d.label==="liberta"&&libUsers().length?libUsers():(kind!=="staff"&&bizOf(ed.d)==="houkago")?(SGN.kids||[]):SGN.users,Y=SGN.yomi||{};
   let hit=src.filter(x=>kanaNorm(x.name)===q);
   if(!hit.length)hit=src.filter(x=>Y[x.name]&&kanaNorm(Y[x.name])===q);
   const names=[...new Set(hit.map(x=>x.name))];if(names.length!==1)return;
@@ -573,7 +575,8 @@ function checkSg(d,sg){
     if(!sg.staff.length)return"送迎表に載せるときは、担当の職員を選んでください。";}
   if(sg.type.startsWith("user")&&!sg.users.length)return"利用者を選んでください。";
   if(sg.type==="help"&&!sg.users.length)return"利用者を選んでください。";
-  if(sg.type==="liberta"){if(!sg.users.length)return"利用者を選んでください。";if(d.date===d.endDate&&sg.lfrom==="pm"&&sg.lto==="am")return"同じ日のときは「朝から」か「夜まで」にしてください（夜から朝までは、終了日を次の日にしてください）。";}
+  if(sg.type==="liberta"){if(!sg.users.length)return"利用者を選んでください。";
+    {const L=libUsers();const bad=L.length?sg.users.filter(n=>!L.some(u=>u.name===n)):[];if(bad.length)return`${bad.join("・")}さんはリベルタの利用者ではありません（リベルタ利用は、送迎表の利用者のタブでリベルタ（朝・夕）にしている人だけ入れられます）。`;}if(d.date===d.endDate&&sg.lfrom==="pm"&&sg.lto==="am")return"同じ日のときは「朝から」か「夜まで」にしてください（夜から朝までは、終了日を次の日にしてください）。";}
   if(sg.type==="help_cancel"){if(!sg.users.length)return"利用者を選んでください。";if(w.hcM==="time"&&!w.hct)return"キャンセルするヘルプの時刻を入れてください。";}
   if(sg.type==="shift"&&LE_LABELS.includes(d.label)){if(!(d.label==="late"?sg.wstart:sg.wend))return d.label==="late"?"何時に出勤するか入れてください。":"何時に早退するか入れてください。";}
   else if(sg.type==="shift"){

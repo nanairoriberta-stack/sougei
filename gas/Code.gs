@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.08a',
+  VERSION: '2026.11.08b',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -215,6 +215,7 @@ var HANDLERS = {
   'shift.get': function (me, a) { return shiftGet_(me, a[0] || {}); },
   'shift.save': function (me, a) { return shiftSave_(me, a[0] || {}); },
   'shift.syncCal': function (me, a) { return shiftSyncCalApi_(me, a[0] || {}); },
+  'sg.attendance': function (me, a) { return attendance_(me, a[0] || {}); },
   'sg.linkReqs': function (me, a) { return linkReqsOf_(String(a[0] || '')); },   // 生活介護の画面に、りんく・ぷれいす版からの依頼を出す（表示だけ）
   'docs.query': function (me, a) { return docsQuery_(a[0] || {}); },
   'docs.get': function (me, a) { return docGetPublic_(String(a[0])); },
@@ -431,7 +432,11 @@ function namesList_() {
       if (Object.keys(sb).length) sd[st.name].sb = sb;
       if (st.awayFrom && st.awayTo) sd[st.name].a = [st.awayFrom, st.awayTo]; });
     if (ed === 'v3') (m.users || []).forEach(function (u) { if (u && u.name && !seenK[u.name]) { seenK[u.name] = 1; kids.push({ name: u.name, dept: dn(u.deptId) }); } });
-    else (m.users || []).forEach(function (u) { if (u && u.name && !seen[u.name]) { seen[u.name] = 1; users.push({ name: u.name, dept: dn(u.deptId) }); } });
+    else (m.users || []).forEach(function (u) {
+      if (!u || !u.name) return; var isLib = !!(u.libertaAM || u.libertaPM);
+      if (!seen[u.name]) { seen[u.name] = 1; users.push(Object.assign({ name: u.name, dept: dn(u.deptId) }, isLib ? { lib: true } : {})); }
+      else if (isLib) users.forEach(function (x) { if (x.name === u.name) x.lib = true; });
+    });   // lib＝リベルタ（ﾏﾝｼｮﾝ）の利用者（2026-11-07 依頼者：リベルタ利用ラベルはその人たちだけ）
     // 休日出勤・勤務時間変更の部署を選ぶための名前（送迎表の名前で持ち、各版で名前から探す）
     // 迎え先・送り先の候補：利用者タブの「いつもの迎え先・送り先」（家族送り・家族迎えは別の選択肢なので除く）
     (m.users || []).forEach(function (u) { [u && u.meetPlace, u && u.sendPlace].forEach(function (v) { v = String(v || '').trim(); if (/^(リベルタ|リベ|ﾘﾍﾞﾙﾀ|ﾘﾍﾞ)$/.test(v)) v = 'ﾘﾍﾞ'; if (v && !/^(家族|母|父)/.test(v) && !seenP[v]) { seenP[v] = 1; places.push(v); } }); });
@@ -892,6 +897,42 @@ function shiftSyncCalApi_(me, a) {
     var idx = docIndex_(), cur = docGet_(q.monthPath, idx), month = cur ? cur.value : SGShift.monthOf(q.group, q.ym, null);
     return { left: shiftSyncCal_(q.group, q.ym, month, idx) };
   });
+}
+/* 期間の出欠一覧（2026-11-07 依頼者「長期休暇だと誰がいて誰がいないか一覧でわかるようにエクセルで。特定の期間を選んで」）。
+   日ごとに、その日の送迎表（まだ無い日は空の表）にカレンダーの予定を反映した内容で、利用者は ○（来る）/休（欠席）/空（利用日でない）、
+   職員は ○（出勤。時間を変えた日は時刻つき）/休（休み）/公休（固定休）。生活介護は11/1から新体制版・それより前は現体制版、放課後デイはりんく・ぷれいす版。保存はしない（見るだけ） */
+function attendance_(me, a) {
+  if (!(me.role === '管理者' || me.role === '送迎表')) throw { code: 'invalid_argument', message: '出欠の一覧は、送迎表の担当者・管理者だけが出せます' };
+  var D = /^\d{4}-\d{2}-\d{2}$/, from = String(a.from || ''), to = String(a.to || ''), biz = a.biz === 'houkago' ? 'houkago' : 'seikatsu';
+  if (!D.test(from) || !D.test(to) || to < from) throw { code: 'invalid_argument', message: '期間（はじめの日・おわりの日）を正しく選んでください' };
+  var dates = [], d0 = new Date(from + 'T00:00:00Z');
+  while (true) { var ds = Utilities.formatDate(d0, 'UTC', 'yyyy-MM-dd'); if (ds > to) break; dates.push(ds); if (dates.length > 93) throw { code: 'invalid_argument', message: '期間は3か月（93日）までにしてください' }; d0 = new Date(d0.getTime() + 864e5); }
+  var idx = docIndex_(), evMap = TCCore.mergeDays(docsQuery_({ col: 'days', from: from, to: to })), events = Object.keys(evMap).map(function (k) { return evMap[k]; });
+  var masters = {}, users = {}, staff = {}, uOrder = [], sOrder = [];
+  var mOf = function (ns) { if (!(ns in masters)) { var md = docGet_(kvPath_(ns + 'master'), idx); masters[ns] = md && md.value ? md.value.v : null; } return masters[ns]; };
+  var dn = function (m, id) { var x = (m.departments || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ''; };
+  var out = dates.map(function (date) {
+    var ns = biz === 'houkago' ? 'v3:' : linkTargetNs_(date), m = mOf(ns); if (!m) return { date: date };
+    var sd = docGet_(kvPath_(ns + 'sheet:' + date), idx);
+    var v = sd && sd.value && sd.value.v ? sd.value.v : { runs: [], blocks: [], staffOv: {}, userAbsent: {}, userExtra: {}, noRide: {}, userTime: {} };
+    v = SGCal.reconcile(m, v, events, date);
+    var wd = new Date(date + 'T00:00:00Z').getUTCDay(), ov = v.staffOv || {}, ab = v.userAbsent || {}, ux = v.userExtra || {};
+    (m.users || []).forEach(function (u) {
+      if (!u || !u.name) return;
+      var on = (u.days || []).indexOf(wd) >= 0 || !!ux[u.id];
+      if (!users[u.name]) { users[u.name] = { name: u.name, dept: dn(m, u.deptId), cells: {} }; uOrder.push(u.name); }
+      users[u.name].cells[date] = !on ? '' : ab[u.id] ? '休' : '○';
+    });
+    (m.staff || []).forEach(function (s) {
+      if (!s || !s.name || (s.retireDate && s.retireDate <= date)) return;
+      var o = ov[s.id] || {}, fixed = (s.offDays || []).indexOf(wd) >= 0 && !o.workToday;
+      if (!staff[s.name]) { staff[s.name] = { name: s.name, dept: dn(m, s.deptId), part: s.emp === 'パート', cells: {} }; sOrder.push(s.name); }
+      staff[s.name].cells[date] = o.off ? '休' : fixed ? '公休' : '○' + (o.start || o.end ? '(' + (o.start || '') + '〜' + (o.end || '') + ')' : '');
+    });
+    return { date: date };
+  });
+  return { from: from, to: to, biz: biz, dates: out.map(function (x) { return x.date; }),
+    users: uOrder.map(function (n) { return users[n]; }), staff: sOrder.map(function (n) { return staff[n]; }) };
 }
 /* りんく・ぷれいす版のその日の依頼（生活介護の画面で表示するため）。生活介護のその日の表がまだ保存されていなくても出せるように
    （2026-10-31 実機：まだ保存されていない日の生活介護の表に依頼が出なかった） */

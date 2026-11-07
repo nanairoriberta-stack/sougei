@@ -48,6 +48,7 @@ const css = `
 .sgh-card{background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.12);width:min(380px,100%);padding:24px;display:flex;flex-direction:column;gap:14px}
 .sgh-card h1{margin:0;font-size:20px} .sgh-card p{margin:0;font-size:13px;color:#5f6b66;line-height:1.6}
 .sgh-card label{font-size:12px;color:#5f6b66;display:flex;flex-direction:column;gap:6px}
+.sgh-card[data-att] input,.sgh-card[data-att] select{height:42px;font-size:16px;letter-spacing:normal;font-family:inherit;border:1px solid #cfd8d4;border-radius:10px;padding:0 10px}
 .sgh-card input{height:48px;border:1px solid #cfd8d4;border-radius:10px;padding:0 14px;font-size:22px;letter-spacing:.2em;font-family:ui-monospace,Menlo,monospace}
 .sgh-card button.go{height:48px;border:0;border-radius:10px;background:#13795b;color:#fff;font-size:16px;font-weight:700}
 .sgh-card button.go:disabled{opacity:.5}
@@ -140,13 +141,75 @@ function toggleMenu() {
   else if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar" + dq))}" target="_top">📅 カレンダー</a>`);
   if (isExec(BASE) && page !== "shift") links.push(`<a href="${esc(url("?page=shift"))}" target="_top">🗓 シフト表（希望休）</a>`);   // マンション職員の早番・遅番（2026-11-02）
   if (isExec(BASE) && (me.canSougei || me.admin)) [["v1", "現体制版"], ["v2", "新体制版"], ["v3", "りんく・ぷれいす版"]].forEach(([e, l]) => { if (!(page === "sougei" && e === ED)) links.push(`<a href="${esc(url("?page=sougei&e=" + e + dq))}" target="_top">🚌 送迎表（${l}）</a>`); });
-  menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
+  menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}${me.canSougei || me.admin ? `<button data-a="att">📋 期間の出欠（Excel）</button>` : ""}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
   menu.onclick = (e) => {
     const a = e.target.closest("[data-a]"); if (!a) return;
     menu.remove(); menu = null;
-    if (a.dataset.a === "out") logout(); else if (a.dataset.a === "pin") askNewPin(false); else if (a.dataset.a === "log") showLog();
+    if (a.dataset.a === "out") logout(); else if (a.dataset.a === "pin") askNewPin(false); else if (a.dataset.a === "log") showLog(); else if (a.dataset.a === "att") showAttendance();
   };
   document.body.appendChild(menu);
+}
+/* 期間の出欠（長期休暇などに、誰が来て誰が休みか）を期間を選んでExcelに（2026-11-07 依頼者）。中身はサーバーの sg.attendance */
+const ymdL = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+let excelJsP = null;
+function loadExcelJs() {
+  if (G.ExcelJS) return Promise.resolve(G.ExcelJS);
+  return excelJsP || (excelJsP = new Promise((ok, ng) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"; sc.onload = () => ok(G.ExcelJS); sc.onerror = () => { excelJsP = null; ng(new Error("Excelの部品を読み込めませんでした（通信を確かめてください）")); }; document.head.appendChild(sc); }));
+}
+function showAttendance() {
+  const t = new Date(), t2 = new Date(t.getTime() + 6 * 864e5);
+  showOverlay(`<div class="sgh-card" style="width:min(460px,100%)" data-att><h1>期間の出欠（Excel）</h1>
+    <p>長期休暇などに、期間を選ぶと、日ごとに<b>利用者が来るか・休みか</b>、<b>職員が出勤か・休みか</b>の一覧をExcelで出します。カレンダーの休み・欠席なども入ります。</p>
+    <label>はじめの日<input type="date" id="sghAttFrom" value="${ymdL(t)}"></label>
+    <label>おわりの日<input type="date" id="sghAttTo" value="${ymdL(t2)}"></label>
+    <label>事業<select id="sghAttBiz"><option value="seikatsu">生活介護</option><option value="houkago">放課後デイ（りんく・ぷれいす）</option></select></label>
+    <p class="err" id="sghAttMsg"></p>
+    <button class="go" id="sghAttGo" data-att-go>Excelで出す</button><button class="go" style="background:#eef3f1;color:#18201d" id="sghAttClose">閉じる</button></div>`);
+  document.getElementById("sghAttClose").onclick = hideOverlay;
+  document.getElementById("sghAttGo").onclick = async () => {
+    const msg = document.getElementById("sghAttMsg"), go = document.getElementById("sghAttGo");
+    const from = document.getElementById("sghAttFrom").value, to = document.getElementById("sghAttTo").value, biz = document.getElementById("sghAttBiz").value;
+    if (!from || !to || to < from) { msg.textContent = "はじめの日・おわりの日を選んでください（おわりの日は、はじめの日より後）"; return; }
+    go.disabled = true; msg.textContent = "集めています…（長い期間だと少し時間がかかります）";
+    try {
+      const [r, X] = await Promise.all([call("sg.attendance", { from, to, biz }), loadExcelJs()]);
+      const wb = buildAttendanceWb(X, r), buf = await wb.xlsx.writeBuffer();
+      await downloadsShim.save({ filename: `出欠一覧_${biz === "houkago" ? "放課後デイ" : "生活介護"}_${from}〜${to}.xlsx`, data: new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }) });
+      msg.textContent = "出しました。";
+    } catch (e) { msg.textContent = (e && e.message) || "出せませんでした"; }
+    go.disabled = false;
+  };
+}
+const DEPT_ORD = ["嫁島", "津田", "川津", "あいのて", "リベ", "ぷれいす"];
+const deptRank = (d) => { const i = DEPT_ORD.findIndex((x) => String(d || "").startsWith(x)); return i < 0 ? 99 : i; };
+function buildAttendanceWb(ExcelJS, r) {
+  const WDN = ["日", "月", "火", "水", "木", "金", "土"], wb = new ExcelJS.Workbook();
+  const thin = { style: "thin", color: { argb: "FF9CA3AF" } }, bd = { top: thin, bottom: thin, left: thin, right: thin };
+  const lab = (d) => { const x = new Date(d + "T00:00:00"); return `${x.getMonth() + 1}/${x.getDate()}(${WDN[x.getDay()]})`; };
+  const sheet = (title, rows, isStaff) => {
+    const ws = wb.addWorksheet(title, { pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 }, views: [{ state: "frozen", xSplit: 2, ySplit: 2 }] });
+    const n = r.dates.length;
+    ws.getCell(1, 1).value = `${title}の出欠　${lab(r.from)}〜${lab(r.to)}（${r.biz === "houkago" ? "放課後デイ" : "生活介護"}）　○＝${isStaff ? "出勤" : "来る"}　休＝休み${isStaff ? "　公休＝固定休" : "　空き＝利用日でない"}`;
+    ws.getCell(1, 1).font = { bold: true, size: 13 }; ws.mergeCells(1, 1, 1, Math.max(2, n + 2));
+    const head = ["名前", "部署", ...r.dates.map(lab)];
+    head.forEach((h, i) => { const c = ws.getCell(2, i + 1); c.value = h; c.font = { bold: true }; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; c.border = bd;
+      const wd = i >= 2 ? new Date(r.dates[i - 2] + "T00:00:00").getDay() : -1; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: wd === 0 ? "FFFEE2E2" : wd === 6 ? "FFDBEAFE" : "FFF1F5F9" } }; });
+    ws.getColumn(1).width = 12; ws.getColumn(2).width = 10; for (let i = 0; i < n; i++) ws.getColumn(i + 3).width = isStaff ? 9 : 6.5;
+    const list = rows.slice().sort((a, b) => deptRank(a.dept) - deptRank(b.dept) || (isStaff ? (a.part ? 1 : 0) - (b.part ? 1 : 0) : 0));
+    list.forEach((x, ri) => {
+      const row = ri + 3; ws.getCell(row, 1).value = x.name; ws.getCell(row, 2).value = x.dept + (x.part ? "(パート)" : "");
+      [1, 2].forEach((c) => { ws.getCell(row, c).border = bd; });
+      r.dates.forEach((d, i) => { const v = (x.cells || {})[d] || "", c = ws.getCell(row, i + 3); c.value = v; c.border = bd; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; c.font = { size: v.length > 2 ? 8 : 11, bold: v === "休", color: { argb: v === "休" ? "FFB91C1C" : "FF18201D" } };
+        if (v === "休") c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } }; else if (!v || v === "公休") c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } }; });
+    });
+    const sr = list.length + 3; ws.getCell(sr, 1).value = isStaff ? "出勤の人数" : "来る人数"; ws.getCell(sr, 1).font = { bold: true }; ws.mergeCells(sr, 1, sr, 2);
+    r.dates.forEach((d, i) => { const c = ws.getCell(sr, i + 3); c.value = list.filter((x) => /^○/.test((x.cells || {})[d] || "")).length; c.font = { bold: true }; c.alignment = { horizontal: "center" }; c.border = bd; });
+    const sr2 = sr + 1; ws.getCell(sr2, 1).value = "休みの人数"; ws.getCell(sr2, 1).font = { bold: true }; ws.mergeCells(sr2, 1, sr2, 2);
+    r.dates.forEach((d, i) => { const c = ws.getCell(sr2, i + 3); c.value = list.filter((x) => ((x.cells || {})[d] || "") === "休").length; c.alignment = { horizontal: "center" }; c.border = bd; });
+    ws.pageSetup.printTitlesRow = "1:2";
+  };
+  sheet("利用者", r.users || [], false); sheet("職員", r.staff || [], true);
+  return wb;
 }
 async function showLog() {
   showOverlay(`<div class="sgh-card" style="width:min(900px,100%)"><h1>変更履歴</h1><div class="sgh-log" id="sghLog">読み込み中…</div><button class="go" id="sghClose">閉じる</button></div>`);

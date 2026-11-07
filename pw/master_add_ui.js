@@ -163,6 +163,29 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await P.pg.locator('button:has-text("週間パターンの担当を基本として一括登録")').count(), 0, "週間パターンからの一括登録はなし");
     await P.pg.click('button:text-is("＋ ヘルプを追加")'); await P.pg.waitForTimeout(300);
     console.log("週間パターンの印刷:", fn, "／ヘルプ表は登録した行だけ"); }
+  { // 送迎表の日付選びも月曜始まり（2026-11-07 依頼者「すべてのカレンダー」）
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(800);
+    await P.pg.click("[data-datepop]"); await P.pg.waitForTimeout(200);
+    const heads = await P.pg.$$eval('[aria-label="日付を選ぶ"] .grid > span.text-xs', (o) => o.map((x) => x.textContent));
+    assert.deepStrictEqual(heads, ["月", "火", "水", "木", "金", "土", "日"], "日付選びは月曜から " + heads.join(""));
+    const firstBtn = await P.pg.$eval('[aria-label="日付を選ぶ"] .grid button[data-day]', (b) => ({ d: b.dataset.day, col: [...b.parentElement.children].indexOf(b) - 7 }));
+    assert.strictEqual(firstBtn.col, (new Date(firstBtn.d + "T00:00:00").getDay() + 6) % 7, "1日が正しい曜日の列 " + JSON.stringify(firstBtn));
+    await P.pg.keyboard.press("Escape"); await P.pg.waitForTimeout(200); }
+  { // 期間の出欠（Excel）：右下の名前のボタン → メニュー → 期間を選んで出す（2026-11-07 依頼者）
+    await P.pg.evaluate(() => { window.__dl = null; const o = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) { window.__dl = { name: this.download, href: this.href }; return; } return o.call(this); }; });
+    await P.pg.click(".sgh-chip"); await P.pg.waitForTimeout(200); await P.pg.click('.sgh-menu [data-a="att"]'); await P.pg.waitForTimeout(200);
+    await P.pg.fill("#sghAttFrom", "2026-11-01"); await P.pg.fill("#sghAttTo", "2026-11-07"); await P.pg.click("[data-att-go]");
+    await P.pg.waitForFunction(() => window.__dl, null, { timeout: 20000 });
+    const got = await P.pg.evaluate(async () => { const r = await fetch(window.__dl.href); return { name: window.__dl.name, bytes: Array.from(new Uint8Array(await r.arrayBuffer())) }; });
+    assert.strictEqual(got.name, "出欠一覧_生活介護_2026-11-01〜2026-11-07.xlsx");
+    const ExcelJS = require("exceljs"); const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(got.bytes));
+    const wu = wb.getWorksheet("利用者"), wsf = wb.getWorksheet("職員"); assert.ok(wu && wsf, "利用者・職員のシート");
+    assert.deepStrictEqual([3, 4, 9].map((c) => String(wu.getCell(2, c).value)), ["11/1(日)", "11/2(月)", "11/7(土)"], "日付の列");
+    let marks = 0; wu.eachRow((row, rn) => { if (rn > 2) row.eachCell((c) => { if (c.value === "○") marks++; }); }); assert.ok(marks > 50, "来る人の○ " + marks);
+    assert.ok(String(wsf.getCell(1, 1).value).includes("公休＝固定休"));
+    assert.match(await P.pg.locator("#sghAttMsg").innerText(), /出しました/);
+    await P.pg.click("#sghAttClose"); await P.pg.waitForTimeout(200);
+    console.log("期間の出欠（Excel）:", got.name, "○", marks); }
   assert.deepStrictEqual(P.errs.filter((e) => !/net::ERR_FAILED|favicon/.test(e)), [], "画面エラーなし");
   console.log("画面エラー: []");
   await b.close();

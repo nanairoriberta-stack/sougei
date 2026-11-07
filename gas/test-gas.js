@@ -644,6 +644,34 @@ async function bootstrap() {
     return "白戸＝男性を組める・横田＝自分の希望だけ・八壁＝女性だけ、別の日の同時保存はどちらも残る";
   });
 
+  await test("期間の出欠一覧（長期休暇）：日ごとに利用者の来る/休み・職員の出勤/休み/公休、カレンダーの休みも入る・送迎表の担当者と管理者だけ（2026-11-07 依頼者）／リベルタの利用者の目印", async () => {
+    const { g, admin } = await bootstrap();
+    const E = engFor("v2"), m2 = (await admin.call("kv.get", "v2:master")).value;
+    const op = (id, ev) => admin.call("cal.apply", { kind: "upsert", opId: "op_" + id, id: "ev_" + id, baseRev: null, ev });
+    const base = (date, title, label, sg, end) => ({ title, date, endDate: end || date, allDay: true, start: "", end: "", label, place: "", memo: "", members: [], sg });
+    assert.strictEqual((await op("att00001", base("2026-11-03", "中村 欠席", "user", { type: "user_absent", users: ["中村"] }))).status, "ok");
+    assert.strictEqual((await op("att00002", base("2026-11-02", "八壁 休み", "leave", { type: "staff_off", staff: ["八壁"] }, "2026-11-03"))).status, "ok");
+    assert.strictEqual((await op("att00003", base("2026-11-04", "日野 10:00出勤（遅刻）", "late", { type: "shift", staff: ["日野"], wstart: "10:00", reason: "遅刻" }))).status, "ok");
+    const r = await admin.call("sg.attendance", { from: "2026-10-31", to: "2026-11-04", biz: "seikatsu" });
+    assert.deepStrictEqual(r.dates, ["2026-10-31", "2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04"]);
+    const nk = r.users.find((u) => u.name === "中村"), hy = r.staff.find((s) => s.name === "八壁"), hn = r.staff.find((s) => s.name === "日野");
+    assert.strictEqual(nk.cells["2026-11-02"], "○", "利用日は○"); assert.strictEqual(nk.cells["2026-11-03"], "休", "カレンダーの欠席は休"); assert.strictEqual(nk.cells["2026-11-01"], "", "利用日でない日は空き");
+    assert.strictEqual(hy.cells["2026-11-02"], "休"); assert.strictEqual(hy.cells["2026-11-03"], "休", "何日も続く休み");
+    assert.strictEqual(hn.cells["2026-11-04"], "○(10:00〜)", "時間を変えた日は時刻つき");
+    assert.ok(r.staff.some((s) => Object.values(s.cells).includes("公休")), "固定休は公休");
+    const v1n = r.users.find((u) => u.name === "中村"); assert.ok(v1n.cells["2026-10-31"] !== undefined, "10/31は現体制版の表から");
+    assert.ok(!(await admin.call("kv.get", "v2:sheet:2026-11-03")).value, "出欠を出しても送迎表は作らない（見るだけ）");
+    const ippan = device(g); await ippan.login(noOf(g, "日野"), pinOf(g, "日野"));
+    await ippan.call("sg.attendance", { from: "2026-11-02", to: "2026-11-03" }).then(() => assert.fail("一般は出せない"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+    await admin.call("sg.attendance", { from: "2026-11-01", to: "2027-03-01" }).then(() => assert.fail("長すぎる"), (e) => assert.ok(/93日/.test(e.message)));
+    // リベルタ（ﾏﾝｼｮﾝ）の利用者の目印：リベルタ利用ラベルの候補はこの人たちだけ
+    for (const k of [...g.cache.keys()]) if (k === "names6") g.cache.delete(k);
+    const nl = await admin.call("names.list");
+    const libN = nl.users.filter((u) => u.lib).map((u) => u.name), want = m2.users.filter((u) => u.libertaAM || u.libertaPM).map((u) => u.name);
+    assert.ok(libN.length > 10 && want.every((n) => libN.includes(n)) && !nl.users.find((u) => !u.lib && want.includes(u.name)), "リベルタの利用者 " + libN.length + "名");
+    return `出欠：利用者${r.users.length}名・職員${r.staff.length}名×${r.dates.length}日／リベルタの利用者${libN.length}名`;
+  });
+
   await test("ログインはログアウトするまで続く：期限は10年・以前の120日のログインも使っているうちにのびる・ログアウトで切れる（2026-11-07 依頼者）", async () => {
     const { g, admin } = await bootstrap();
     const sess = () => g.sheets.get("_sessions").data.slice(1);

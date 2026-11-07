@@ -148,7 +148,7 @@ function DatePop({ date, setDate, empty }) {
   useEffect(() => { if (!open) return; const k = (e) => { if (e.key === "Escape") setOpen(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [open]);
   const d = new Date((date || todayStr()) + "T00:00:00");
   const [y, m] = ym.split("-").map(Number);
-  const first = new Date(y, m - 1, 1).getDay(), days = new Date(y, m, 0).getDate();
+  const first = (new Date(y, m - 1, 1).getDay() + 6) % 7, days = new Date(y, m, 0).getDate();   // 月曜始まり（2026-11-07 依頼者「すべてのカレンダー」）
   const ds = (n) => `${y}-${String(m).padStart(2, "0")}-${String(n).padStart(2, "0")}`;
   const move = (k) => { const t = new Date(y, m - 1 + k, 1); setYm(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`); };
   const today = todayStr();
@@ -168,10 +168,10 @@ function DatePop({ date, setDate, empty }) {
             <button type="button" className="px-2 py-1 rounded hover:bg-stone-100" onClick={() => move(1)} aria-label="次の月">›</button>
           </div>
           <div className="grid grid-cols-7 text-center gap-0.5">
-            {DAYS.map((w, i) => <span key={w} className={`text-xs py-1 ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-stone-500"}`}>{w}</span>)}
+            {[1, 2, 3, 4, 5, 6, 0].map((i) => <span key={i} className={`text-xs py-1 ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-stone-500"}`}>{DAYS[i]}</span>)}
             {cells.map((n, i) => n == null ? <span key={"b" + i} /> : (
               <button type="button" key={n} data-day={ds(n)} onClick={() => { setDate(ds(n)); setOpen(false); }}
-                className={`py-1 rounded ${ds(n) === date ? "bg-teal-600 text-white font-bold" : ds(n) === today ? "ring-1 ring-teal-500 text-stone-800" : i % 7 === 0 ? "text-red-500 hover:bg-stone-100" : i % 7 === 6 ? "text-blue-500 hover:bg-stone-100" : "text-stone-700 hover:bg-stone-100"}`}>{n}</button>
+                className={`py-1 rounded ${ds(n) === date ? "bg-teal-600 text-white font-bold" : ds(n) === today ? "ring-1 ring-teal-500 text-stone-800" : i % 7 === 6 ? "text-red-500 hover:bg-stone-100" : i % 7 === 5 ? "text-blue-500 hover:bg-stone-100" : "text-stone-700 hover:bg-stone-100"}`}>{n}</button>
             ))}
           </div>
           <div className="flex justify-end mt-1"><button type="button" className="text-xs text-teal-700 px-2 py-1 rounded hover:bg-stone-100" onClick={() => { setDate(today); setOpen(false); }}>今日</button></div>
