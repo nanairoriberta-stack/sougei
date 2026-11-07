@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.07a";
+const APP_VERSION="2026.11.07b";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -503,8 +503,20 @@ function sgHits(kind,q){
   if(!qn)groups.sort((a,b)=>rank(a.d)-rank(b.d)||String(a.d).localeCompare(String(b.d),"ja"));   // 入力中は合うものが多い部署から（並びは予測の順）
   h.innerHTML=list.length?groups.map(g=>`<div class="sghd" data-sghd="${esc(g.d)}">${esc(g.d)}</div>`+g.xs.map(x=>`<button type="button" class="sgin" data-sgpick="${kind}" data-name="${esc(x.name)}"><span>${esc(x.name)}${Y[x.name]?` <small>${esc(Y[x.name])}</small>`:""}</span></button>`).join("")).join(""):`<div class="by" style="padding:6px 10px">${!SGN.loaded?"読み込み中…":kidsMode&&!(SGN.kids||[]).length?"放課後デイ（りんく・ぷれいす）の利用者がまだいません。送迎表の「りんく・ぷれいす版」の利用者タブで登録すると、ここに出ます。":"見つかりません"}</div>`;h.hidden=false;
 }
+/* 名前の欄に打った文字が、候補の名前（またはよみがな）とそのまま同じなら、選ばなくても入れる（2026-11-07 依頼者「打った内容がリストにあるなら選択不要に」）。
+   ラベルを変える・保存する・ほかの項目を変えるとき（readSg）に入る。同じよみの人が2人以上いるときは入れない（選んでもらう） */
+function typedPick(kind){
+  const inp=$("f-sgq-"+kind);if(!inp||!ed)return;const q=kanaNorm(inp.value);if(!q)return;
+  const src=kind==="staff"?SGN.staff:(kind!=="staff"&&bizOf(ed.d)==="houkago")?(SGN.kids||[]):SGN.users,Y=SGN.yomi||{};
+  let hit=src.filter(x=>kanaNorm(x.name)===q);
+  if(!hit.length)hit=src.filter(x=>Y[x.name]&&kanaNorm(Y[x.name])===q);
+  const names=[...new Set(hit.map(x=>x.name))];if(names.length!==1)return;
+  const w=ed.d.w;if(oneOnly(ed.d.label,kind))w[kind]=[names[0]];else if(!w[kind].includes(names[0]))w[kind].push(names[0]);
+  inp.value="";
+}
 function readSg(){
   if(!ed||!$("sgArea"))return;const w=ed.d.w;
+  typedPick("staff");typedPick("users");
   const rv=n=>{const x=document.querySelector(`input[name="${n}"]:checked`);return x?x.value:null};
   const iv=id=>{const x=$(id);return x?x.value.trim():null};
   for(const[n,k]of[["w-kinmu","kinmu"],["w-leave","leave"],["w-meet","meetM"],["w-send","sendM"],["w-ws","wsM"],["w-we","weM"],["w-hdur","hdur"],["w-aw","awM"]]){const v=rv(n);if(v!=null)w[k]=v}

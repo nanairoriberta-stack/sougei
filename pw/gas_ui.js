@@ -391,6 +391,30 @@ const D = path.join(__dirname, "../gas/out");
   await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
   const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await pickLabel(A.pg, label); await A.pg.waitForTimeout(300); };
   const save = async (ms) => { await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(ms || 1500); };
+  { // ラベルを変えても選んだ名前はそのまま（職員の中・利用者の中）。打った名前が候補にそのままあれば選ばなくてよい（2026-11-07 依頼者）
+    const chipsOf = (k) => A.pg.$$eval(`.sgbox [data-sgrm="${k}"]`, (o) => o.map((x) => x.dataset.name));
+    await add("help"); await pick("users", "中村"); await A.pg.waitForTimeout(200);
+    for (const L of ["user", "ride", "extra", "monitor", "uother", "help"]) { await pickLabel(A.pg, L); await A.pg.waitForTimeout(250); assert.deepStrictEqual(await chipsOf("users"), ["中村"], "利用者の中でラベルを変えても中村のまま: " + L); }
+    await pickLabel(A.pg, "late"); await A.pg.waitForTimeout(250);
+    if ((await chipsOf("staff")).length) { await A.pg.click('.sgbox [data-sgrm="staff"]'); await A.pg.waitForTimeout(200); }
+    await pick("staff", "日野"); await A.pg.waitForTimeout(200);
+    for (const L of ["early", "shift", "leave", "hwork", "sother", "late"]) { await pickLabel(A.pg, L); await A.pg.waitForTimeout(250); assert.deepStrictEqual(await chipsOf("staff"), ["日野"], "職員の中でラベルを変えても日野のまま: " + L); }
+    await pickLabel(A.pg, "user"); await A.pg.waitForTimeout(250); assert.deepStrictEqual(await chipsOf("users"), ["中村"], "職員→利用者に戻しても中村のまま");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+    // 打った名前が候補にそのままある → 選ばなくても入る（保存のとき・ほかを押したとき）
+    const D24 = "2026-11-26";
+    await add("user"); await A.pg.fill("#f-date", D24); await A.pg.fill("#f-enddate", D24); await A.pg.fill("#f-sgq-users", "中村"); await A.pg.waitForTimeout(300);
+    await pickLabel(A.pg, "ride"); await A.pg.waitForTimeout(300); assert.deepStrictEqual(await chipsOf("users"), ["中村"], "打った名前はラベルを変えても入っている");
+    await pickLabel(A.pg, "user"); await A.pg.waitForTimeout(250);
+    if ((await chipsOf("users")).length) { await A.pg.click('.sgbox [data-sgrm="users"]'); await A.pg.waitForTimeout(200); }
+    await A.pg.fill("#f-sgq-users", "中村"); await save(2000);
+    const evs = Object.values(api(t, "docs.query", [{ col: "days", from: D24, to: D24 }]).data.reduce((a, d) => Object.assign(a, d.events), {}));
+    assert.ok(evs.some((e) => e.label === "user" && (e.sg.users || []).join() === "中村"), "選ばずに保存しても中村の欠席が入る " + evs.map((e) => e.title).join(","));
+    await add("user"); await A.pg.fill("#f-sgq-users", "なかむ"); await save(600);
+    assert.match(await A.pg.locator("#f-err").textContent(), /利用者を選んで/, "途中まで（候補にそのままない名前）は入れない");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
+    console.log("ラベルを変えても名前はそのまま・打った名前はそのまま入る OK"); }
   { // カレンダーからシフト表へ切り替えるボタン（使える人だけ。2026-11-02）
     await A.pg.waitForTimeout(500);
     assert.ok(await A.pg.locator("#shiftBtn").isVisible(), "管理者にはシフト表のボタン");
