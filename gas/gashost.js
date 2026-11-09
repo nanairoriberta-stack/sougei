@@ -19,7 +19,7 @@ function rawCall(method, args) {
     const run = G.google && G.google.script && G.google.script.run;
     if (!run) { rej({ code: "unavailable", message: "サーバーに接続できません" }); return; }
     run.withSuccessHandler((r) => { if (!r) { netTrouble("サーバーの返事が空でした（" + method + "）"); return rej({ code: "unavailable", message: "サーバーの返事が空でした" }); } if (r.ok) res(r.data); else rej({ code: r.code, message: r.message }); })
-       .withFailureHandler((e) => { const m = String((e && e.message) || e); netTrouble(m); rej({ code: "unavailable", message: m }); })
+       .withFailureHandler((e) => { const m = String((e && e.message) || e); netTrouble(m + "［" + method + "］"); rej({ code: "unavailable", message: m }); })   // どの操作で失敗したかも出す（2026-11-09 送迎表の読み込みで出た）
        .api(token, method, args);
   });
 }

@@ -19,11 +19,12 @@ const D = path.join(__dirname, "../gas/out");
     api(t, "kv.merge", [{ key: "sheet:" + date, base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, { id: "blkNote1", kind: "block", time: "12:00", staffId: m0.staff.find((x) => x.name === "八壁").id, label: "黒田給食利用", vehicleId: "" }] } }]); }
   const yo = rows().find((r) => r[1] === "余村慎");
   const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js", "exceljs.min.js": "node_modules/exceljs/dist/exceljs.min.js" };
+  let failCas = false;   // 書き込みを失敗させる（送迎表を開くときの手直しが失敗しても開けるかの試し）
   const b = await chromium.launch();
   async function open(file, vp, boot, outName, extraInit) {
     const ctx = await b.newContext({ viewport: vp, colorScheme: "light" }); const pg = await ctx.newPage();
     const errs = []; pg.on("pageerror", (e) => errs.push(String(e))); pg.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errs.push(m.text().slice(0, 200)); });
-    await pg.exposeFunction("__gasApi", (tk, m, a) => api(tk, m, a));
+    await pg.exposeFunction("__gasApi", (tk, m, a) => (failCas && m === "kv.cas" ? { ok: false, error: { code: "busy", message: "こみあっています" } } : api(tk, m, a)));
     await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { const h = m === "docs.query" && window.__HOLDQ; if (h) window.__QN = (window.__QN || 0) + 1; setTimeout(() => window.__gasApi(tk, m, a).then((r) => setTimeout(() => s && s(r), h || 0), (e) => f && f(e)), 30); } }; })() } }; });
     if (extraInit) await pg.addInitScript(extraInit);
     await pg.route("https://**/*", async (r) => { const u = r.request().url(); for (const k in LOC) if (u.endsWith(k)) return r.fulfill({ path: LOC[k], contentType: "application/javascript" }); return r.abort(); });
@@ -187,6 +188,16 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.click("#sghAttClose"); await P.pg.waitForTimeout(200);
     console.log("期間の出欠（Excel）:", got.name, "○", marks); }
   assert.deepStrictEqual(P.errs.filter((e) => !/net::ERR_FAILED|favicon/.test(e)), [], "画面エラーなし");
+  // 送迎表を開くときの手直し（中抜けの初期値）が書き込みの失敗で止まっても、「読み込み中…」のままにしないで開く（2026-11-09 依頼者「読み込みがすごい時間かかってる」）
+  { const m1 = api(t, "kv.get", ["master"]).data.value, r1 = api(t, "kv.get", ["master"]).data.rev; const { away1, ...noFlag } = m1;
+    api(t, "kv.cas", [{ key: "master", rev: r1, value: noFlag }]); failCas = true;
+    const L = await open("sougei.html", { width: 1200, height: 800 }, 'window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-02";', "loading_v1.html");
+    await L.pg.waitForTimeout(500); await L.pg.fill("#sghNo", "000"); await L.pg.fill("#sghPin", "5829"); await L.pg.click("#sghGo");
+    await L.pg.waitForSelector("[data-loading-step]", { timeout: 5000 }).then(async () => assert.match(await L.pg.locator("[data-loading-step]").innerText(), /を読んでいます（\d+秒）/), () => {});
+    await L.pg.waitForTimeout(6000);
+    assert.strictEqual(await L.pg.locator("[data-loading]").count(), 0, "手直しが失敗しても送迎表が開く");
+    assert.ok(await L.pg.locator('button:text-is("職員")').count() > 0, "送迎表の画面");
+    failCas = false; await L.pg.context().close(); console.log("読み込み：手直しが失敗しても開く OK"); }
   console.log("画面エラー: []");
   await b.close();
 })().catch((e) => { console.error(e); process.exit(1); });

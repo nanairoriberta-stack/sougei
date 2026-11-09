@@ -668,6 +668,23 @@ function seedMasterLink() {
 }
 /* 以前の初期データ（部署「りんく・ぷれいす」・職員1〜5・車1〜3・午前1〜10/午後1〜10）を新しい名前に直す。
    中のID（送迎表の日の表が指している）はそのままで名前だけ変え、足りない人・車は足す。画面で名前を変えた人はそのまま */
+// 送迎表を開くときの「読み込み中…」：何を読んでいるか・何秒たったか。20秒を過ぎたら「もう一度読み込む」（2026-11-09 依頼者）
+function LoadingScreen({ step }) {
+  const [, tick] = useState(0);
+  useEffect(() => { const t = setInterval(() => tick((v) => v + 1), 1000); return () => clearInterval(t); }, []);
+  const sec = Math.floor((Date.now() - ((step && step.at) || Date.now())) / 1000);
+  return (
+    <div className="min-h-screen bg-stone-100 flex flex-col items-center justify-center gap-2 text-stone-500 font-sans" data-loading>
+      <div>読み込み中…</div>
+      <div className="text-xs" data-loading-step>{(step && step.step) || ""}を読んでいます（{sec}秒）</div>
+      {step && step.err ? <div className="text-xs text-rose-700">{step.err}</div> : null}
+      {sec >= 20 || (step && step.err) ? (
+        <div className="text-xs text-center max-w-sm">時間がかかっています。通信がこみあっているか、Googleの処理が混んでいる可能性があります。
+          <div><button className="mt-2 px-3 py-1 rounded border border-stone-400 bg-white text-stone-700" data-loading-retry onClick={() => location.reload()}>もう一度読み込む</button></div></div>
+      ) : null}
+    </div>
+  );
+}
 function upgradeAway1(cur) {
   if (!cur || cur.away1) return cur;
   const m = { ...cur, away1: true };
@@ -9520,10 +9537,16 @@ function AppInner() {
   const flushSaves = async () => { if (KV) KV.flushLocal(); };
   const [calEvents, setCalEvents] = useState({ date: null, list: [] });
 
+  // 読み込みのようす（2026-11-09 依頼者「送迎表の読み込みがすごい時間かかってる」）：どこで待っているかと経過秒を「読み込み中…」に出す。
+  // 初めの手直し（seed・中抜け・りんくの名前）が通信で失敗しても、読めたマスタで画面を開く（以前は失敗すると「読み込み中…」のまま止まっていた）
+  const [loadStep, setLoadStep] = useState({ step: "マスタ（職員・利用者・車）", at: Date.now(), err: "" });
   useEffect(() => {
     (async () => {
       let m = await sGet("master");
-      if (sLoadFailed("master")) return; // 読めなかったときは初期データで上書きしない(障害A)。画面上部に警告が出る
+      if (sLoadFailed("master")) { setLoadStep((x) => ({ ...x, err: "マスタが読み込めませんでした（通信）" })); return; } // 読めなかったときは初期データで上書きしない(障害A)。画面上部に警告が出る
+      const base = m;
+      try {
+      setLoadStep((x) => ({ ...x, step: "初めの手直し" }));
       // 未保存、または古い版の初期データしか入っていない場合は最新の初期データに差し替える
       if (!m || !m.staff || m.staff.length === 0 || (m.seedVersion || 0) < SEED_VERSION) {
         // 丸ごと上書きせず、アプリ画面での追加・変更を残したままseedを取り込む
@@ -9550,7 +9573,8 @@ function AppInner() {
         m = await sUpdate("master", (cur) => (cur && !cur.linkSeed2 ? upgradeLinkSeed(cur) : cur));
         notify("りんく・ぷれいす版の職員・車・利用者を新しい名前にしました（職員・車両・利用者のタブで確かめてください）", "info");
       }
-      setMaster(m);
+      } catch (e) { m = m && m.staff ? m : base; }   // 手直しは次に開いたときにまた試す
+      setMaster(m && m.staff ? m : base);
     })();
   }, []);
   // 他の人がマスタを変えたら、開いている画面にもすぐ反映する
@@ -10556,13 +10580,7 @@ function AppInner() {
     ["rules", "ルール"],
   ];
 
-  if (!master) {
-    return (
-      <div className="min-h-screen bg-stone-100 flex items-center justify-center text-stone-500 font-sans">
-        読み込み中…
-      </div>
-    );
-  }
+  if (!master) return <LoadingScreen step={loadStep} />;
 
   return (
     <div className="min-h-screen bg-stone-100 font-sans text-stone-800 pb-10" style={calSide && typeof window !== "undefined" && window.innerWidth >= 1000 ? { marginRight: calSideW } : undefined}>
