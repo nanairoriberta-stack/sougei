@@ -146,6 +146,15 @@ console.log('half OK');
  assert.ok(x.blocks.some(b=>b.id==='cal_hp2___hold__'&&b.staffId==='__hold__'&&b.label==='中村'),'担当未定のヘルプは保留欄');
  const h3=x.blocks.find(b=>b.id===`cal_hp3_${st('白戸')}`); assert.ok(h3&&h3.label==='○○公民館'&&h3.userIds.length===0,'行き先が場所でも入る');
  assert.ok(!x.blocks.some(b=>String(b.id).startsWith('cal_hp4')),'この版の職員も利用者もいないヘルプは入れない');
+ // 2026-11-09 依頼者「カレンダーの『園山 ヘルプ』が送迎表に出ていない」：利用者の名前がこの版に見つからなくても、同じ事業の予定なら名前のまま保留へ（だまって消さない）
+ { const ms=[{id:'hm1',rev:1,date:D,endDate:D,allDay:false,start:'10:00',end:'11:00',title:'園山X ヘルプ',sg:{type:'help',staff:[],users:['園山X'],note:''}}];
+   const hx=C.reconcile(m,sheet,ms,D).blocks.find(b=>b.id==='cal_hm1___hold__');
+   assert.ok(hx&&hx.label==='園山X'&&hx.time==='10:00','見つからない名前のヘルプも保留の欄に名前のまま');
+   assert.deepStrictEqual(C.specsFor(m,ms,D)[0].missing,['園山X'],'「送迎表に見つからない名前」に出る');
+   assert.ok(C.summary(m,sheet,ms,D).some(x=>x.id==='hm1'&&x.missing.includes('園山X')),'送迎表の「反映中」に名前つきで出る');
+   assert.ok(!C.reconcile(m,sheet,[Object.assign({},ms[0],{biz:'houkago'})],D).blocks.some(b=>b.id==='cal_hm1___hold__'),'放課後デイの予定は生活介護の送迎表に入れない（今までどおり）');
+   const hy=C.reconcile(m,sheet,[Object.assign({},ms[0],{sg:{type:'help',staff:[],users:['園山'],note:''}})],D).blocks.find(b=>b.id==='cal_hm1___hold__');
+   assert.ok(hy&&hy.label==='園山'&&hy.userIds[0]===us('園山'),'園山さん（送迎表にいる人）は保留の欄に'); }
  assert.strictEqual(x.noRide[us('森')].meet,'家族送り'); assert.strictEqual(x.userTime[us('森')].send,'15:30');
  assert.deepStrictEqual(x.noRide[us('中村')],{meet:'受診後送り',send:'家族迎え'},'受診後送り・家族迎え');
  assert.deepStrictEqual(x.staffOv[st('八壁')],{workToday:true,start:'9:00',end:'13:00',deptId:dept.id},'休日出勤：時間とその日の部署');

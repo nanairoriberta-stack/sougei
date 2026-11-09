@@ -29,14 +29,17 @@ function specsFor(master, events, date) {
     const missing = [...missingStaff, ...missingUsers];
     const half = ev.sg.type === "staff_off" && (ev.sg.half === "am" || ev.sg.half === "pm") ? ev.sg.half : "";
     // ヘルプは、この版の職員も利用者（行き先）もいなければ、この版の送迎表には入れない（ほかの事業所の予定）
-    if (ev.sg.type === "help" && !users.length && !staff.length) continue;
+    // 2026-11-09 依頼者「カレンダーに入れた『園山 ヘルプ』が送迎表に出ていない」：名前がこの版の利用者に見つからないと、だまって入れていなかった。
+    // この版と同じ事業の予定なら、名前のまま保留の欄に入れて「送迎表に見つからない名前」に出す（消えない・気づける）。ほかの事業の予定は今までどおり入れない
+    const edBiz = master && master.linkSeed2 ? "houkago" : "seikatsu";
+    if (ev.sg.type === "help" && !users.length && !staff.length && (!missingUsers.length || (ev.biz === "houkago" ? "houkago" : "seikatsu") !== edBiz)) continue;
     const dept = (ev.sg.type === "hwork" || ev.sg.type === "shift") && ev.sg.dept ? (master.departments || []).find((d) => d.name === ev.sg.dept) : null;
     if ((ev.sg.type === "hwork" || ev.sg.type === "shift") && ev.sg.dept && !dept) { missing.push(ev.sg.dept); missingStaff.push(ev.sg.dept); }
     out.push({ id: ev.id, rev: ev.rev, type: ev.sg.type, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(ev.sg.meet), send: appTime(ev.sg.send), noMeet: ev.sg.noMeet || "", noSend: ev.sg.noSend || "", missing,
       reason: ev.sg.reason || "", note: ev.sg.note || "", deptId: dept ? dept.id : "",
       wstart: appTime(ev.sg.wstart), wend: appTime(ev.sg.wend), meetPlace: ev.sg.meetPlace || "", sendPlace: ev.sg.sendPlace || "", noRide: !!ev.sg.noRide, afrom: appTime(ev.sg.afrom), ato: appTime(ev.sg.ato), noAway: !!ev.sg.noAway, at: appTime(ev.sg.at),
-      lib: ev.sg.lib || "off", libParts: ev.sg.type === "liberta" ? libParts(ev, date) : null });
+      missUsers: missingUsers, lib: ev.sg.lib || "off", libParts: ev.sg.type === "liberta" ? libParts(ev, date) : null });
   }
   return out;
 }
@@ -57,7 +60,7 @@ function blocksOf(spec) {
   if (spec.type === "help") {                              // ヘルプ：開始時刻に【ヘルプ（利用者）】。職員が無ければ保留欄（担当者が送迎表で割り当てる）。長さは送迎表の決まり（既定1時間）
     if (!spec.from) return [];
     const who = spec.staff.length ? spec.staff.map((s) => s.id) : [HOLD_ID];
-    const names = spec.users.map((u) => u.name).join("・");
+    const names = spec.users.map((u) => u.name).concat(spec.users.length ? [] : (spec.missUsers || [])).join("・");
     const note = names && spec.note && spec.note !== names ? spec.note : "";   // 家以外の行き先は（ ）書きで出る
     // ヘルプの時間（カレンダーで30分・1時間などを選ぶ＝開始〜終了。2026-10-30〜）。選んでいない古い予定は送迎表の決まり（既定1時間）
     const f0 = toMinX(spec.from), t0 = toMinX(spec.to), dur = f0 != null && t0 != null && t0 > f0 ? t0 - f0 : 0;
@@ -326,7 +329,7 @@ function summary(master, sheet, events, date) {
   });
 }
 function summary0(master, sheet, events, date) {
-  return specsFor(master, events, date).filter((s) => s.staff.length || s.users.length).map((s) => ({ id: s.id, type: s.type, typeLabel: TYPE_LABEL[s.type], title: s.title,
+  return specsFor(master, events, date).filter((s) => s.staff.length || s.users.length || (s.type === "help" && (s.missUsers || []).length)).map((s) => ({ id: s.id, type: s.type, typeLabel: TYPE_LABEL[s.type], title: s.title,
     who: [...s.staff.map((x) => x.name), ...s.users.map((x) => x.name)], missing: s.missing, missingStaff: s.missingStaff, biz: s.biz,
     time: s.half ? (s.half === "am" ? "AM休（午後から出勤）" : "PM休（午前で退勤）") :
       s.type === "help" ? `${s.from}〜${s.note ? `・${s.note}` : ""}${s.staff.length ? "" : "・担当は未定（保留欄）"}` :
