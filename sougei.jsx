@@ -1286,7 +1286,8 @@ function buildAutoNotes(master, blocks) {
     .filter((b) => (b.label || "").trim())
     .sort((a, b) => (toMin(a.time) || 0) - (toMin(b.time) || 0))
     .forEach((b) => {
-      const line = `${(b.label || "").trim()} ${b.time}〜`;
+      // 行き先（家以外。カレンダーのヘルプの「行き先」など）も付ける（2026-11-09 依頼者「ヘルプの行き先は送迎表にも備考にも」）
+      const line = `${(b.label || "").trim()}${b.note && String(b.note).trim() ? `（${String(b.note).trim()}）` : ""} ${b.time}〜`;
       if (startsWithUser((b.label || "").trim())) userNotes.push(line);
       // カレンダーから入った職員の予定・不在（cal_…）は特記事項(職員)へ（2026-11-03 依頼者「職員の所には職員の予定」）
       else if (String(b.id || "").startsWith("cal_") && b.kind !== "help") staffNotes.push(line);
@@ -1315,8 +1316,8 @@ function calNoteLines(master, events, date, edition) {
     // 職員・利用者の「その他」は「名前 内容」（以前に入れた題名に名前が無くても。2026-11-07 依頼者「横田 PM検診みたいに」）
     const nm0 = e.label === "sother" ? (e.tanto || [])[0] : e.label === "uother" ? (e.users || [])[0] : "", t0 = String(e.title || "").trim();
     const title = nm0 && !(t0 === nm0 || t0.startsWith(nm0 + " ") || t0.startsWith(nm0 + "　")) ? `${nm0} ${t0}` : t0;
-    if (!title || t === "help" || t === "staff_plan" || t === "user_absent") continue;
     const line = title + (e.allDay || !e.start ? "" : ` ${hm(e.date === date ? e.start : "0:00")}〜${hm((e.endDate || e.date) === date ? e.end : "24:00")}`);
+    if (!title || t === "help" || t === "staff_plan" || t === "user_absent") continue;
     if (t === "user_time" || t === "user_extra" || t === "help_cancel" || t === "liberta") { if ((sg.users || []).some((n) => users.includes(n))) out.user.push(line); continue; }   // ヘルプキャンセルも特記事項(利用者)に
     if (t === "staff_off" || t === "hwork" || t === "shift") { if ((sg.staff || []).some((n) => staff.includes(n))) out.staff.push(line); continue; }
     if (t) continue;

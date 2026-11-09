@@ -273,6 +273,21 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   const ms = m.staff.find((s) => s.name === "三島"), mt = m.staff.find((s) => s.name === "鳥屋尾");
   has(`三島 ${ms.start}〜${sh.staffOv[ms.id].end}`);   // PM休はパート欄の退勤が早くなる
   assert.ok(!all.includes("森 欠席"), "欠席は特記事項に出さない");
+  // ヘルプの行き先（家以外）は送迎表のコマ（保留）にも特記事項(利用者)にも（2026-11-09 依頼者）
+  { const hv = [ev("h1", "園山 ヘルプ（○○病院）", { allDay: false, start: "10:00", end: "11:00", label: "help", sg: { type: "help", staff: [], users: ["園山"], note: "○○病院" } }),
+      ev("h2", "中村 ヘルプ", { allDay: false, start: "14:00", end: "15:00", label: "help", sg: { type: "help", staff: [], users: ["中村"], note: "" } })];
+    const hn = E9.calNoteLines(m, hv, date, "v1");
+    assert.deepStrictEqual(hn.user, [], "カレンダーの行からは出さない（コマから出る＝二重にしない）");
+    const hs = C9.reconcile(m, E9.emptySheet(), hv, date), hb = hs.blocks.find((b) => b.calId === "h1");
+    assert.ok(hb && hb.note === "○○病院" && hb.staffId === "__hold__", "送迎表のコマに行き先");
+    const hw = E9.buildWorkbook(ExcelJS, m, Object.assign({}, hs, { calNotes: hn }), date);
+    const hb2 = new ExcelJS.Workbook(); await hb2.xlsx.load(await hw.xlsx.writeBuffer());
+    const ht = []; hb2.getWorksheet("送迎表").eachRow((r) => r.eachCell((c) => ht.push(String(c.value && c.value.richText ? c.value.richText.map((x) => x.text).join("") : c.value || ""))));
+    const hall = ht.join("\n");
+    assert.ok(/園山\(○○病院\)/.test(hall), "Excelの表（保留の列）に行き先 ");
+    const an2 = E9.buildAutoNotes(m, hs.blocks);
+    assert.deepStrictEqual(an2.userNotes, ["園山（○○病院） 10:00〜", "中村 14:00〜"], "特記事項(利用者)のヘルプに行き先 " + JSON.stringify(an2));
+    assert.ok(hall.includes("園山（○○病院） 10:00〜"), "Excelの特記事項にも行き先 " + JSON.stringify(ht.filter((x) => x.includes("病院")))); }
   if (!(mt.offDays || []).includes(1)) has("鳥屋尾"), assert.ok(/鳥屋尾 [^\n]*\(13:00〜15:00不在\)/.test(all), "中抜けはパート欄に（不在）");
   console.log("cal notes OK", cn.user.length, cn.staff.length, cn.biz.length, "/ パート:", (all.match(/三島 [^\n]*/) || [""])[0]);
 })().catch((e) => { console.error(e); process.exit(1); });
