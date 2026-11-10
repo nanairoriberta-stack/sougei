@@ -298,6 +298,19 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     const an2 = E9.buildAutoNotes(m, hs.blocks);
     assert.deepStrictEqual(an2.userNotes, ["園山（○○病院） 10:00〜", "中村 14:00〜"], "特記事項(利用者)のヘルプに行き先 " + JSON.stringify(an2));
     assert.ok(hall.includes("園山（○○病院） 10:00〜"), "Excelの特記事項にも行き先 " + JSON.stringify(ht.filter((x) => x.includes("病院")))); }
+  // カレンダーのメモも送迎表に（2026-11-10 依頼者）：コマの（ ）書き・特記事項の行
+  { const mv = [ev("m1", "園山 ヘルプ", { allDay: false, start: "10:00", end: "11:00", label: "help", memo: "車いす\n玄関まで", sg: { type: "help", staff: [], users: ["園山"], note: "○○病院" } }),
+      ev("m2", "中村 入浴", { allDay: false, start: "13:00", end: "14:00", label: "uother", users: ["中村"], memo: "着替え持参" }),
+      ev("m3", "中村 受診後来所", { memo: "母が送る", sg: { type: "user_time", users: ["中村"], meet: "10:30", noMeet: "受診後送り" } }),
+      ev("m4", "三島 研修", { label: "sother", tanto: ["三島"], memo: "松江で" })];
+    const ms2 = C9.reconcile(m, E9.emptySheet(), mv, date);
+    const b1 = ms2.blocks.find((b) => b.calId === "m1"), b2 = ms2.blocks.find((b) => b.calId === "m2"), b4 = ms2.blocks.find((b) => b.calId === "m4");
+    assert.ok(b1 && b1.note === "○○病院・車いす 玄関まで", "ヘルプのコマに行き先とメモ " + JSON.stringify(b1));
+    assert.ok(b2 && b2.note === "着替え持参" && b4 && b4.note === "松江で", "その他のコマにメモ " + JSON.stringify([b2, b4]));
+    const mn = E9.calNoteLines(m, mv, date, "v1");
+    assert.deepStrictEqual(mn.user, ["中村 受診後来所（母が送る）"], "特記事項の行にメモ " + JSON.stringify(mn));
+    const an3 = E9.buildAutoNotes(m, ms2.blocks);
+    assert.ok(an3.userNotes.includes("中村 入浴（着替え持参） 13:00〜14:00") && an3.staffNotes.includes("三島 研修（松江で） 8:30〜"), "コマから特記事項にメモ " + JSON.stringify(an3)); }
   if (!(mt.offDays || []).includes(1)) has("鳥屋尾"), assert.ok(/鳥屋尾 [^\n]*\(13:00〜15:00不在\)/.test(all), "中抜けはパート欄に（不在）");
   console.log("cal notes OK", cn.user.length, cn.staff.length, cn.biz.length, "/ パート:", (all.match(/三島 [^\n]*/) || [""])[0]);
 })().catch((e) => { console.error(e); process.exit(1); });

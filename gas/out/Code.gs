@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.10h',
+  VERSION: '2026.11.10i',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,

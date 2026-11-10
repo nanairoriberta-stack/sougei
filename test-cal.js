@@ -477,6 +477,11 @@ console.log('extra OK');
  assert.strictEqual(C.reconcile(m,xn,[ev],D).blocks.find(b=>b.id==='cal_ev_uoth0001_hold').noteOnly,true,'そのまま');
  const ev2=Object.assign({},ev,{rev:2,start:'10:30',end:'11:30'}), xr=C.reconcile(m,xn,[ev2],D).blocks.find(b=>b.id==='cal_ev_uoth0001_hold');
  assert.ok(xr&&xr.noteOnly===true&&xr.time==='10:30','予定の時刻を直しても消したまま（時刻は付いていく） '+JSON.stringify(xr));
+ // 題名に利用者の名前が無い以前の予定でも、コマは「名前 内容」（2026-11-10 依頼者「利用者が消えてただのその他予定で表示」）
+ { const e3=Object.assign({},ev,{id:'ev_uoth0003',title:'入浴'}), b3=C.reconcile(m,sheet,[e3],D).blocks.find(b=>b.id==='cal_ev_uoth0003_hold');
+   assert.ok(b3&&b3.label===un+' 入浴'&&(b3.userIds||[]).length===1,'名前つき '+JSON.stringify(b3));
+   const e4=Object.assign({},ev,{id:'ev_uoth0004',title:''}), b4=C.reconcile(m,sheet,[e4],D).blocks.find(b=>b.id==='cal_ev_uoth0004_hold');
+   assert.ok(b4&&b4.label===un+' その他','題名なし '+JSON.stringify(b4)); }
  console.log('uother koma OK');
 }
 // 職員その他・その他予定もコマ（2026-11-10 依頼者「その他予定もコマで。利用者・職員のその他と同じように」）

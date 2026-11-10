@@ -1336,7 +1336,9 @@ function calNoteLines(master, events, date, edition) {
     // 職員・利用者の「その他」は「名前 内容」（以前に入れた題名に名前が無くても。2026-11-07 依頼者「横田 PM検診みたいに」）
     const nm0 = e.label === "sother" ? (e.tanto || [])[0] : e.label === "uother" ? (e.users || [])[0] : "", t0 = String(e.title || "").trim();
     const title = nm0 && !(t0 === nm0 || t0.startsWith(nm0 + " ") || t0.startsWith(nm0 + "　")) ? `${nm0} ${t0}` : t0;
-    const line = title + (e.allDay || !e.start ? "" : ` ${hm(e.date === date ? e.start : "0:00")}〜${hm((e.endDate || e.date) === date ? e.end : "24:00")}`);
+    // カレンダーのメモも付ける（2026-11-10 依頼者「カレンダーのメモの部分は送迎表に出るように」）
+    const memo = String(e.memo || "").replace(/\s+/g, " ").trim(), memo1 = memo.length > 200 ? memo.slice(0, 200) + "…" : memo;
+    const line = title + (e.allDay || !e.start ? "" : ` ${hm(e.date === date ? e.start : "0:00")}〜${hm((e.endDate || e.date) === date ? e.end : "24:00")}`) + (memo1 ? `（${memo1}）` : "");
     if (!title || t === "help" || t === "staff_plan" || t === "user_absent") continue;
     if (t === "user_time" || t === "user_extra" || t === "help_cancel" || t === "liberta") { if ((sg.users || []).some((n) => users.includes(n))) out.user.push(line); continue; }   // ヘルプキャンセルも特記事項(利用者)に
     if (t === "staff_off" || t === "hwork" || t === "shift") { if ((sg.staff || []).some((n) => staff.includes(n))) out.staff.push(line); continue; }

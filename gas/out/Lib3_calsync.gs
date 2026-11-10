@@ -31,6 +31,10 @@ function komaSg(master, ev) {
   return (ev.biz === "houkago" ? "houkago" : "seikatsu") === edBiz ? { type: "staff_plan", staff: [], users: [] } : null;
 }
 
+/* カレンダーのメモ（2026-11-10 依頼者「カレンダーのメモの部分は送迎表に出るように」）：コマの（ ）書きに付ける。改行は空白に、長いものは60字で切る */
+const memoOf = (ev) => { const t = String((ev && ev.memo) || "").replace(/\s+/g, " ").trim(); return t.length > 60 ? t.slice(0, 60) + "…" : t; };
+const withMemo = (note, memo) => [note, memo].filter(Boolean).join("・");
+
 function specsFor(master, events, date) {
   const staffBy = new Map((master.staff || []).map((s) => [s.name, s]));
   const userBy = new Map((master.users || []).map((u) => [u.name, u]));
@@ -56,11 +60,14 @@ function specsFor(master, events, date) {
     if (sg0.type === "help" && !users.length && !staff.length && (!missingUsers.length || (ev.biz === "houkago" ? "houkago" : "seikatsu") !== edBiz)) continue;
     const dept = (sg0.type === "hwork" || sg0.type === "shift") && sg0.dept ? (master.departments || []).find((d) => d.name === sg0.dept) : null;
     if ((sg0.type === "hwork" || sg0.type === "shift") && sg0.dept && !dept) { missing.push(sg0.dept); missingStaff.push(sg0.dept); }
-    out.push({ id: ev.id, rev: ev.rev, type: sg0.type, koma: !ev.sg, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
+    // 職員・利用者の「その他」から作るコマは「名前 内容」（題名に名前が無い以前の予定でも。2026-11-10 依頼者「利用者が消えてただのその他予定で表示」）
+    const nm0 = !ev.sg && ev.label === "uother" ? (ev.users || [])[0] : !ev.sg && ev.label === "sother" ? (ev.tanto || [])[0] : "", t0 = String(ev.title || "").trim();
+    const title0 = nm0 && !(t0 === nm0 || t0.startsWith(nm0 + " ") || t0.startsWith(nm0 + "　") || t0.startsWith(nm0)) ? `${nm0} ${t0 || "その他"}` : (t0 || (nm0 ? `${nm0} その他` : ""));
+    out.push({ id: ev.id, rev: ev.rev, type: sg0.type, koma: !ev.sg, title: title0, whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(sg0.meet), send: appTime(sg0.send), noMeet: sg0.noMeet || "", noSend: sg0.noSend || "", missing,
       reason: sg0.reason || "", note: sg0.note || "", deptId: dept ? dept.id : "",
       wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, at: appTime(sg0.at),
-      missUsers: missingUsers, lib: sg0.lib || "off", libParts: sg0.type === "liberta" ? libParts(ev, date) : null });
+      memo: memoOf(ev), missUsers: missingUsers, lib: sg0.lib || "off", libParts: sg0.type === "liberta" ? libParts(ev, date) : null });
   }
   return out;
 }
@@ -82,7 +89,7 @@ function blocksOf(spec) {
     if (!spec.from) return [];
     const who = spec.staff.length ? spec.staff.map((s) => s.id) : [HOLD_ID];
     const names = spec.users.map((u) => u.name).concat(spec.users.length ? [] : (spec.missUsers || [])).join("・");
-    const note = names && spec.note && spec.note !== names ? spec.note : "";   // 家以外の行き先は（ ）書きで出る
+    const note = withMemo(names && spec.note && spec.note !== names ? spec.note : "", spec.memo);   // 家以外の行き先・メモは（ ）書きで出る
     // ヘルプの時間（カレンダーで30分・1時間などを選ぶ＝開始〜終了。2026-10-30〜）。選んでいない古い予定は送迎表の決まり（既定1時間）
     const f0 = toMinX(spec.from), t0 = toMinX(spec.to), dur = f0 != null && t0 != null && t0 > f0 ? t0 - f0 : 0;
     return who.map((sid) => Object.assign({ id: `cal_${spec.id}_${sid}`, kind: "help", time: spec.from, staffId: sid,
@@ -95,7 +102,7 @@ function blocksOf(spec) {
     if (!spec.users.length && !spec.koma) return [];
     const from = spec.whole ? "8:30" : spec.from;   // 終日は 8:30（2026-11-10 依頼者）
     const dur = spec.whole ? 60 : Math.max(15, (toMinX(spec.to) ?? toMinX(from) + 60) - toMinX(from));
-    return [Object.assign({ id: `cal_${spec.id}_hold`, kind: "block", time: from, durMin: dur, staffId: HOLD_ID, label: spec.title, userIds: spec.users.map((u) => u.id), calId: spec.id }, spec.whole ? { wholeDay: true } : {})];
+    return [Object.assign({ id: `cal_${spec.id}_hold`, kind: "block", time: from, durMin: dur, staffId: HOLD_ID, label: spec.title, userIds: spec.users.map((u) => u.id), calId: spec.id }, spec.whole ? { wholeDay: true } : {}, spec.memo ? { note: spec.memo } : {})];
   }
   return spec.staff.map((s) => {
     // その他の予定から作るコマ（koma）の終日は 8:30 から1時間（利用者その他と同じ。勤務時間いっぱいのコマにしない）
@@ -103,7 +110,7 @@ function blocksOf(spec) {
     const to = spec.whole ? (spec.koma ? "9:30" : (s.end || "17:30")) : spec.to;
     const dur = Math.max(15, (toMinX(to) ?? toMinX(from) + 60) - toMinX(from));
     return Object.assign({ id: `cal_${spec.id}_${s.id}`, kind: "block", time: from, durMin: dur, staffId: s.id,
-      label: spec.type === "staff_off" ? `不在（${spec.title}）` : spec.title, calId: spec.id }, spec.whole ? { wholeDay: true } : {});
+      label: spec.type === "staff_off" ? `不在（${spec.title}）` : spec.title, calId: spec.id }, spec.whole ? { wholeDay: true } : {}, spec.memo && spec.type !== "staff_off" ? { note: spec.memo } : {});
   });
 }
 
