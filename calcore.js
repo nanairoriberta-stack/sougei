@@ -91,8 +91,8 @@ function normSg(x) {
     wstart: x.type === "shift" ? t(x.wstart) : "", wend: x.type === "shift" ? t(x.wend) : "",  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
     meetPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.meetPlace, 40) : "", sendPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.sendPlace, 40) : "",
     ...(x.type === "shift" && x.noRide === true ? { noRide: true } : {}),
-    ...(x.type === "shift" && TIME_RE.test(x.afrom) && TIME_RE.test(x.ato) ? { afrom: x.afrom, ato: x.ato } : {}),   // その日の中抜け（不在の時間。2026-11-05）
-    ...(x.type === "shift" && x.noAway === true ? { noAway: true } : {}),
+    ...((x.type === "shift" || x.type === "hwork") && TIME_RE.test(x.afrom) && TIME_RE.test(x.ato) ? { afrom: x.afrom, ato: x.ato } : {}),   // 休日出勤の中抜けも（2026-11-10）   // その日の中抜け（不在の時間。2026-11-05）
+    ...((x.type === "shift" || x.type === "hwork") && x.noAway === true ? { noAway: true } : {}),
     ...(x.type === "help_cancel" && TIME_RE.test(x.at) ? { at: x.at } : {}),
     ...(x.type === "liberta" ? { lib: x.lib === "on" ? "on" : "off", lfrom: x.lfrom === "pm" ? "pm" : "am", lto: x.lto === "am" ? "am" : "pm" } : {}) };   // リベルタ：なし/あり・開始日の朝から/夜から・終了日の朝まで/夜まで   // ヘルプキャンセル：その時刻のヘルプだけ（無ければその日のその人のヘルプ全部）   // その日は中抜けなし   // 職員時間変更「ﾏﾝｼｮﾝのみ」：送迎表には載るが送迎はしない（2026-10-31）  // 送迎：その日の迎え先・送り先  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
 }

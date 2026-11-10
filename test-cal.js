@@ -421,3 +421,44 @@ console.log('extra OK');
   assert.deepStrictEqual(C.reconcile(m, Object.assign({}, r, { libertaOff: {} }), [ev], '2026-11-03').libertaOff[nk.id], { am: true, pm: true });
   console.log('liberta OK');
 }
+// 迎えなし（受診後来所など）・送りなしにしたら、その日の迎え／送りの便から外す・予定を消すと元の便の元の位置に戻る・パターン読込でまた入っても外す（2026-11-10 依頼者）
+{
+ const D='2026-11-02';
+ const mr=sheet.runs.find(r=>r.kind==='meet'&&(r.userIds||[]).length>=2), uid=mr.userIds[1], un=m.users.find(u=>u.id===uid).name;
+ const sr=sheet.runs.find(r=>r.kind==='send'&&(r.userIds||[]).includes(uid));
+ const ev={id:'pl1',rev:1,date:D,endDate:D,allDay:true,title:un+' 受診後来所',sg:{type:'user_time',users:[un],noMeet:'受診後来所'}};
+ const x=C.reconcile(m,sheet,[ev],D);
+ assert.deepStrictEqual(x.noRide[uid],{meet:'受診後来所'});
+ assert.ok(!x.runs.some(r=>r.kind==='meet'&&(r.userIds||[]).includes(uid)),'迎えの便から外れる');
+ if(sr) assert.ok(x.runs.find(r=>r.id===sr.id).userIds.includes(uid),'送りの便はそのまま');
+ assert.deepStrictEqual(sheet.runs.find(r=>r.id===mr.id).userIds,mr.userIds,'元の表は変えない');
+ assert.strictEqual(C.reconcile(m,x,[ev],D),x,'同じ内容なら変更なし');
+ const back=C.reconcile(m,x,[],D);
+ assert.deepStrictEqual(back.runs.find(r=>r.id===mr.id).userIds,mr.userIds,'予定を消すと元の便の元の位置に戻る');
+ assert.ok(!(back.noRide||{})[uid],'迎えなしも外れる');
+ // パターン読込で便が元に戻ったら、また外す
+ const wiped=Object.assign({},x,{runs:JSON.parse(JSON.stringify(sheet.runs))});
+ assert.ok(!C.reconcile(m,wiped,[ev],D).runs.some(r=>r.kind==='meet'&&(r.userIds||[]).includes(uid)),'パターン読込で戻っても外す');
+ // 送迎表で迎えなしの理由を手で別のものに変えたら、便に乗せても外さない
+ { const h=JSON.parse(JSON.stringify(x)); h.noRide[uid]={meet:'手で変えた理由'}; h.runs.find(r=>r.id===mr.id).userIds.push(uid); const hr=C.reconcile(m,h,[ev],D);
+   assert.ok(hr.runs.find(r=>r.id===mr.id).userIds.includes(uid),'理由を手で変えたあとは便から外さない'); }
+ // 手で別の迎えの便に乗せたら、予定を消しても二重にしない
+ const other=x.runs.find(r=>r.kind==='meet'&&r.id!==mr.id); const y=JSON.parse(JSON.stringify(x)); y.runs.find(r=>r.id===other.id).userIds.push(uid);
+ const yb=C.reconcile(m,y,[],D); assert.strictEqual(yb.runs.filter(r=>r.kind==='meet'&&r.userIds.includes(uid)).length,1,'手で乗せた便だけ（二重にしない）');
+ // 送りなし（家族迎え）も送りの便から外す
+ if(sr){ const z=C.reconcile(m,sheet,[{id:'pl2',rev:1,date:D,endDate:D,allDay:true,title:un+' 家族迎え',sg:{type:'user_time',users:[un],noSend:'家族迎え'}}],D);
+   assert.ok(!z.runs.some(r=>r.kind==='send'&&r.userIds.includes(uid)),'送りの便から外れる'); }
+ console.log('noRide pull OK',un);
+}
+// 休日出勤の中抜け（2026-11-10 依頼者「6:00〜9:00と17:00〜22:00のときは9:00〜17:00が不在の網掛けに」）
+{
+ const D='2026-11-02', sid=S('白戸').id;
+ const ev={id:'ev_hwa00001',rev:1,date:D,endDate:D,allDay:false,start:'06:00',end:'22:00',title:'白戸 休日出勤（中抜け09:00〜17:00）',sg:{type:'hwork',staff:['白戸'],afrom:'09:00',ato:'17:00'}};
+ const TC=require('./calcore.js'); const n=TC.normEvent(ev,ev.id,0); assert.deepStrictEqual([n.sg.afrom,n.sg.ato],['09:00','17:00'],'カレンダーに中抜けが残る');
+ const x=C.reconcile(m,sheet,[n],D);
+ assert.deepStrictEqual(x.staffOv[sid],{workToday:true,start:'6:00',end:'22:00',awayFrom:'9:00',awayTo:'17:00'},'送迎表の中抜け（灰色）に入る');
+ assert.ok(!(C.reconcile(m,x,[],D).staffOv||{})[sid],'予定を消すと外れる');
+ const n2=TC.normEvent(Object.assign({},ev,{sg:{type:'hwork',staff:['白戸'],noAway:true}}),ev.id,0);
+ assert.strictEqual(C.reconcile(m,sheet,[n2],D).staffOv[sid].noAway,true,'この日は中抜けなし');
+ console.log('hwork away OK');
+}

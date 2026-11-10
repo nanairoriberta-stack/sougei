@@ -117,6 +117,13 @@ function revert(next, rec) {
       if (Object.keys(pl).length) r.places = pl; else delete r.places;
     }
   }
+  // 迎え・送りの便から外した人：その種類の便にまだだれも乗せていなければ、元の便の元の位置に戻す（手で別の便に乗せていたら触らない）
+  for (const e of rec.pulled || []) {
+    if (runOf(next, e.k, e.uid)) continue;
+    const r = (next.runs || []).find((x) => x.id === e.run && x.kind === e.k);
+    if (!r) continue;
+    const ids = (r.userIds || []).slice(); ids.splice(Math.min(e.idx, ids.length), 0, e.uid); r.userIds = ids;
+  }
   // 保留へ移した便・予定：まだ保留のままなら元の担当に戻す（手で誰かに割り当てていたら触らない）
   for (const h of rec.held || []) {
     const it = (next[h.t] || []).find((x) => x.id === h.id);
@@ -152,6 +159,17 @@ function libParts(ev, date) {
   const s = ev.sg || {}, first = date === ev.date, last = date === ev.endDate;
   const am = !(first && s.lfrom === "pm"), pm = !(last && s.lto === "am");
   return { am: am || (first && last && s.lfrom === "am" && s.lto === "am"), pm: pm && !(first && last && s.lto === "am") };
+}
+/* 迎え・送りの便からその人を外す（同じ種類の便のすべてから）。外した便・位置を返す */
+function pullRider(sheet, k, uid) {
+  const out = [];
+  for (const r of sheet.runs || []) {
+    if (r.kind !== k || !(r.userIds || []).includes(uid)) continue;
+    const idx = r.userIds.indexOf(uid);
+    r.userIds = r.userIds.filter((x) => x !== uid);
+    out.push({ k, uid, run: r.id, idx });
+  }
+  return out;
 }
 function applySpec(next, spec, keepStaff) {
   const rec = { rev: spec.rev, title: spec.title, type: spec.type, staffOv: {}, userAbsent: {}, userTime: {}, noRide: {}, userExtra: {}, libertaOff: {}, libertaOn: {}, blocks: [] };
@@ -195,6 +213,9 @@ function applySpec(next, spec, keepStaff) {
   if (spec.type === "user_time" || spec.type === "user_extra") spec.users.forEach((u) => {
     if (spec.meet || spec.send) put("userTime", u.id, Object.assign({}, (next.userTime || {})[u.id] || {}, spec.meet ? { meet: spec.meet } : {}, spec.send ? { send: spec.send } : {}));
     if (spec.noMeet || spec.noSend) put("noRide", u.id, Object.assign({}, (next.noRide || {})[u.id] || {}, spec.noMeet ? { meet: spec.noMeet } : {}, spec.noSend ? { send: spec.noSend } : {}));
+    // 迎えなし（受診後来所・家族送りなど）／送りなしにしたら、その日の迎え／送りの便からその人を外す（2026-11-10 依頼者「受診後来所を選んだら迎えの欄から自動で消えるように」）。
+    // 外した便と位置を覚えておき、予定を消したら元の便に戻す
+    for (const [k, on] of [["meet", spec.noMeet], ["send", spec.noSend]]) if (on) for (const e of pullRider(next, k, u.id)) (rec.pulled = rec.pulled || []).push(e);
   });
   // 迎え先・送り先：その日その人が乗る迎え／送りの便に「その日だけの行き先」を入れる。まだ便に入っていなければ、入ったときに入れる（healPlaces）
   if (spec.type === "user_time" || spec.type === "user_extra") for (const [k, place] of [["meet", spec.meetPlace], ["send", spec.sendPlace]]) {
@@ -247,6 +268,24 @@ function healHeld(get, work, sp) {
       const n = work(); const nit = (n[t2] || []).find((x) => x.id === it.id); if (!nit) continue;
       nit.staffId = HOLD_ID;
       const r2 = n.calApplied[sp.id]; r2.held = (r2.held || []).concat([{ t: t2, id: it.id, staff: s.id }]);
+    }
+  }
+}
+/* 迎えなし・送りなしの人が、パターン読込などでまた便に入っていたら外す。
+   送迎表の「迎えなし／送りなし」をカレンダーの理由のままにしている間だけ（手で迎えなしを外した・理由を変えたなら触らない） */
+function healPulled(get, work, sp) {
+  if (sp.type !== "user_time" && sp.type !== "user_extra") return;
+  for (const [k, on] of [["meet", sp.noMeet], ["send", sp.noSend]]) {
+    if (!on) continue;
+    for (const u of sp.users) {
+      if ((((get().noRide || {})[u.id]) || {})[k] !== on) continue;
+      const hits = (get().runs || []).filter((r) => r.kind === k && (r.userIds || []).includes(u.id));
+      if (!hits.length) continue;
+      const n = work(), ids = new Set(hits.map((r) => r.id)), r2 = n.calApplied[sp.id];
+      for (const r of n.runs || []) if (ids.has(r.id)) {
+        const idx = r.userIds.indexOf(u.id); r.userIds = r.userIds.filter((x) => x !== u.id);
+        if (!(r2.pulled || []).some((e) => e.k === k && e.uid === u.id && e.run === r.id)) r2.pulled = (r2.pulled || []).concat([{ k, uid: u.id, run: r.id, idx }]);
+      }
     }
   }
 }
@@ -308,6 +347,7 @@ function reconcile(master, sheet, events, date) {
     heal(next || sheet, cur, work);
     healPlaces(() => next || sheet, work, sp.id);
     healHeld(() => next || sheet, work, sp);
+    healPulled(() => next || sheet, work, sp);
     if (sp.type === "help_cancel") {   // パターン読込などでまた入ったヘルプは、また消す（元に戻すために記録も足す）
       const hits = helpCancelHits(next || sheet, sp);
       if (hits.length) { const n = work(), ids = new Set(hits.map((b) => b.id)), r2 = n.calApplied[sp.id], ks = new Set((r2.cancelled || []).map(hcKey));
