@@ -247,6 +247,14 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - 男性の表は、表の職員（組む権限のない人）には希望を入れる画面だけ（2026-11-10 依頼者「男性の希望休のカレンダーは希望を入れる画面のみに」。`wishOnly`）：勤務の枠・日勤・休み・赤青の説明・基本シフト・曜日のパターンは出さない（確定した月も。勤務は職場カレンダーで見る）。マスには希望だけ。女性の表・組む人の画面は今までどおり。テスト `pw/gas_ui.js`
 - まだ：ほかの職員ごとの制限（依頼者が後で送る）
 
+## シフト表作成システムとの連携の窓口（2026-11-10 依頼者が「カレンダーアプリ連携のお願い」の文書を渡した）
+- 別のアプリ（シフト表作成システム）が月を開くたびに読む：`GET …/exec?page=export&key=<連携キー>&ym=YYYY-MM`（`doGet` → `exportForShift_`・`exportData_`）。**読むだけ**（書きこまない・ログイン不要・キーで守る）
+- キーはスクリプト プロパティ `EXPORT_KEY`（32字以上）。エディタで `issueExportKey` を実行すると作り直し（前のアドレスは使えなくなる）、アドレスを「設定」シートの4行目と実行ログに出す・変更履歴「連携」。違うキーは `{"error":"key"}`、年月の形が違うと `{"error":"ym"}`
+- 返す形 `{format:"riberta-calendar-export", v:1, ym, generatedAt, shift:{m,f}, events}`：**形は変えない**（変えるなら `v:2` にして知らせる約束。項目を足すのはよい）。
+  `shift.<g>`＝`members`（cfg の名前）・`days`・`wish`（シフト表の画面と同じ中身、保存がまだの月は `SGShift.monthOf` の最初の中身）＋足した `fixed`（確定した月か。確定前の下書きも出る）。
+  `events`＝その月に1日でもかかる消していない予定（`id,date,endDate,title,label,deleted:false,sg` ＋足した `allDay,start,end,biz,users,tanto,memo`）。相手が使うのは `sg.type` の liberta・staff_off・shift
+- テスト `gas/test-gas.js`（fakegas の PropertiesService は値を覚えるようにした）
+
 ## TimeTreeの予定をカレンダーへ（2026-11-03）
 依頼者がTimeTreeの画面の写真を送る → 写して「バックアップから復元」で読めるJSON（`app:"team-calendar"`、ラベルは「その他予定」・送迎表には反映しない、ID `ttYYYYMMDD_NN` で2回入れても二重にならない）を `out_zip/` に作って渡す。
 復元は管理者のメニュー（同期の画面）の「バックアップから復元」。サーバーにない予定だけ足す。

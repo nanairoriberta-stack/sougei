@@ -718,6 +718,38 @@ async function bootstrap() {
     await admin.call("auth.logout", admin.token || "").catch(() => {});
     return "期限 " + Math.round(yrs(g.sheets.get("_sessions").data[row][2])) + "年・ホーム画面のアドレス";
   });
+  await test("シフト表作成システムとの連携（?page=export）：キーで読むだけ・シフト表と予定がv1の形で出る（2026-11-10 依頼）", async () => {
+    const { g, admin } = await bootstrap();
+    const get = (p) => JSON.parse(g.ctx.doGet({ parameter: p }).getContent());
+    assert.deepStrictEqual(get({ page: "export", key: "x", ym: "2026-12" }), { error: "key" }, "キーを作る前は読めない");
+    const url = g.ctx.issueExportKey(), key = /key=([0-9a-f]{64})$/.exec(url)[1];
+    assert.ok(/\?page=export&key=/.test(url), url);
+    assert.deepStrictEqual(get({ page: "export", key: key.slice(0, -1) + (key.endsWith("0") ? "1" : "0"), ym: "2026-12" }), { error: "key" }, "キーを1文字変えると読めない");
+    assert.deepStrictEqual(get({ page: "export", key, ym: "2026-13" }), { error: "ym" });
+    // シフト表（12月・男性）と予定（休み・何日も続くリベルタ・前の月から続く予定・ほかの月・消した予定）
+    const q = { group: "m", ym: "2026-12" };
+    await admin.call("shift.save", Object.assign({ kind: "month", base: null, baseKnown: true, mine: { days: { "2026-12-01": { e: { 1: { n: "橋本" }, 2: { n: "野津", t: "6~9" } }, d: ["横田"] } }, wish: { "秋山": { "2026-12-08": "休" } } } }, q));
+    const up = (id, ev) => admin.call("cal.apply", { kind: "upsert", opId: "op_" + id.slice(3), id, baseRev: null, ev });
+    await up("ev_exp00001", evOff("2026-12-20", "日野"));
+    await up("ev_exp00002", Object.assign(evOff("2026-11-30", "日野"), { title: "中村 リベルタなし", endDate: "2026-12-02", label: "liberta", sg: { type: "liberta", staff: [], users: ["中村"], lib: "off", lfrom: "pm", lto: "am" } }));
+    await up("ev_exp00003", evOff("2027-01-05", "日野"));
+    const r = get({ page: "export", key, ym: "2026-12" });
+    assert.strictEqual(r.format, "riberta-calendar-export"); assert.strictEqual(r.v, 1); assert.strictEqual(r.ym, "2026-12"); assert.ok(r.generatedAt);
+    assert.ok(r.shift.m.members.includes("橋本") && r.shift.f && Array.isArray(r.shift.f.members), "男性・女性の職員");
+    assert.deepStrictEqual(r.shift.m.days["2026-12-01"].e["2"], { n: "野津", t: "6~9" }, "シフト表の中身");
+    assert.strictEqual(r.shift.m.wish["秋山"]["2026-12-08"], "休", "希望");
+    const ids = r.events.map((e) => e.id);
+    assert.ok(ids.includes("ev_exp00001") && ids.includes("ev_exp00002") && !ids.includes("ev_exp00003"), "その月にかかる予定だけ " + ids);
+    const lib = r.events.find((e) => e.id === "ev_exp00002");
+    assert.ok(lib.sg.type === "liberta" && lib.sg.lfrom === "pm" && lib.sg.lto === "am" && lib.endDate === "2026-12-02", "リベルタの泊まり " + JSON.stringify(lib.sg));
+    assert.strictEqual(r.events.find((e) => e.id === "ev_exp00001").sg.type, "staff_off");
+    // 11月は紙の表から写した最初の中身（保存がまだでも）
+    const n11 = get({ page: "export", key, ym: "2026-11" });
+    assert.ok(Object.keys(n11.shift.m.days).length > 20 && n11.shift.m.fixed === true, "11月の男性は最初の中身");
+    // 読むだけ：何も書かない
+    const w0 = g.stats.writes; get({ page: "export", key, ym: "2026-12" }); assert.strictEqual(g.stats.writes, w0, "書きこまない");
+    return "連携のアドレス: …" + url.slice(-30);
+  });
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
     const { g, admin } = await bootstrap();
     const date = "2026-11-25"; const E = engFor("v1"); const m = await admin.kv().get("master"); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);

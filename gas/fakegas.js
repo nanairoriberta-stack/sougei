@@ -45,6 +45,7 @@ function makeGas(files) {
   }
   const ss = { getSheetByName: (n) => sheets.get(n) || null, insertSheet: (n) => { const s = Sheet(n); sheets.set(n, s); return s; } };
   const cache = new Map();
+  const props = new Map();
   const ctx = {
     console, JSON, Date, Math, Object, Array, String, Number, Set, Map, RegExp, Error, Promise, Boolean, encodeURIComponent,
     SpreadsheetApp: { getActiveSpreadsheet: () => ss },
@@ -53,7 +54,7 @@ function makeGas(files) {
       get: (k) => (cache.has(k) ? cache.get(k) : null), put: (k, v) => { if (String(v).length > 100000) throw new Error("cache too big"); cache.set(k, String(v)); },
       getAll: (ks) => Object.fromEntries(ks.filter((k) => cache.has(k)).map((k) => [k, cache.get(k)])), putAll: (o) => { for (const k in o) cache.set(k, String(o[k])); }, remove: (k) => cache.delete(k), removeAll: (ks) => { for (const k of ks) cache.delete(k); },
     }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: () => null, setProperty() {} }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (props.has(k) ? props.get(k) : null), setProperty: (k, v) => { props.set(k, String(v)); } }) },
     Utilities: {
       DigestAlgorithm: { SHA_256: "sha256" }, Charset: { UTF_8: "utf8" },
       computeDigest: (alg, s) => [...crypto.createHash("sha256").update(String(s), "utf8").digest()].map((b) => (b > 127 ? b - 256 : b)),

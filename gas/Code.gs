@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.10i',
+  VERSION: '2026.11.10j',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -25,6 +25,7 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.mcp) return ContentService.createTextOutput(JSON.stringify({ name: '送迎表', message: 'これはClaudeのカスタムコネクタ用の接続先です。Claudeの「設定 → コネクタ → カスタムコネクタを追加」にこのURLを貼ってください。' })).setMimeType(ContentService.MimeType.JSON);
   if (p.page === 'check') return checkPage_();
+  if (p.page === 'export') return exportForShift_(p);   // シフト表作成システム（別のアプリ）が読む連携の窓口（読むだけ。2026-11-10 依頼）
   var page = p.page === 'sougei' ? 'sougei' : p.page === 'shift' ? 'shift' : 'calendar';
   var ed = APP.EDITIONS.hasOwnProperty(p.e) ? p.e : 'v1';
   var base = appUrl_();
@@ -49,6 +50,55 @@ function appUrl_() {
     if (APP_URL_RE.test(v)) return v;
   } catch (e) {}
   return ScriptApp.getService().getUrl();
+}
+/* ================= シフト表作成システムとの連携（?page=export&key=…&ym=YYYY-MM）=================
+   2026-11-10 依頼（「カレンダーアプリ連携のお願い」）：シフト表作成システムが月を開くたびに、その月のシフト表（男性・女性）と予定を JSON で読む。
+   読むだけ（書きかえない）。ログインの代わりに連携キー（スクリプト プロパティ EXPORT_KEY、エディタで issueExportKey を実行して作る）で守る。
+   返す形は v:1 で固定（形を変えるときは v を上げて知らせる）。項目を足すのはかまわない */
+var EXPORT_FORMAT = 'riberta-calendar-export';
+function exportForShift_(q) {
+  var out = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
+  var key = '';
+  try { key = String(PropertiesService.getScriptProperties().getProperty('EXPORT_KEY') || ''); } catch (e) {}
+  if (key.length < 32 || String(q.key || '') !== key) return out({ error: 'key' });
+  var ym = String(q.ym || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(ym)) return out({ error: 'ym' });
+  try {
+    return out(exportData_(ym));
+  } catch (e) {
+    return out({ error: 'server', message: String((e && e.message) || e) });
+  }
+}
+function exportData_(ym) {
+  var y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
+  var first = ym + '-01', last = ym + '-' + String(new Date(y, m, 0).getDate()).padStart(2, '0');
+  var idx = docIndex_(), shift = {};
+  ['m', 'f'].forEach(function (g) {
+    var c = docGet_('shift/' + g + '/cfg', idx), mo = docGet_('shift/' + g + '/' + ym, idx);
+    var cfg = SGShift.cfgOf(g, c ? c.value : null), mv = SGShift.monthOf(g, ym, mo ? mo.value : null) || {};   // シフト表の画面と同じ中身（保存がまだの月は最初の中身）
+    shift[g] = { members: (cfg.members || []).map(function (x) { return x.name; }), days: mv.days || {}, wish: mv.wish || {},
+      fixed: SGShift.isFixed(mv, ym) };   // fixed（足した項目）：シフト表で「確定」した月か
+  });
+  var evMap = TCCore.mergeDays(docsQuery_({ col: 'days', from: first, to: last })), events = [];
+  Object.keys(evMap).forEach(function (k) {
+    var e = evMap[k]; if (!e || e.deleted) return;
+    var end = e.endDate || e.date; if (!(e.date <= last && end >= first)) return;
+    events.push({ id: e.id, date: e.date, endDate: end, title: e.title || '', label: e.label || 'other', deleted: false, sg: e.sg || null,
+      allDay: !!e.allDay, start: e.start || '', end: e.end || '', biz: e.biz || 'seikatsu', users: e.users || [], tanto: e.tanto || [], memo: e.memo || '' });
+  });
+  events.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.id < b.id ? -1 : 1); });
+  return { format: EXPORT_FORMAT, v: 1, ym: ym, generatedAt: Utilities.formatDate(new Date(), 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss'+09:00'"), shift: shift, events: events };
+}
+/* 連携キーを作る（スクリプトエディタで実行。もう一度実行すると前のアドレスは使えなくなる）。
+   できたアドレスは「設定」シートの4行目と、実行ログに出る。このアドレスはパスワードと同じように扱う */
+function issueExportKey() {
+  var k = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  PropertiesService.getScriptProperties().setProperty('EXPORT_KEY', k);
+  var url = appUrl_() + '?page=export&key=' + k;
+  try { var sh = confSheet_(); sh.getRange(4, 1, 1, 2).setValues([['シフト表作成システムとの連携アドレス（パスワードと同じように扱う。issueExportKey をもう一度実行すると変わる）', txt_(url)]]); } catch (e) {}
+  try { log_({ no: '', name: '（エディタ）' }, '連携', 'シフト表作成システム', '連携キーを作りました'); } catch (e) {}
+  Logger.log(url);
+  return url;
 }
 function confSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(APP.SH.conf);
