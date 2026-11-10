@@ -57,6 +57,13 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     assert.strictEqual(fillOf(rowOf["14:00"], cn2), "FFF5F5F4", "新見さんのいつもの中抜け 14:00は灰色"); assert.strictEqual(fillOf(rowOf["15:00"] + 1, cn2), "FFF5F5F4");
     assert.notStrictEqual(fillOf(rowOf["16:00"], cn2), "FFF5F5F4", "16:00から白"); assert.notStrictEqual(fillOf(rowOf["13:00"] + 1, cn2), "FFF5F5F4");
     assert.ok(E.buildAutoNotes(dm, sh4.blocks).staffNotes.some((l) => l.startsWith("不在（日野 中抜け）")), "特記事項(職員)には残る");
+    // 遅番（13:00〜22:00）の人：Excelでも12:30までは灰色（2026-11-10 依頼者）
+    { const lt = m.staff.find((x) => x.name === "日野"), m2 = JSON.parse(JSON.stringify(dm)); const t2 = m2.staff.find((x) => x.id === lt.id); t2.start = "13:00"; t2.end = "22:00"; t2.shiftByDay = {};
+      const wb5 = E.buildWorkbook(ExcelJS, m2, sheet, date); const b5 = new ExcelJS.Workbook(); await b5.xlsx.load(await wb5.xlsx.writeBuffer());
+      const w5 = b5.getWorksheet("送迎表"); let c5 = 0; const r5 = {};
+      w5.eachRow((row, rn) => row.eachCell((c, cn) => { const v = String(c.value || ""); if (v === lt.name) c5 = cn; if (cn === 1 && /^\d{1,2}:\d{2}$/.test(v)) r5[v] = rn; }));
+      const f5 = (r) => ((w5.getRow(r).getCell(c5).fill || {}).fgColor || {}).argb;
+      assert.strictEqual(f5(r5["12:00"]), "FFF5F5F4", "遅番の人の12:00は灰色"); assert.notStrictEqual(f5(r5["13:00"]), "FFF5F5F4", "13:00から白"); }
     console.log("中抜けのExcel OK");
   }
   { // Excelを取り込んだ日でも、カレンダーから入った分（出勤・退勤の時刻・休み・ヘルプ）はカレンダーが優先（2026-11-06 依頼者「職員の出勤の時間とかうまく変わってない」）
@@ -140,7 +147,10 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  assert.strictEqual(E4.earlyLeaveSlot(s,{start:'13:30'},[]),null,'AM休は退勤を出さない');
  assert.ok(E4.outOfShiftSlot(s,{end:'12:30'},12*60+30)&&!E4.outOfShiftSlot(s,{end:'12:30'},12*60),'PM休の後は灰色');
  assert.ok(E4.outOfShiftSlot(s,{start:'13:30'},13*60)&&!E4.outOfShiftSlot(s,{start:'13:30'},13*60+30),'AM休の前は灰色');
- assert.ok(!E4.outOfShiftSlot(s,{},7*60),'時間を変えていない人は今までどおり');
+ // いつもの勤務時間の外も灰色（2026-11-10 依頼者「早番・遅番・ほかの時間外の人も網掛けに」。以前はその日に時間を変えた人だけだった）
+ assert.ok(E4.outOfShiftSlot(s,{},7*60)&&E4.outOfShiftSlot(s,{},17*60+30)&&!E4.outOfShiftSlot(s,{},8*60+30)&&!E4.outOfShiftSlot(s,{},17*60),'いつもの勤務時間（8:30〜17:30）の外は灰色・中は白');
+ const late={id:'y',start:'13:00',end:'22:00'};
+ assert.ok(E4.outOfShiftSlot(late,{},12*60+30)&&!E4.outOfShiftSlot(late,{},13*60),'遅番（13:00〜）は12:30まで灰色');
  console.log('leave slot OK');
 }
 // ===== 灰色の時間（休み・AM休・PM休）に入ったコマは、出力前の確認で「時間のエラー」（2026-10-30） =====

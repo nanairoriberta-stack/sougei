@@ -3499,8 +3499,9 @@ function earlyLeaveSlot(s, ov, blocks) {
 function outOfShiftSlot(s, ov, m) {
   if (!s) return false;
   { const [a0, a1] = awayMin(s, ov); if (a0 != null && m + SLOT > a0 && m < a1) return true; }   // 中抜けの時間も灰色（2026-11-05）
-  if (!ov || !(ov.start || ov.end)) return false;
-  const st = toMin(ov.start || s.start), en = toMin(ov.end || s.end);
+  // いつもの勤務時間の外も灰色（2026-11-10 依頼者「早番・遅番 13:00〜・14:00〜や 14:00まで・15:00までの人も網掛けに。ほかの時間外の人も」。以前はその日に時間を変えた人だけ）。s は曜日ごとの勤務時間を当てたもの（staffTimeOf）
+  const o = ov || {};
+  const st = toMin(o.start || s.start), en = toMin(o.end || s.end);
   return st != null && en != null && (m + SLOT <= st || m >= en);
 }
 // 休み・固定休・AM休・PM休などで灰色の時間に入っているヘルプ・予定（出力前の確認で「時間のエラー」に出す。便は runWarnings が見る）
@@ -3514,7 +3515,7 @@ function offTimeBlockWarn(master, sheetData, wd) {
     if (ov.off) out.push(pre + "休みの職員に入っています");
     else if (wd != null && (s.offDays || []).includes(wd) && !ov.workToday) out.push(pre + "固定休の職員に入っています");
     else if ((() => { const [a0, a1] = awayMin(s, ov); return a0 != null && t < a1 && t + (Number(b.durMin) || SLOT) > a0; })()) { const a = awayOf(s, ov); out.push(pre + `中抜けの時間(${a.from}〜${a.to}は不在)`); }
-    else if (outOfShiftSlot(staffTimeOf(s, wd, {}), ov, Math.floor(t / SLOT) * SLOT)) out.push(pre + `勤務時間外(この日は${ov.start ? ov.start + "から出勤" : ""}${ov.start && ov.end ? "・" : ""}${ov.end ? ov.end + "で退勤" : ""})`);
+    else if ((ov.start || ov.end) && outOfShiftSlot(staffTimeOf(s, wd, {}), ov, Math.floor(t / SLOT) * SLOT)) /* 出力前の確認は今までどおり、その日に時間を変えた人だけ */ out.push(pre + `勤務時間外(この日は${ov.start ? ov.start + "から出勤" : ""}${ov.start && ov.end ? "・" : ""}${ov.end ? ov.end + "で退勤" : ""})`);
   });
   return out;
 }
@@ -3876,7 +3877,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       if (prevM != null && spill[`${s.id}:${prevM}`]) return; // 上のセルの縦マージ範囲なので触らない
       const items = (cellMapH[`${s.id}:${m}`] || []).slice().sort((a, b) => ((a.oc != null ? a.oc : 1) - (b.oc != null ? b.oc : 1)) || ((a.o != null ? a.o : 999) - (b.o != null ? b.o : 999)) || (a.k - b.k));
       if (spill[`${s.id}:${m}`]) { try { ws.mergeCells(r, 2 + i2, r + 1, 2 + i2); } catch (e) {} }
-      setCell(r, 2 + i2, items.map((x) => x.t).join("\n"), { fill: isOff(s) || outOfShiftSlot(s, (sheet.staffOv || {})[s.id], m) || awayBlockAt(sheet.blocks, s.id, m) ? "FFF5F5F4" : undefined, sideOnly: true, size: GF });
+      setCell(r, 2 + i2, items.map((x) => x.t).join("\n"), { fill: isOff(s) || outOfShiftSlot({ ...s, ...staffTimeOf(s, wd, {}) }, (sheet.staffOv || {})[s.id], m) || awayBlockAt(sheet.blocks, s.id, m) ? "FFF5F5F4" : undefined, sideOnly: true, size: GF });
     });
     if (hasHold) {
       if (!(prevM != null && spill[`${HOLD_ID}:${prevM}`])) {
