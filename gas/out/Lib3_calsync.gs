@@ -186,7 +186,8 @@ function applySpec(next, spec, keepStaff) {
   else if (spec.type === "staff_off" && spec.whole) spec.staff.forEach((s) => put("staffOv", s.id, Object.assign({}, (next.staffOv || {})[s.id] || {}, { off: true })));
   // 休日出勤：固定休の日でも出勤に。時間指定ならその時間、部署を選んだらその日の部署
   if (spec.type === "hwork") spec.staff.forEach((s) => put("staffOv", s.id, Object.assign({}, (next.staffOv || {})[s.id] || {}, { workToday: true },
-    spec.whole ? {} : { start: spec.from, end: spec.to === "24:00" ? "23:59" : spec.to }, spec.deptId ? { deptId: spec.deptId } : {})));
+    spec.whole ? {} : { start: spec.from, end: spec.to === "24:00" ? "23:59" : spec.to }, spec.deptId ? { deptId: spec.deptId } : {},
+    spec.afrom && spec.ato ? { awayFrom: spec.afrom, awayTo: spec.ato } : {}, spec.noAway ? { noAway: true } : {})));   // 休日出勤の中抜け（2026-11-10 依頼者）
   // 勤務時間変更：その日の出勤・退勤の時刻（送迎表の遅刻・早退・早出・残業と同じ欄）。部署を選んだらその日の部署
   if (spec.type === "shift") spec.staff.forEach((s) => {
     const patch = Object.assign({}, spec.wstart ? { start: spec.wstart } : {}, spec.wend ? { end: spec.wend } : {}, spec.deptId ? { deptId: spec.deptId } : {}, spec.noRide ? { noRide: true } : {},
