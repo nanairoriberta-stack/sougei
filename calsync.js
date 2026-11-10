@@ -18,7 +18,8 @@ function specsFor(master, events, date) {
   const out = [];
   for (const ev of events || []) {
     // 利用者その他（uother）で時間が入っているものは、送迎表の保留の欄にコマとして出す（2026-11-10 依頼者「山崎 入浴」がコマに出ない）。終日のものは特記事項だけ
-    const sg0 = ev && (ev.sg || (ev.label === "uother" && !ev.allDay && (ev.users || []).length ? { type: "staff_plan", staff: [], users: ev.users } : null));
+    // 終日の予定も 8:30 にコマ（2026-11-10 依頼者「基本終日予定もコマが出るように。時間は8:30」）。要らないコマは送迎表で「コマだけ消す」
+    const sg0 = ev && (ev.sg || (ev.label === "uother" && (ev.users || []).length ? { type: "staff_plan", staff: [], users: ev.users } : null));
     if (!ev || ev.deleted || !sg0 || !sg0.type) continue;
     if (!(ev.date <= date && ev.endDate >= date)) continue;
     const whole = !!ev.allDay || (ev.date < date && ev.endDate > date);
@@ -73,7 +74,7 @@ function blocksOf(spec) {
   // モニタリング・支援会議などで対応者が決まっていない（利用者だけ）：保留の欄に1つ（2026-11-05 依頼者「職員は誰が入るかわからないので保留に」）。担当は送迎表で決める（同じIDなので職員の欄へ動かしても残る）
   if (spec.type === "staff_plan" && !spec.staff.length) {
     if (!spec.users.length) return [];
-    const from = spec.whole ? "9:00" : spec.from;
+    const from = spec.whole ? "8:30" : spec.from;   // 終日は 8:30（2026-11-10 依頼者）
     const dur = spec.whole ? 60 : Math.max(15, (toMinX(spec.to) ?? toMinX(from) + 60) - toMinX(from));
     return [{ id: `cal_${spec.id}_hold`, kind: "block", time: from, durMin: dur, staffId: HOLD_ID, label: spec.title, userIds: spec.users.map((u) => u.id), calId: spec.id }];
   }
@@ -234,6 +235,7 @@ function applySpec(next, spec, keepStaff) {
   const bl = blocksOf(spec);
   // 保留に入れたコマ（ヘルプ・対応者の決まっていないモニタリングなど）を送迎表で職員の欄へ動かしていたら、予定を直しても担当はそのまま
   bl.forEach((x) => { if (x.staffId !== HOLD_ID) return; const old = (next.blocks || []).find((b) => b.id === x.id), k = (old && old.staffId !== HOLD_ID && old.staffId) || (keepStaff || {})[x.id]; if (k) x.staffId = k; });
+  bl.forEach((x) => { const old = (next.blocks || []).find((b) => b.id === x.id); if ((old && old.noteOnly) || (keepStaff || {})["note:" + x.id]) x.noteOnly = true; });
   next.blocks = (next.blocks || []).filter((b) => !bl.some((x) => x.id === b.id)).concat(bl);
   rec.blocks = bl.map((b) => b.id);
   return rec;
@@ -339,6 +341,8 @@ function reconcile(master, sheet, events, date) {
     if (!sp || sp.rev !== rec.rev) {
       // 保留から送迎表で職員の欄へ動かした担当を覚えておく（予定を直して入れ直すときにそのまま使う）
       ((next || sheet).blocks || []).forEach((b) => { if ((rec.blocks || []).includes(b.id) && b.staffId && b.staffId !== HOLD_ID) keepStaff[b.id] = b.staffId; });
+      // 送迎表で「コマだけ消す」にしたコマは、予定を直しても消したまま（2026-11-10 依頼者「送迎表作成者がそのコマを消せるように」）
+      ((next || sheet).blocks || []).forEach((b) => { if ((rec.blocks || []).includes(b.id) && b.noteOnly) keepStaff["note:" + b.id] = true; });
       const n = work(); revert(n, rec); delete n.calApplied[id];
     }
   }

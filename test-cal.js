@@ -469,6 +469,13 @@ console.log('extra OK');
  const x=C.reconcile(m,sheet,[ev],D), b=x.blocks.find(b=>b.id==='cal_ev_uoth0001_hold');
  assert.ok(b&&b.staffId==='__hold__'&&b.time==='10:00'&&b.durMin===60&&b.label===un+' 入浴','保留の欄にコマ '+JSON.stringify(b));
  assert.ok(!C.reconcile(m,x,[],D).blocks.some(b=>b.id==='cal_ev_uoth0001_hold'),'予定を消すとコマも消える');
- assert.ok(!C.reconcile(m,sheet,[Object.assign({},ev,{allDay:true,start:'',end:''})],D).blocks.some(b=>/uoth/.test(b.id)),'終日はコマにしない');
+ // 終日も 8:30 にコマ（「終日」は付けない。2026-11-10 依頼者）
+ const ad=Object.assign({},ev,{allDay:true,start:'',end:''}), xa=C.reconcile(m,sheet,[ad],D), ba=xa.blocks.find(b=>b.id==='cal_ev_uoth0001_hold');
+ assert.ok(ba&&ba.time==='8:30'&&ba.label===un+' 入浴'&&ba.staffId==='__hold__','終日は8:30にコマ '+JSON.stringify(ba));
+ // 送迎表で「コマだけ消す」にしたら、予定を直しても消したまま
+ const xn=JSON.parse(JSON.stringify(x)); xn.blocks.find(b=>b.id==='cal_ev_uoth0001_hold').noteOnly=true;
+ assert.strictEqual(C.reconcile(m,xn,[ev],D).blocks.find(b=>b.id==='cal_ev_uoth0001_hold').noteOnly,true,'そのまま');
+ const ev2=Object.assign({},ev,{rev:2,start:'10:30',end:'11:30'}), xr=C.reconcile(m,xn,[ev2],D).blocks.find(b=>b.id==='cal_ev_uoth0001_hold');
+ assert.ok(xr&&xr.noteOnly===true&&xr.time==='10:30','予定の時刻を直しても消したまま（時刻は付いていく） '+JSON.stringify(xr));
  console.log('uother koma OK');
 }
