@@ -747,6 +747,12 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.click(`.cell[data-day="${date}"] .ev-chip >> nth=0`); await A.pg.waitForTimeout(300);
     assert.ok(await A.pg.locator(".daysheet").isVisible(), "日を押すとその日の一覧");
     const rows = await A.pg.locator(".daysheet .ds-row b").allInnerTexts(); assert.strictEqual(rows.length, await A.pg.locator("#panel .ev-row").count(), "その日の予定がぜんぶ並ぶ");
+    // 背景は 職員／利用者／その他予定 で色分け（2026-11-10 依頼者。左の線はラベルの色のまま）
+    { const gs = await A.pg.$$eval(".daysheet .ds-row", (l) => l.map((b) => ({ g: b.dataset.grp, bg: getComputedStyle(b).backgroundColor })));
+      assert.ok(gs.length && gs.every((x) => ["staff", "user", "other"].includes(x.g)), "グループの印 " + JSON.stringify(gs));
+      const by = {}; gs.forEach((x) => { by[x.g] = x.bg; });
+      assert.ok(Object.values(by).every((c) => c && c !== "rgba(0, 0, 0, 0)"), "背景に色 " + JSON.stringify(by));
+      if (Object.keys(by).length > 1) assert.strictEqual(new Set(Object.values(by)).size, Object.keys(by).length, "グループごとに違う色 " + JSON.stringify(by)); }
     await A.pg.screenshot({ path: "g_daysheet.png" });
     { const bgD = await A.pg.evaluate(() => getComputedStyle(document.querySelector(".daysheet")).backgroundColor), bgB = await A.pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
       assert.strictEqual(bgD, bgB, "日の一覧も月の背景と同じ色"); }

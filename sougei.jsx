@@ -1304,10 +1304,13 @@ function buildAutoNotes(master, blocks) {
     .sort((a, b) => (toMin(a.time) || 0) - (toMin(b.time) || 0))
     .forEach((b) => {
       // 行き先（家以外。カレンダーのヘルプの「行き先」など）も付ける（2026-11-09 依頼者「ヘルプの行き先は送迎表にも備考にも」）
-      const line = `${(b.label || "").trim()}${b.note && String(b.note).trim() ? `（${String(b.note).trim()}）` : ""} ${b.time}〜`;
+      // カレンダーの予定から入ったコマ（cal_…・ヘルプ以外）で時刻のある予定は終わりの時刻も（10:00〜12:00。終日の予定から入ったコマ wholeDay は始まりだけ）
+      const t1 = String(b.id || "").startsWith("cal_") && b.kind !== "help" && !b.wholeDay && b.durMin > 0 && toMin(b.time) != null ? ((m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`)(toMin(b.time) + b.durMin) : "";
+      const line = `${(b.label || "").trim()}${b.note && String(b.note).trim() ? `（${String(b.note).trim()}）` : ""} ${b.time}〜${t1}`;
       if (startsWithUser((b.label || "").trim())) userNotes.push(line);
       // カレンダーから入った職員の予定・不在（cal_…）は特記事項(職員)へ（2026-11-03 依頼者「職員の所には職員の予定」）
-      else if (String(b.id || "").startsWith("cal_") && b.kind !== "help") staffNotes.push(line);
+      // ただし担当の決まっていない（保留の欄の）その他予定のコマは連絡事項へ（2026-11-10）
+      else if (String(b.id || "").startsWith("cal_") && b.kind !== "help" && !(b.staffId === "__hold__" && /_hold$/.test(String(b.id)))) staffNotes.push(line);
       else bizNotes.push(line);
     });
   // 同じ内容+同じ時刻は1つに統合(例:2名体制のヘルプが2件登録されていても表記は1つ)
@@ -1340,6 +1343,11 @@ function calNoteLines(master, events, date, edition) {
     if (t) continue;
     // 利用者その他で時間があるものは保留の欄のコマになり、そこから特記事項に出る（二重にしない。2026-11-10）
     if (e.label === "uother" && (e.users || []).some((n) => users.includes(n))) continue;   // 終日も（2026-11-10）
+    // 職員その他・その他予定もコマになる（担当の職員の欄・保留の欄）→ コマから特記事項に出るので、ここでは出さない（2026-11-10）
+    if ((e.label === "sother" || e.label === "other") && !/^(sh|tt)/.test(String(e.id || ""))) {
+      const tn = (e.tanto || []).filter(Boolean);
+      if (tn.length ? tn.some((n) => staff.includes(n)) : e.label === "other" && (e.biz === "houkago" ? "houkago" : "seikatsu") === ((master.linkSeed2) ? "houkago" : "seikatsu")) continue;
+    }
     // 送迎表に反映しない予定（その他予定・TimeTreeから写した予定など）：名前で分ける
     if (inText(userOnly, title) || (e.users || []).some((n) => users.includes(n))) out.user.push(line);
     else if (inText(staff, title) || (e.tanto || []).some((n) => staff.includes(n))) out.staff.push(line);

@@ -380,3 +380,15 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 .grppick label span{width:100%;justify-content:center;height:38px;font-size:14px}
 .lblpick[data-lbl2]{padding:8px;border-radius:10px;background:color-mix(in srgb,var(--ink) 4%,transparent)}
 .awt{display:inline-flex;align-items:center;gap:6px;margin-top:6px}.awt .input{width:auto;min-width:110px}
+
+/* 予定の背景は「職員／利用者／その他予定」の3つで色分け（2026-11-10 依頼者。左の線はラベルの色のまま） */
+:root{--g-staff:#e6efff;--g-user:#fff0dc;--g-other:#eef0f2}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--g-staff:#1f2a3d;--g-user:#3a2e1c;--g-other:#2a2d31}}
+.ev-row.g-staff,.ds-row.g-staff{background:var(--g-staff)}
+.ev-row.g-user,.ds-row.g-user{background:var(--g-user)}
+.ev-row.g-other,.ds-row.g-other{background:var(--g-other)}
+.ds-list li+li{margin-top:6px}
+.ev-row.g-staff:hover,.ds-row.g-staff:hover,html[data-biz] .daysheet .ds-row.g-staff:hover{background:color-mix(in srgb,#3b6fd8 18%,var(--g-staff))}
+.ev-row.g-user:hover,.ds-row.g-user:hover,html[data-biz] .daysheet .ds-row.g-user:hover{background:color-mix(in srgb,#d88a1e 18%,var(--g-user))}
+.ev-row.g-other:hover,.ds-row.g-other:hover,html[data-biz] .daysheet .ds-row.g-other:hover{background:color-mix(in srgb,#888 18%,var(--g-other))}
+:root[data-theme="dark"]{--g-staff:#1f2a3d;--g-user:#3a2e1c;--g-other:#2a2d31}

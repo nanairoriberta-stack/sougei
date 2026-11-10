@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.10g";
+const APP_VERSION="2026.11.10h";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -141,7 +141,7 @@ function renderGrid(vis){
 }
 function evRow(e,ps){
   const av=e.members.slice(0,6).map(id=>ps[id]?`<img src="${esc(ps[id].avatarUrl)}" alt="${esc(ps[id].name||"メンバー")}" title="${esc(ps[id].name||"メンバー")}">`:"").join("");
-  return`<li><button class="ev-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(ttl(e))}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${(e.users||[]).length?`<span>利用者：${esc(e.users.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
+  return`<li><button class="ev-row g-${grpOf(e.label).k}" data-grp="${grpOf(e.label).k}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(ttl(e))}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${(e.users||[]).length?`<span>利用者：${esc(e.users.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
 function renderPanel(vis,ps){
   const d=parse(S.sel),evs=on(vis,S.sel),hol=HOL[S.sel],can=db&&S.canWrite&&core;
   let body;
@@ -166,7 +166,7 @@ function fitGrid(){
 function dsRow(e){
   const tm=e.allDay||e.date!==e.endDate&&!(e.date===S.sel&&e.start)?`<span class="ds-time">終日</span>`:`<span class="ds-time">${esc(e.start)}<small>${esc(e.end)}</small></span>`;
   const sub=[LMAP[e.label]?.n||"その他",e.place,(e.tanto||[]).length?"担当："+e.tanto.join("・"):"",(e.users||[]).length?"利用者："+e.users.join("・"):""].filter(Boolean).map(esc).join(" ・ ");
-  return`<li><button class="ds-row" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${misTag(e)}${bizTag(e)}${esc(ttl(e))}</b><small>${sub}</small></span></button></li>`;
+  return`<li><button class="ds-row g-${grpOf(e.label).k}" data-grp="${grpOf(e.label).k}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${misTag(e)}${bizTag(e)}${esc(ttl(e))}</b><small>${sub}</small></span></button></li>`;
 }
 function renderDay(vis){
   const root=$("dayRoot");document.documentElement.classList.toggle("dayopen",!!S.dayOpen);   // 開いている間は裏の月の画面を動かさない

@@ -479,3 +479,24 @@ console.log('extra OK');
  assert.ok(xr&&xr.noteOnly===true&&xr.time==='10:30','予定の時刻を直しても消したまま（時刻は付いていく） '+JSON.stringify(xr));
  console.log('uother koma OK');
 }
+// 職員その他・その他予定もコマ（2026-11-10 依頼者「その他予定もコマで。利用者・職員のその他と同じように」）
+{
+ const D='2026-11-02', st=m.staff.find(s=>!s.part&&s.name)||m.staff[0];
+ const so={id:'ev_soth0001',rev:1,date:D,endDate:D,allDay:false,start:'13:00',end:'14:00',title:st.name+' 研修',label:'sother',tanto:[st.name]};
+ const x=C.reconcile(m,sheet,[so],D), b=x.blocks.find(b=>b.id==='cal_ev_soth0001_'+st.id);
+ assert.ok(b&&b.staffId===st.id&&b.time==='13:00'&&b.durMin===60,'職員その他は担当の欄にコマ '+JSON.stringify(b));
+ const sa=Object.assign({},so,{allDay:true,start:'',end:''}), ba=C.reconcile(m,sheet,[sa],D).blocks.find(b=>b.id==='cal_ev_soth0001_'+st.id);
+ assert.ok(ba&&ba.time==='8:30'&&ba.durMin===60,'終日は8:30から1時間 '+JSON.stringify(ba));
+ const ot={id:'ev_oth00001',rev:1,date:D,endDate:D,allDay:false,start:'15:00',end:'15:30',title:'避難訓練',label:'other',tanto:[]};
+ const xo=C.reconcile(m,sheet,[ot],D), bo=xo.blocks.find(b=>b.id==='cal_ev_oth00001_hold');
+ assert.ok(bo&&bo.staffId==='__hold__'&&bo.label==='避難訓練'&&bo.durMin===30,'担当なしのその他予定は保留の欄 '+JSON.stringify(bo));
+ const ot2=Object.assign({},ot,{id:'ev_oth00002',tanto:[st.name]}), bo2=C.reconcile(m,sheet,[ot2],D).blocks.find(b=>b.id==='cal_ev_oth00002_'+st.id);
+ assert.ok(bo2&&bo2.staffId===st.id,'担当つきのその他予定は担当の欄');
+ // ほかの事業・この版にいない担当・シフト表の予定・TimeTreeの予定はコマにしない
+ const no=[Object.assign({},ot,{id:'ev_oth00003',biz:'houkago'}),Object.assign({},ot,{id:'ev_oth00004',tanto:['だれでもない人']}),
+   Object.assign({},so,{id:'shm20261102_a'}),Object.assign({},ot,{id:'tt20261102_01'})];
+ const xn=C.reconcile(m,sheet,no,D);
+ assert.ok(!xn.blocks.some(b=>/ev_oth0000[34]|shm2026|tt2026/.test(b.id)),'入れない '+JSON.stringify(xn.blocks.filter(b=>/^cal_/.test(b.id))));
+ assert.ok(!C.reconcile(m,xo,[],D).blocks.some(b=>b.id==='cal_ev_oth00001_hold'),'予定を消すとコマも消える');
+ console.log('other koma OK');
+}

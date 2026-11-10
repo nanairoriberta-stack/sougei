@@ -13,6 +13,24 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const TYPE_LABEL = { staff_off: "職員の休み・不在", staff_plan: "職員の予定", user_absent: "利用者の欠席", user_time: "送迎の変更", user_extra: "利用日外利用", help: "ヘルプ", hwork: "休日出勤", shift: "職員時間変更", help_cancel: "ヘルプキャンセル", liberta: "リベルタ利用" };
 const HOLD_ID = "__hold__";                                  // 送迎表の「保留」欄（担当がまだ決まっていないヘルプ）
 
+/* 送迎表に反映の指定（sg）が無い「その他」の予定も、送迎表のコマにする（sg の代わり）。
+   利用者その他（uother）＝保留の欄（2026-11-10 依頼者「山崎 入浴」）。
+   職員その他（sother）・その他予定（other）＝担当の職員の欄、担当がいなければ保留の欄（2026-11-10 依頼者「その他予定もコマで。利用者・職員のその他と同じように」）。
+   シフト表から入った予定（ID sh…）・TimeTreeから写した予定（tt…）はコマにしない。担当がこの版の職員にいない・ほかの事業の予定（担当なし）は入れない */
+function komaSg(master, ev) {
+  if (!ev || ev.sg || ev.deleted) return null;
+  const id = String(ev.id || "");
+  if (/^(sh|tt)/.test(id)) return null;
+  if (ev.label === "uother") return (ev.users || []).length ? { type: "staff_plan", staff: [], users: ev.users } : null;
+  if (ev.label !== "sother" && ev.label !== "other") return null;
+  const names = new Set(((master && master.staff) || []).map((s) => s.name));
+  const tanto = (ev.tanto || []).filter(Boolean);
+  if (tanto.length) { const hit = tanto.filter((n) => names.has(n)); return hit.length ? { type: "staff_plan", staff: hit, users: [] } : null; }
+  if (ev.label === "sother") return null;
+  const edBiz = master && master.linkSeed2 ? "houkago" : "seikatsu";
+  return (ev.biz === "houkago" ? "houkago" : "seikatsu") === edBiz ? { type: "staff_plan", staff: [], users: [] } : null;
+}
+
 function specsFor(master, events, date) {
   const staffBy = new Map((master.staff || []).map((s) => [s.name, s]));
   const userBy = new Map((master.users || []).map((u) => [u.name, u]));
@@ -20,7 +38,7 @@ function specsFor(master, events, date) {
   for (const ev of events || []) {
     // 利用者その他（uother）で時間が入っているものは、送迎表の保留の欄にコマとして出す（2026-11-10 依頼者「山崎 入浴」がコマに出ない）。終日のものは特記事項だけ
     // 終日の予定も 8:30 にコマ（2026-11-10 依頼者「基本終日予定もコマが出るように。時間は8:30」）。要らないコマは送迎表で「コマだけ消す」
-    const sg0 = ev && (ev.sg || (ev.label === "uother" && (ev.users || []).length ? { type: "staff_plan", staff: [], users: ev.users } : null));
+    const sg0 = ev && (ev.sg || komaSg(master, ev));
     if (!ev || ev.deleted || !sg0 || !sg0.type) continue;
     if (!(ev.date <= date && ev.endDate >= date)) continue;
     const whole = !!ev.allDay || (ev.date < date && ev.endDate > date);
@@ -38,7 +56,7 @@ function specsFor(master, events, date) {
     if (sg0.type === "help" && !users.length && !staff.length && (!missingUsers.length || (ev.biz === "houkago" ? "houkago" : "seikatsu") !== edBiz)) continue;
     const dept = (sg0.type === "hwork" || sg0.type === "shift") && sg0.dept ? (master.departments || []).find((d) => d.name === sg0.dept) : null;
     if ((sg0.type === "hwork" || sg0.type === "shift") && sg0.dept && !dept) { missing.push(sg0.dept); missingStaff.push(sg0.dept); }
-    out.push({ id: ev.id, rev: ev.rev, type: sg0.type, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
+    out.push({ id: ev.id, rev: ev.rev, type: sg0.type, koma: !ev.sg, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(sg0.meet), send: appTime(sg0.send), noMeet: sg0.noMeet || "", noSend: sg0.noSend || "", missing,
       reason: sg0.reason || "", note: sg0.note || "", deptId: dept ? dept.id : "",
       wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, at: appTime(sg0.at),
@@ -74,17 +92,18 @@ function blocksOf(spec) {
   if (spec.type === "staff_off" && (spec.whole || spec.half)) return [];
   // モニタリング・支援会議などで対応者が決まっていない（利用者だけ）：保留の欄に1つ（2026-11-05 依頼者「職員は誰が入るかわからないので保留に」）。担当は送迎表で決める（同じIDなので職員の欄へ動かしても残る）
   if (spec.type === "staff_plan" && !spec.staff.length) {
-    if (!spec.users.length) return [];
+    if (!spec.users.length && !spec.koma) return [];
     const from = spec.whole ? "8:30" : spec.from;   // 終日は 8:30（2026-11-10 依頼者）
     const dur = spec.whole ? 60 : Math.max(15, (toMinX(spec.to) ?? toMinX(from) + 60) - toMinX(from));
-    return [{ id: `cal_${spec.id}_hold`, kind: "block", time: from, durMin: dur, staffId: HOLD_ID, label: spec.title, userIds: spec.users.map((u) => u.id), calId: spec.id }];
+    return [Object.assign({ id: `cal_${spec.id}_hold`, kind: "block", time: from, durMin: dur, staffId: HOLD_ID, label: spec.title, userIds: spec.users.map((u) => u.id), calId: spec.id }, spec.whole ? { wholeDay: true } : {})];
   }
   return spec.staff.map((s) => {
-    const from = spec.whole ? (s.start || "8:30") : spec.from;
-    const to = spec.whole ? (s.end || "17:30") : spec.to;
+    // その他の予定から作るコマ（koma）の終日は 8:30 から1時間（利用者その他と同じ。勤務時間いっぱいのコマにしない）
+    const from = spec.whole ? (spec.koma ? "8:30" : (s.start || "8:30")) : spec.from;
+    const to = spec.whole ? (spec.koma ? "9:30" : (s.end || "17:30")) : spec.to;
     const dur = Math.max(15, (toMinX(to) ?? toMinX(from) + 60) - toMinX(from));
-    return { id: `cal_${spec.id}_${s.id}`, kind: "block", time: from, durMin: dur, staffId: s.id,
-      label: spec.type === "staff_off" ? `不在（${spec.title}）` : spec.title, calId: spec.id };
+    return Object.assign({ id: `cal_${spec.id}_${s.id}`, kind: "block", time: from, durMin: dur, staffId: s.id,
+      label: spec.type === "staff_off" ? `不在（${spec.title}）` : spec.title, calId: spec.id }, spec.whole ? { wholeDay: true } : {});
   });
 }
 
@@ -455,6 +474,6 @@ function exportChanges(sheet) {
   return out;
 }
 
-const API = { reconcile, specsFor, summary, TYPE_LABEL, appTime, REQ_ID, linkReqs, linkApply, linkStatus, exportSnapOf, exportChanges };
+const API = { reconcile, specsFor, komaSg, summary, TYPE_LABEL, appTime, REQ_ID, linkReqs, linkApply, linkStatus, exportSnapOf, exportChanges };
 if (typeof module !== "undefined" && module.exports) module.exports = API; else G.SGCal = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);
