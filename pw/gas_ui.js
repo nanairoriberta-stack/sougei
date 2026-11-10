@@ -402,16 +402,23 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await Y.pg.locator(".sh-wishbar").innerText()).includes("横田"), "自分の希望");
     assert.strictEqual(await Y.pg.locator("#shWho").count(), 0, "表の職員は自分（ログインした人）が選ばれている"); await Y.pg.click('td[data-day="2026-11-20"] .dnum'); await Y.pg.waitForTimeout(200); await Y.pg.click('[data-wpick="休"]'); await Y.pg.waitForTimeout(2500);
     assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.wish["横田"]["2026-11-20"], "休", "自分の希望が保存");
-    // スマホでは早番（赤）・遅番（青）を1列にして名前が見える（2026-11-07 依頼者「スマホだと名前わからない」）
-    { const sl = Y.pg.locator('[data-slot="2026-11-04|e|1"]'), bx = await sl.boundingBox(), td = await Y.pg.locator('td[data-day="2026-11-04"]').boundingBox();
+    // 男性の表は、表の職員には希望を入れる画面だけ（2026-11-10 依頼者）：勤務の枠・日勤・休み・基本シフト・曜日のパターンは出さない
+    assert.strictEqual(await Y.pg.locator("[data-slot]").count(), 0, "勤務の枠は出さない");
+    assert.strictEqual(await Y.pg.locator(".sh-base, .sh-pat, .line.off, [data-legend]").count(), 0, "基本シフト・パターン・休みの行は出さない");
+    assert.ok((await Y.pg.locator('td[data-day="2026-11-20"]').innerText()).includes("横田 休"), "希望は見える");
+    await Y.pg.screenshot({ path: "g_shiftpage_mobile.png" });
+    assert.deepStrictEqual(real(Y.errs), [], "画面エラーなし"); await Y.pg.context().close();
+    // スマホでは早番（赤）・遅番（青）を1列にして名前が見える（2026-11-07 依頼者「スマホだと名前わからない」。組む人＝管理者の画面で）
+    const Y2 = await open("shift.html", { width: 390, height: 844 }, sb, "shift_m2.html");
+    await Y2.pg.waitForTimeout(500); await Y2.pg.fill("#sghNo", "000"); await Y2.pg.fill("#sghPin", "5829"); await Y2.pg.click("#sghGo"); await Y2.pg.waitForTimeout(2000);
+    { const Y = Y2, sl = Y.pg.locator('[data-slot="2026-11-04|e|1"]'), bx = await sl.boundingBox(), td = await Y.pg.locator('td[data-day="2026-11-04"]').boundingBox();
       assert.ok(bx.width > td.width * 0.8, "スマホは1列（枠いっぱい） " + bx.width + "/" + td.width);
       assert.ok(await sl.evaluate((e) => e.scrollWidth <= e.clientWidth + 1), "名前が切れない");
       assert.ok(!(await sl.innerText()).includes("早"), "「早」の字は出さない（色で分かる） " + await sl.innerText());
       assert.strictEqual(await sl.evaluate((e) => getComputedStyle(e).color), "rgb(220, 38, 38)", "早番は赤");
       assert.strictEqual(await Y.pg.locator('[data-slot="2026-11-04|l|1"]').evaluate((e) => getComputedStyle(e).color), "rgb(29, 78, 216)", "遅番は青");
       assert.ok(await Y.pg.locator("[data-legend]").isVisible(), "赤＝早番・青＝遅番の説明"); }
-    await Y.pg.screenshot({ path: "g_shiftpage_mobile.png" });
-    assert.deepStrictEqual(real(Y.errs), [], "画面エラーなし"); await Y.pg.context().close();
+    assert.deepStrictEqual(real(Y2.errs), [], "画面エラーなし"); await Y2.pg.context().close();
     // 男性の表は ?d= が無ければ翌月から開く・「🤖 シフトを自動で作る」で空きが埋まる（2026-11-07 依頼者）
     { const nx = new Date(); nx.setDate(1); nx.setMonth(nx.getMonth() + 1); const nym = `${nx.getFullYear()}-${String(nx.getMonth() + 1).padStart(2, "0")}`;
       const Z = await open("shift.html", { width: 1400, height: 1000 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";`, "shift_next.html");

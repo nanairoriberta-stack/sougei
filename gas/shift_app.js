@@ -135,16 +135,18 @@
         return ds.length ? ds.map((d) => `<span class="wi">${esc(X.label(d))} ${esc(wishText(w[d]))}${S.canEdit || S.wishWho === S.myName ? `<button type="button" data-wish-del="${d}" aria-label="消す">×</button>` : ""}</span>`).join("") : `<span class="note">${esc(S.wishWho)}さんの今月の希望はまだありません</span>`; })()}</div>
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
     // シフトの確定（2026-11-07 依頼者「管理者以外は確定までは見えないように。最終確定ボタン」）
-    const fixed = X.isFixed(S.month, S.ym), hidden = !S.canEdit && (!!(S.month && S.month.hidden) || !fixed), fx = (S.month && S.month.fixed) || null;
+    // 男性の表は、表の職員には希望を入れる画面だけ（2026-11-10 依頼者「男性の希望休のカレンダーは希望を入れる画面のみに」）。勤務は職場カレンダーで見る
+    const wishOnly = !S.canEdit && S.group === "m";
+    const fixed = X.isFixed(S.month, S.ym), hidden = wishOnly || (!S.canEdit && (!!(S.month && S.month.hidden) || !fixed)), fx = (S.month && S.month.fixed) || null;
     if (S.canEdit) html += fixed ? `<div class="sh-fix on" data-fix="on">✅ この月のシフトは<b>確定</b>しています（表の職員にも見え、職場カレンダーにも出ます）${fx && fx.at ? `<small>${esc(String(fx.at).slice(5, 10).replace("-", "/"))} ${esc(fx.by || "")}</small>` : ""}<button data-act="unfix">確定を取り消す</button></div>`
       : `<div class="sh-fix" data-fix="off">この月のシフトは<b>まだ確定していません</b>。組む人（管理者など）だけに見えています。表の職員には希望だけが見え、職場カレンダーにも出ません。<button data-act="fix" class="primary" data-fix-btn>✅ このシフトで確定する</button></div>`;
-    else if (hidden) html += `<div class="sh-fix" data-unfixed>この月のシフトはまだ確定していません。確定すると、ここに勤務が出ます（今は希望だけ入れられます）。</div>`;
+    else if (hidden && !wishOnly) html += `<div class="sh-fix" data-unfixed>この月のシフトはまだ確定していません。確定すると、ここに勤務が出ます（今は希望だけ入れられます）。</div>`;
     const hs = X.holes(S.month, c, S.ym), holeSet = new Set(hs.map((h) => `${h.date}|${h.kind}|${h.idx}`));
     const conf = X.conflicts(S.month, c, S.ym), confSet = new Set(conf.map((x) => `${x.date}|${x.name}`));
     const le = X.lateEarly(S.month, c, S.ym), leSet = new Set(le.map((x) => `${x.date}|e|${x.slot}`)), leFix = le.length ? X.fixLateEarly(S.month, c, S.ym) : { fixed: [], left: [] };
     const ri = X.ruleIssues(S.month, c, S.ym), riSet = new Set(ri.map((x) => `${x.date}|${x.kind}|${x.now}`));
     const days = X.daysOfMonth(S.ym), lead = (X.wdOf(days[0]) + 6) % 7;   // 月曜始まり（2026-11-07 依頼者）
-    html += `<div class="sh-legend" data-legend><span class="e">赤＝早番</span>・<span class="l">青＝遅番</span>（①②③は番号）</div>`;
+    if (!hidden) html += `<div class="sh-legend" data-legend><span class="e">赤＝早番</span>・<span class="l">青＝遅番</span>（①②③は番号）</div>`;
     html += `<table class="sh-grid"><thead><tr>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th class="${i === 0 ? "su" : i === 6 ? "sa" : ""}">${X.WD[i]}曜日</th>`).join("")}</tr></thead><tbody>`;
     const cells = Array(lead).fill(null).concat(days);
     while (cells.length % 7) cells.push(null);
@@ -174,13 +176,13 @@
     const rowsOf = (k) => Math.max(1, ...WEEK.map((wd) => Math.max(needWd(wd, k), ((B[wd] || {})[k] || []).length)));
     const bCell = (wd, k, i) => { const n = ((B[wd] || {})[k] || [])[i - 1] || "", on = i <= needWd(wd, k) || n;
       return `<td class="${on ? "" : "na"}">${on ? (S.canEdit ? `<button data-bslot="${wd}|${k}|${i}">${esc(n) || "－"}</button>` : esc(n)) : ""}</td>`; };
-    html += `<h2 class="sh-h2">基本シフト（曜日ごと）<small>下書きはこの番号どおりに入ります${c.rotate && c.rotateFrom ? `。①〜③は1週ごとに1つずつずれます（この表は ${Number(c.rotateFrom.slice(5, 7))}/${Number(c.rotateFrom.slice(8))} の週の並び）` : ""}${S.canEdit ? "。マスを押すと変えられます" : ""}${(c.rules || []).length ? `<br>職員ごとの決まり：${(c.rules || []).map((r) => esc(X.ruleText(r))).join("、")}（下書きはこの番号に入れます）` : ""}</small></h2>
+    if (!wishOnly) html += `<h2 class="sh-h2">基本シフト（曜日ごと）<small>下書きはこの番号どおりに入ります${c.rotate && c.rotateFrom ? `。①〜③は1週ごとに1つずつずれます（この表は ${Number(c.rotateFrom.slice(5, 7))}/${Number(c.rotateFrom.slice(8))} の週の並び）` : ""}${S.canEdit ? "。マスを押すと変えられます" : ""}${(c.rules || []).length ? `<br>職員ごとの決まり：${(c.rules || []).map((r) => esc(X.ruleText(r))).join("、")}（下書きはこの番号に入れます）` : ""}</small></h2>
       <table class="sh-base"><thead><tr><th></th>${WEEK.map((wd) => `<th class="${wd === 0 ? "su" : wd === 6 ? "sa" : ""}">${X.WD[wd]}</th>`).join("")}</tr></thead><tbody>
       ${["e", "l"].map((k) => Array.from({ length: rowsOf(k) }, (_, j) => `<tr class="${j === 0 ? "top" : ""}"><th>${j === 0 ? X.KIND[k] + "番" : ""}<i>${X.MARK[j + 1]}</i></th>${WEEK.map((wd) => bCell(wd, k, j + 1)).join("")}</tr>`).join("")).join("")}
       <tr class="top"><th>日勤</th>${WEEK.map((wd) => `<td>${S.canEdit ? `<button data-bd="${wd}">${esc(((B[wd] || {}).d || []).join("、")) || "－"}</button>` : esc(((B[wd] || {}).d || []).join("、"))}</td>`).join("")}</tr>
       <tr class="top off"><th>休み</th>${WEEK.map((wd) => `<td>${esc(c.members.filter((x) => X.patOf(c, x, wd) === "休").map((x) => x.name).join("、"))}</td>`).join("")}</tr></tbody></table>`;
     // 下の表：職員ごとの曜日のパターン（基本シフトから。早番・遅番・日勤・休み）と今月の希望
-    html += `<table class="sh-pat"><thead><tr><th>職員</th>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th>${X.WD[i]}</th>`).join("")}<th>今月の希望休・希望勤務</th></tr></thead><tbody>${c.members.map((x, mi) => `<tr><th>${esc(x.name)}</th>${[1, 2, 3, 4, 5, 6, 0].map((wd) => { const v = X.patOf(c, x, wd); return `<td class="${/休/.test(v) ? "p-off" : ""}">${S.canEdit && !B[wd] ? `<button data-pat="${mi}|${wd}">${esc(v) || "－"}</button>` : esc(v)}</td>`; }).join("")}<td class="sum">${esc(X.wishSummary(S.month, x.name))}</td></tr>`).join("") || `<tr><td colspan="9" class="none">職員がまだいません。「設定」から入れてください。</td></tr>`}</tbody></table>`;
+    if (!wishOnly) html += `<table class="sh-pat"><thead><tr><th>職員</th>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th>${X.WD[i]}</th>`).join("")}<th>今月の希望休・希望勤務</th></tr></thead><tbody>${c.members.map((x, mi) => `<tr><th>${esc(x.name)}</th>${[1, 2, 3, 4, 5, 6, 0].map((wd) => { const v = X.patOf(c, x, wd); return `<td class="${/休/.test(v) ? "p-off" : ""}">${S.canEdit && !B[wd] ? `<button data-pat="${mi}|${wd}">${esc(v) || "－"}</button>` : esc(v)}</td>`; }).join("")}<td class="sum">${esc(X.wishSummary(S.month, x.name))}</td></tr>`).join("") || `<tr><td colspan="9" class="none">職員がまだいません。「設定」から入れてください。</td></tr>`}</tbody></table>`;
     if (S.canEdit) html += `<section class="sh-holes" id="shHoles"><h2>空き ${hs.length}枠${conf.length ? `・希望とちがう ${conf.length}件` : ""}${ri.length ? `・決まりとちがう ${ri.length}件` : ""}${le.length ? `・遅番の次の日に早番 ${le.length}件` : ""}</h2>
       ${le.length ? `<ul class="conf turnx" data-turn-list>${le.map((x) => `<li>${X.label(x.date)} 早${X.MARK[x.slot]} ${esc(x.name)}さんは前の日が遅番です</li>`).join("")}</ul>${leFix.fixed.length ? `<div class="acts"><button data-act="fixturn">替われる人に替える（${leFix.fixed.length}件）</button><span class="note">その日の日勤の人や早番の人に替えます。だめなら前の日の遅番を替えます${leFix.left.length ? `。残りの${leFix.left.length}件は替われる人がいないので、LINE文に入れています` : ""}</span></div>` : `<p class="note">替われる人が見つからないので、LINE文に入れています</p>`}` : ""}
       ${ri.length ? `<ul class="conf rulex" data-rule-list>${ri.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは${X.KIND[x.kind]}${X.MARK[x.slot]}の決まりですが${X.KIND[x.kind]}${X.MARK[x.now]}に入っています</li>`).join("")}</ul><div class="acts"><button data-act="fixrules">決まりどおりに並べ替える</button><span class="note">決まりの番号の人と入れ替えます</span></div>` : ""}
