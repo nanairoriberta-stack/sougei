@@ -709,8 +709,14 @@ async function bootstrap() {
     for (const k of [...g.cache.keys()]) if (/^[sm]:/.test(k)) g.cache.delete(k);
     await admin.call("auth.me");
     assert.ok(yrs(g.sheets.get("_sessions").data[row][2]) > 9, "使うと期限がのびる " + g.sheets.get("_sessions").data[row][2]);
+    // ログインしたままのアドレス（iPhoneのSafari向け。2026-11-10 依頼者）：鍵でログインでき、ログアウトすると使えなくなる
+    const dl = await admin.call("auth.deviceLink"); assert.ok(/^[0-9a-f]{64}$/.test(dl.key), "鍵 " + dl.key);
+    assert.strictEqual(String(sess()[sess().length - 1][3]), "ホーム画面のアドレス");
+    const kr = g.ctx.api(dl.key, "auth.me", []); assert.ok(kr.ok && kr.data.no === "000", "鍵でログインできる " + JSON.stringify(kr));
+    g.ctx.api(dl.key, "auth.logout", [dl.key]);
+    assert.ok(!g.ctx.api(dl.key, "auth.me", []).ok, "ログアウトすると鍵は使えない");
     await admin.call("auth.logout", admin.token || "").catch(() => {});
-    return "期限 " + Math.round(yrs(g.sheets.get("_sessions").data[row][2])) + "年";
+    return "期限 " + Math.round(yrs(g.sheets.get("_sessions").data[row][2])) + "年・ホーム画面のアドレス";
   });
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
     const { g, admin } = await bootstrap();

@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.10c',
+  VERSION: '2026.11.10d',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -197,6 +197,9 @@ function api(token, method, args) {
 }
 var HANDLERS = {
   'auth.me': function (me) { return publicMe_(me); },
+  // iPhoneのSafariなどで、閉じるたびにログインが消える端末のために「ログインしたままのアドレス」を作る（2026-11-10 依頼者「毎回ログインを求められる」iPhone・Safari）。
+  // 新しいログイン（10年）をもう1つ作り、その鍵をアドレスに付ける。ログアウト・暗証番号の変更・再発行で、ほかのログインと同じように使えなくなる
+  'auth.deviceLink': function (me) { return deviceLink_(me); },
   'auth.logout': function (me, a) { logout_(a[0]); return true; },
   'auth.changePin': function (me, a) { return changePin_(me, a[0], a[1]); },
   'staff.list': function (me) { return staffList_(); },
@@ -273,6 +276,14 @@ function login_(no, pin, device) {
     log_({ no: no, name: st.name }, 'ログイン', String(device || '').slice(0, 40), '');
     var me = { no: no, name: st.name, role: st.role, mustChange: !(auth && auth.changed), shift: st.shift };
     return { token: token, me: publicMe_(me) };
+  });
+}
+function deviceLink_(me) {
+  return withLock_(function () {
+    var token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    sheet_(APP.SH.sess).appendRow([hash_(token), txt_(me.no), new Date(Date.now() + APP.SESSION_DAYS * 864e5), safe_('ホーム画面のアドレス')]);
+    log_(me, 'ログイン', 'ホーム画面のアドレスを作成', '');
+    return { key: token };
   });
 }
 function authRow_(no) {

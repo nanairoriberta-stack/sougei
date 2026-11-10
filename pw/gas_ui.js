@@ -34,6 +34,23 @@ const D = path.join(__dirname, "../gas/out");
     fs.writeFileSync(path.join(__dirname, out), html);
     await pg.goto("file://" + path.join(__dirname, out)); return { pg, errs };
   }
+  // ログインしたままのアドレス（…&k=鍵。iPhoneのSafariは閉じるとログインの記録が消えることがある。2026-11-10 依頼者）：記録の無い端末でも鍵でログインして開く
+  { const key = api(t, "auth.deviceLink", []).data.key;
+    const K = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_KEY="${key}";`, "calendar_key.html");
+    await K.pg.waitForTimeout(2500);
+    assert.strictEqual(await K.pg.locator("#sghNo").count(), 0, "鍵のアドレスならログイン画面を出さない");
+    assert.ok(await K.pg.locator(".sgh-chip").count() > 0, "ログインしている");
+    await K.pg.locator(".sgh-chip").first().click(); await K.pg.waitForTimeout(200);
+    await K.pg.click('[data-a="keep"]'); await K.pg.waitForTimeout(200); await K.pg.click("#sghKeepGo"); await K.pg.waitForTimeout(1500);
+    const link = await K.pg.locator("#sghKeepUrl").inputValue();
+    assert.ok(/^https:\/\/script\.google\.com\/macros\/s\/TEST\/exec\?page=calendar&k=[0-9a-f]{64}$/.test(link), "専用のアドレス " + link);
+    await K.pg.locator("[data-keep]").screenshot({ path: "g_keep_link.png" });
+    assert.deepStrictEqual(K.errs.filter((x) => !/Failed to load resource/.test(x)), [], "画面エラーなし"); await K.pg.context().close();
+    api(key, "auth.logout", [key]);
+    const K2 = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_KEY="${key}";`, "calendar_key2.html");
+    await K2.pg.waitForTimeout(2500);
+    assert.ok(await K2.pg.locator("#sghNo").count() > 0, "ログアウトした鍵ではログイン画面");
+    await K2.pg.context().close(); console.log("ログインしたままのアドレス OK"); }
   // スマホ：余村慎がログインして AM休 を押す
   const boot = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${date}";`;
   const { pg, errs } = await open("calendar.html", { width: 390, height: 844 }, boot);

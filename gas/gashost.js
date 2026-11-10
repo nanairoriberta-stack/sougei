@@ -9,7 +9,9 @@ let BASE = /\/exec$/.test(G.__SG_BASE || "") ? G.__SG_BASE : (REF || G.__SG_BASE
 let ls = null; try { ls = G.localStorage; } catch (e) {}
 const store = G.TCCore.makeStore(ls || { getItem() { throw 0; }, setItem() { throw 0; }, removeItem() {}, key() { return null; }, length: 0 });
 const TK = "sg:token", MK = "sg:me", DK = "sg:dir";
-let token = store.get(TK) || "";
+// ログインしたままのアドレス（…&k=鍵）で開いたら、その鍵でログインする（iPhoneのSafariは閉じるとログインの記録が消えることがある。2026-11-10）
+const KEY = /^[0-9a-f]{40,80}$/.test(G.__SG_KEY || "") ? G.__SG_KEY : "";
+let token = store.get(TK) || KEY || "";
 let me = null; try { me = JSON.parse(store.get(MK) || "null"); } catch (e) {}
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -50,7 +52,7 @@ const css = `
 .sgh-card label{font-size:12px;color:#5f6b66;display:flex;flex-direction:column;gap:6px}
 .sgh-card[data-att] input,.sgh-card[data-att] select{height:42px;font-size:16px;letter-spacing:normal;font-family:inherit;border:1px solid #cfd8d4;border-radius:10px;padding:0 10px}
 .sgh-card input{height:48px;border:1px solid #cfd8d4;border-radius:10px;padding:0 14px;font-size:22px;letter-spacing:.2em;font-family:ui-monospace,Menlo,monospace}
-.sgh-card button.go{height:48px;border:0;border-radius:10px;background:#13795b;color:#fff;font-size:16px;font-weight:700}
+.sgh-warn{background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px;font-size:13px}.sgh-steps{font-size:13px;margin:6px 0 0 18px;padding:0}.sgh-card a.go{display:flex;align-items:center;justify-content:center;height:48px;border-radius:10px;background:#1d4ed8;color:#fff;font-weight:700;text-decoration:none;margin:6px 0}.sgh-card button.go{height:48px;border:0;border-radius:10px;background:#13795b;color:#fff;font-size:16px;font-weight:700}
 .sgh-card button.go:disabled{opacity:.5}
 .sgh-err{color:#c23a32;font-size:13px;min-height:1em}
 .sgh-chip{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:4000;background:#18201d;color:#fff;border:0;border-radius:999px;padding:7px 14px;font:12px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2)}
@@ -120,7 +122,7 @@ const isExec = (u) => /^https:\/\/script\.google\.com\/.*\/exec$/.test(String(u 
 // 開いたときに公開URLが届かなかったら（実機で起きた）、前に教わったURL → ログイン後にサーバーへ聞いたURL の順で使う
 if (!isExec(BASE)) { const b = store.get("sg:base"); if (isExec(b)) BASE = b; }
 function learnBase() { call("app.base").then((b) => { if (isExec(b)) { BASE = b; store.set("sg:base", b); } }).catch(() => {}); }
-function url(q) { return isExec(BASE) ? BASE + q : ""; }
+function url(q) { return isExec(BASE) ? BASE + q + (KEY && token === KEY && q ? (q.includes("?") ? "&" : "?") + "k=" + KEY : "") : ""; }   // 鍵で開いた画面から移るときも鍵を付ける
 function renderChip() {
   if (!me) { if (chip) chip.remove(); chip = null; return; }
   if (!chip) {
@@ -141,11 +143,11 @@ function toggleMenu() {
   else if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar" + dq))}" target="_top">📅 カレンダー</a>`);
   if (isExec(BASE) && page !== "shift") links.push(`<a href="${esc(url("?page=shift"))}" target="_top">🗓 シフト表（希望休）</a>`);   // マンション職員の早番・遅番（2026-11-02）
   if (isExec(BASE) && (me.canSougei || me.admin)) [["v1", "現体制版"], ["v2", "新体制版"], ["v3", "りんく・ぷれいす版"]].forEach(([e, l]) => { if (!(page === "sougei" && e === ED)) links.push(`<a href="${esc(url("?page=sougei&e=" + e + dq))}" target="_top">🚌 送迎表（${l}）</a>`); });
-  menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}${me.canSougei || me.admin ? `<button data-a="att">📋 期間の出欠（Excel）</button>` : ""}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
+  menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}<button data-a="keep">📱 ログインしたままにする（iPhone）</button>${me.canSougei || me.admin ? `<button data-a="att">📋 期間の出欠（Excel）</button>` : ""}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
   menu.onclick = (e) => {
     const a = e.target.closest("[data-a]"); if (!a) return;
     menu.remove(); menu = null;
-    if (a.dataset.a === "out") logout(); else if (a.dataset.a === "pin") askNewPin(false); else if (a.dataset.a === "log") showLog(); else if (a.dataset.a === "att") showAttendance();
+    if (a.dataset.a === "out") logout(); else if (a.dataset.a === "pin") askNewPin(false); else if (a.dataset.a === "log") showLog(); else if (a.dataset.a === "att") showAttendance(); else if (a.dataset.a === "keep") showKeepLink();
   };
   document.body.appendChild(menu);
 }
@@ -155,6 +157,27 @@ let excelJsP = null;
 function loadExcelJs() {
   if (G.ExcelJS) return Promise.resolve(G.ExcelJS);
   return excelJsP || (excelJsP = new Promise((ok, ng) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"; sc.onload = () => ok(G.ExcelJS); sc.onerror = () => { excelJsP = null; ng(new Error("Excelの部品を読み込めませんでした（通信を確かめてください）")); }; document.head.appendChild(sc); }));
+}
+/* 📱 ログインしたままにする：その人専用のアドレス（鍵つき）を作り、ホーム画面に追加してもらう */
+function showKeepLink() {
+  showOverlay(`<div class="sgh-card" data-keep><h1>📱 ログインしたままにする</h1>
+    <p>iPhoneのSafariでは、閉じるたびにログインが消えることがあります。下の「アドレスを作る」で、あなた専用のアドレスを作り、ホーム画面に追加してください。次からはそこから開くと、ログインしたまま使えます。</p>
+    <p class="sgh-warn">⚠ このアドレスは鍵の代わりです。ほかの人に送ったり、LINEに貼ったりしないでください（その人があなたとしてログインできてしまいます）。<br>ログアウトするか暗証番号を変えると、このアドレスは使えなくなります。</p>
+    <div id="sghKeepOut"></div>
+    <button class="go" id="sghKeepGo">アドレスを作る</button><button class="go" style="background:#eef3f1;color:#18201d" id="sghClose">閉じる</button></div>`);
+  document.getElementById("sghClose").onclick = hideOverlay;
+  document.getElementById("sghKeepGo").onclick = async () => {
+    const out = document.getElementById("sghKeepOut"), b = document.getElementById("sghKeepGo"); b.disabled = true; out.textContent = "作っています…";
+    try {
+      const r = await call("auth.deviceLink"), link = url("?page=calendar").replace(/[?&]k=[0-9a-f]+/, "") + "&k=" + r.key;
+      if (!isExec(BASE)) throw { message: "公開URLが分かりません（設定シートのB2）" };
+      out.innerHTML = `<label>あなた専用のアドレス<textarea id="sghKeepUrl" readonly rows="3" style="width:100%;font-size:12px">${esc(link)}</textarea></label>
+        <button class="go" id="sghKeepCopy">コピーする</button><a class="go" id="sghKeepOpen" href="${esc(link)}" target="_top">このアドレスで開く</a>
+        <ol class="sgh-steps"><li>「このアドレスで開く」を押す（Safariで開きます）</li><li>画面の下の共有ボタン（□に↑）を押す</li><li>「ホーム画面に追加」を押す</li><li>次からは、ホーム画面のアイコンから開く</li></ol>`;
+      document.getElementById("sghKeepCopy").onclick = () => { const t = document.getElementById("sghKeepUrl"); t.select(); try { document.execCommand("copy"); } catch (e) {} if (navigator.clipboard) navigator.clipboard.writeText(link).catch(() => {}); toastHost("コピーしました"); };
+      b.hidden = true;
+    } catch (e) { b.disabled = false; out.textContent = "作れませんでした：" + ((e && e.message) || e); }
+  };
 }
 function showAttendance() {
   const t = new Date(), t2 = new Date(t.getTime() + 6 * 864e5);
@@ -292,6 +315,10 @@ G.SGHost = { ready, call, store, get me() { return me; }, edition: ED, get base(
 /* ---------- 起動：保存済みのログインがあれば、通信できなくてもそのまま使える（未送信は端末に保存） ---------- */
 function boot() {
   if (token && me && !me.mustChange) { done(); call("auth.me").then((m) => setMe(Object.assign({}, m))).catch(() => {}); }
+  else if (token && !me && token === KEY) {   // 鍵のアドレスで開いた（端末にログインの記録が無い）：鍵でログインできるか聞く
+    call("auth.me").then((m) => { store.set(TK, token); setMe(Object.assign({}, m)); if (m.mustChange) askNewPin(true); else done(); })
+      .catch(() => { token = ""; needLogin("このアドレスのログインは使えなくなっています（ログアウト・暗証番号の変更など）。職員番号と暗証番号でログインしてください。"); });
+  }
   else if (token && me && me.mustChange) askNewPin(true);
   else needLogin();
 }
