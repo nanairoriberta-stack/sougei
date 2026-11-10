@@ -462,3 +462,13 @@ console.log('extra OK');
  assert.strictEqual(C.reconcile(m,sheet,[n2],D).staffOv[sid].noAway,true,'この日は中抜けなし');
  console.log('hwork away OK');
 }
+// 利用者その他（時間あり）は保留の欄にコマ（2026-11-10 依頼者「山崎 入浴」がコマに出ない）。終日は出さない
+{
+ const D='2026-11-02', un=m.users[0].name;
+ const ev={id:'ev_uoth0001',rev:1,date:D,endDate:D,allDay:false,start:'10:00',end:'11:00',title:un+' 入浴',label:'uother',users:[un]};
+ const x=C.reconcile(m,sheet,[ev],D), b=x.blocks.find(b=>b.id==='cal_ev_uoth0001_hold');
+ assert.ok(b&&b.staffId==='__hold__'&&b.time==='10:00'&&b.durMin===60&&b.label===un+' 入浴','保留の欄にコマ '+JSON.stringify(b));
+ assert.ok(!C.reconcile(m,x,[],D).blocks.some(b=>b.id==='cal_ev_uoth0001_hold'),'予定を消すとコマも消える');
+ assert.ok(!C.reconcile(m,sheet,[Object.assign({},ev,{allDay:true,start:'',end:''})],D).blocks.some(b=>/uoth/.test(b.id)),'終日はコマにしない');
+ console.log('uother koma OK');
+}

@@ -18,28 +18,30 @@ function specsFor(master, events, date) {
   const userBy = new Map((master.users || []).map((u) => [u.name, u]));
   const out = [];
   for (const ev of events || []) {
-    if (!ev || ev.deleted || !ev.sg || !ev.sg.type) continue;
+    // 利用者その他（uother）で時間が入っているものは、送迎表の保留の欄にコマとして出す（2026-11-10 依頼者「山崎 入浴」がコマに出ない）。終日のものは特記事項だけ
+    const sg0 = ev && (ev.sg || (ev.label === "uother" && !ev.allDay && (ev.users || []).length ? { type: "staff_plan", staff: [], users: ev.users } : null));
+    if (!ev || ev.deleted || !sg0 || !sg0.type) continue;
     if (!(ev.date <= date && ev.endDate >= date)) continue;
     const whole = !!ev.allDay || (ev.date < date && ev.endDate > date);
     const from = whole ? "" : appTime(ev.date === date ? ev.start : "0:00");
     const to = whole ? "" : (ev.endDate === date ? appTime(ev.end) : "24:00");
-    const staff = (ev.sg.staff || []).map((n) => staffBy.get(n)).filter(Boolean);
-    const users = (ev.sg.users || []).map((n) => userBy.get(n)).filter(Boolean);
-    const missingStaff = (ev.sg.staff || []).filter((n) => !staffBy.has(n)), missingUsers = (ev.sg.users || []).filter((n) => !userBy.has(n));
+    const staff = (sg0.staff || []).map((n) => staffBy.get(n)).filter(Boolean);
+    const users = (sg0.users || []).map((n) => userBy.get(n)).filter(Boolean);
+    const missingStaff = (sg0.staff || []).filter((n) => !staffBy.has(n)), missingUsers = (sg0.users || []).filter((n) => !userBy.has(n));
     const missing = [...missingStaff, ...missingUsers];
-    const half = ev.sg.type === "staff_off" && (ev.sg.half === "am" || ev.sg.half === "pm") ? ev.sg.half : "";
+    const half = sg0.type === "staff_off" && (sg0.half === "am" || sg0.half === "pm") ? sg0.half : "";
     // ヘルプは、この版の職員も利用者（行き先）もいなければ、この版の送迎表には入れない（ほかの事業所の予定）
     // 2026-11-09 依頼者「カレンダーに入れた『園山 ヘルプ』が送迎表に出ていない」：名前がこの版の利用者に見つからないと、だまって入れていなかった。
     // この版と同じ事業の予定なら、名前のまま保留の欄に入れて「送迎表に見つからない名前」に出す（消えない・気づける）。ほかの事業の予定は今までどおり入れない
     const edBiz = master && master.linkSeed2 ? "houkago" : "seikatsu";
-    if (ev.sg.type === "help" && !users.length && !staff.length && (!missingUsers.length || (ev.biz === "houkago" ? "houkago" : "seikatsu") !== edBiz)) continue;
-    const dept = (ev.sg.type === "hwork" || ev.sg.type === "shift") && ev.sg.dept ? (master.departments || []).find((d) => d.name === ev.sg.dept) : null;
-    if ((ev.sg.type === "hwork" || ev.sg.type === "shift") && ev.sg.dept && !dept) { missing.push(ev.sg.dept); missingStaff.push(ev.sg.dept); }
-    out.push({ id: ev.id, rev: ev.rev, type: ev.sg.type, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
-      meet: appTime(ev.sg.meet), send: appTime(ev.sg.send), noMeet: ev.sg.noMeet || "", noSend: ev.sg.noSend || "", missing,
-      reason: ev.sg.reason || "", note: ev.sg.note || "", deptId: dept ? dept.id : "",
-      wstart: appTime(ev.sg.wstart), wend: appTime(ev.sg.wend), meetPlace: ev.sg.meetPlace || "", sendPlace: ev.sg.sendPlace || "", noRide: !!ev.sg.noRide, afrom: appTime(ev.sg.afrom), ato: appTime(ev.sg.ato), noAway: !!ev.sg.noAway, at: appTime(ev.sg.at),
-      missUsers: missingUsers, lib: ev.sg.lib || "off", libParts: ev.sg.type === "liberta" ? libParts(ev, date) : null });
+    if (sg0.type === "help" && !users.length && !staff.length && (!missingUsers.length || (ev.biz === "houkago" ? "houkago" : "seikatsu") !== edBiz)) continue;
+    const dept = (sg0.type === "hwork" || sg0.type === "shift") && sg0.dept ? (master.departments || []).find((d) => d.name === sg0.dept) : null;
+    if ((sg0.type === "hwork" || sg0.type === "shift") && sg0.dept && !dept) { missing.push(sg0.dept); missingStaff.push(sg0.dept); }
+    out.push({ id: ev.id, rev: ev.rev, type: sg0.type, title: ev.title || "", whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
+      meet: appTime(sg0.meet), send: appTime(sg0.send), noMeet: sg0.noMeet || "", noSend: sg0.noSend || "", missing,
+      reason: sg0.reason || "", note: sg0.note || "", deptId: dept ? dept.id : "",
+      wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, at: appTime(sg0.at),
+      missUsers: missingUsers, lib: sg0.lib || "off", libParts: sg0.type === "liberta" ? libParts(ev, date) : null });
   }
   return out;
 }

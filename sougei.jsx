@@ -1338,6 +1338,8 @@ function calNoteLines(master, events, date, edition) {
     if (t === "user_time" || t === "user_extra" || t === "help_cancel" || t === "liberta") { if ((sg.users || []).some((n) => users.includes(n))) out.user.push(line); continue; }   // ヘルプキャンセルも特記事項(利用者)に
     if (t === "staff_off" || t === "hwork" || t === "shift") { if ((sg.staff || []).some((n) => staff.includes(n))) out.staff.push(line); continue; }
     if (t) continue;
+    // 利用者その他で時間があるものは保留の欄のコマになり、そこから特記事項に出る（二重にしない。2026-11-10）
+    if (e.label === "uother" && !e.allDay && (e.users || []).some((n) => users.includes(n))) continue;
     // 送迎表に反映しない予定（その他予定・TimeTreeから写した予定など）：名前で分ける
     if (inText(userOnly, title) || (e.users || []).some((n) => users.includes(n))) out.user.push(line);
     else if (inText(staff, title) || (e.tanto || []).some((n) => staff.includes(n))) out.staff.push(line);
