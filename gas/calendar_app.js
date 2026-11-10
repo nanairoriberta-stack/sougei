@@ -581,11 +581,11 @@ function checkSg(d,sg){
   if(sg.type==="liberta"){if(!sg.users.length)return"利用者を選んでください。";
     {const L=libUsers();const bad=L.length?sg.users.filter(n=>!L.some(u=>u.name===n)):[];if(bad.length)return`${bad.join("・")}さんはリベルタの利用者ではありません（リベルタ利用は、送迎表の利用者のタブでリベルタ（朝・夕）にしている人だけ入れられます）。`;}if(d.date===d.endDate&&sg.lfrom==="pm"&&sg.lto==="am")return"同じ日のときは「朝から」か「夜まで」にしてください（夜から朝までは、終了日を次の日にしてください）。";}
   if(sg.type==="help_cancel"){if(!sg.users.length)return"利用者を選んでください。";if(w.hcM==="time"&&!w.hct)return"キャンセルするヘルプの時刻を入れてください。";}
-  if(sg.type==="shift"&&LE_LABELS.includes(d.label)){if(!(d.label==="late"?sg.wstart:sg.wend))return d.label==="late"?"何時に出勤するか入れてください。":"何時に早退するか入れてください。";}
-  if(sg.type==="hwork"){
+  if(sg.type==="hwork"){   // 休日出勤の中抜け（2026-11-10）
     if(w.awM==="time"&&(!w.afrom||!w.ato))return"中抜け（いない時間）の始まりと終わりを入れてください。";
     if(w.awM==="time"&&minOf(w.ato)<=minOf(w.afrom))return"中抜けの終わりは始まりより後にしてください。";
     if(w.awM==="time"&&d.start&&d.end&&(minOf(w.afrom)<minOf(d.start)||minOf(w.ato)>minOf(d.end)))return"中抜けは出勤〜退勤の時刻の間にしてください。";}
+  if(sg.type==="shift"&&LE_LABELS.includes(d.label)){if(!(d.label==="late"?sg.wstart:sg.wend))return d.label==="late"?"何時に出勤するか入れてください。":"何時に早退するか入れてください。";}
   else if(sg.type==="shift"){
     if(w.wsM==="same"&&w.weM==="same"&&!w.dept&&!w.kinmu&&(w.awM||"same")==="same")return"出勤・退勤・中抜けのどれを変えるか（または部署）を選んでください。";
     if(w.awM==="time"&&(!w.afrom||!w.ato))return"中抜け（いない時間）の始まりと終わりを入れてください。";
