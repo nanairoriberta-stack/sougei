@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.11a',
+  VERSION: '2026.11.11b',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -473,7 +473,7 @@ function exportAlerts_(ns) {
   return out.slice(0, 31);
 }
 function namesList_() {
-  var c = CacheService.getScriptCache(), hit = c.get('names6');
+  var c = CacheService.getScriptCache(), hit = c.get('names7');
   if (hit) return JSON.parse(hit);
   // 利用者の候補：生活介護＝現体制版・新体制版（users）、放課後デイ＝りんく・ぷれいす版（kids）
   // 職員がどちらの事業か（staffBiz：名前→["seikatsu"]/["houkago"]/両方）。カレンダーで最初に開くタブと、事業の取り違えの確認に使う
@@ -495,8 +495,11 @@ function namesList_() {
     if (ed === 'v3') (m.users || []).forEach(function (u) { if (u && u.name && !seenK[u.name]) { seenK[u.name] = 1; kids.push({ name: u.name, dept: dn(u.deptId) }); } });
     else (m.users || []).forEach(function (u) {
       if (!u || !u.name) return; var isLib = !!(u.libertaAM || u.libertaPM);
-      if (!seen[u.name]) { seen[u.name] = 1; users.push(Object.assign({ name: u.name, dept: dn(u.deptId) }, isLib ? { lib: true } : {})); }
-      else if (isLib) users.forEach(function (x) { if (x.name === u.name) x.lib = true; });
+      // いつもは家族送り・家族迎え（送迎なし）の人（馬場・猪原など）：fm/fs にその文言。カレンダーの送迎変更で「こちらから迎える／送る」を出すため（2026-11-11 依頼者）
+      var fam = function (k) { var v = String((k === 'send' ? u.sendPlace : u.meetPlace) || '').trim(); if (v) return /^(家族|母|父)/.test(v) ? v : ''; var d = u.noRideDefault; return d && d[k] ? String(d[k]) : ''; };
+      var fm = fam('meet'), fs = fam('send'), ext = Object.assign({}, isLib ? { lib: true } : {}, fm ? { fm: fm } : {}, fs ? { fs: fs } : {});
+      if (!seen[u.name]) { seen[u.name] = 1; users.push(Object.assign({ name: u.name, dept: dn(u.deptId) }, ext)); }
+      else users.forEach(function (x) { if (x.name === u.name) Object.keys(ext).forEach(function (k) { if (!x[k]) x[k] = ext[k]; }); });
     });   // lib＝リベルタ（ﾏﾝｼｮﾝ）の利用者（2026-11-07 依頼者：リベルタ利用ラベルはその人たちだけ）
     // 休日出勤・勤務時間変更の部署を選ぶための名前（送迎表の名前で持ち、各版で名前から探す）
     // 迎え先・送り先の候補：利用者タブの「いつもの迎え先・送り先」（家族送り・家族迎えは別の選択肢なので除く）
@@ -512,7 +515,7 @@ function namesList_() {
   });
   if (!anyNr) noRide = { meet: ['家族送り', '受診後送り'], send: ['家族迎え'] };
   var out = { users: users, kids: kids, staffBiz: staffBiz, staffDept: staffDept, depts: depts, places: places, noRide: noRide, yomi: yomiMap_() };
-  try { c.put('names6', JSON.stringify(out), 300); } catch (e) {}
+  try { c.put('names7', JSON.stringify(out), 300); } catch (e) {}
   return out;
 }
 /* 送迎表の職員マスタ（3つの版）から職員番号を自動で振る。既にある名前は番号を変えない */
@@ -680,7 +683,7 @@ function kvMerge_(me, a) {
       docSet_(path, { k: key, v: merged, by: me.no }, rev, { k: key }, idx);
       linkAfterSave_(key, merged, idx);
       log_(me, '送迎表', kvLabel_(key), diffSummary_(cur, merged) + (conflicts.length ? '（同じ箇所の同時変更 ' + conflicts.length + 'か所：この変更を優先）' : ''));
-      if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names6'); } catch (e) {} }
+      if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names7'); } catch (e) {} }
     }
     return { rev: rev, value: merged, conflicts: conflicts.length };
   });
@@ -697,7 +700,7 @@ function kvImportMany_(me, items) {
       docSet_(path, { k: key, v: v, by: me.no }, (cur ? cur.rev : 0) + 1, { k: key }, idx); n++; linkAfterSave_(key, v, idx);
     });
     log_(me, '送迎表', 'バックアップから復元', n + '件');
-    syncStaffIds_(); try { CacheService.getScriptCache().remove('names6'); } catch (e) {}
+    syncStaffIds_(); try { CacheService.getScriptCache().remove('names7'); } catch (e) {}
     return { written: n };
   });
 }
@@ -713,7 +716,7 @@ function kvCas_(me, a) {
     docSet_(path, { k: key, v: a.value, by: me.no }, rev + 1, { k: key }, idx);
     linkAfterSave_(key, a.value, idx);
     log_(me, '送迎表', kvLabel_(key), '初期データの取り込み');
-    if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names6'); } catch (e) {} }
+    if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names7'); } catch (e) {} }
     return { conflict: false, rev: rev + 1, value: a.value };
   });
 }

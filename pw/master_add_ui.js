@@ -76,7 +76,7 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.waitForTimeout(3000);
     const nr = api(t, "kv.get", ["v2:master"]).data.value.rules.noRideReasons;
     assert.deepStrictEqual(nr.map((x) => x.kind + ":" + x.text), ["meet:家族送り", "meet:受診後に来所", "meet:母送り"], "保存 " + JSON.stringify(nr));
-    for (const k of [...g.cache.keys()]) if (k === "names6") g.cache.delete(k);
+    for (const k of [...g.cache.keys()]) if (k === "names7") g.cache.delete(k);
     const nl = api(t, "names.list", []).data.noRide;
     assert.deepStrictEqual(nl, { meet: ["家族送り", "受診後に来所", "母送り"], send: [] }, "カレンダーの選択肢 " + JSON.stringify(nl));
     console.log("ルール⑪ 送迎なしの理由：変更・追加・削除 → カレンダーの選択肢", JSON.stringify(nl)); }

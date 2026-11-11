@@ -450,6 +450,23 @@ console.log('extra OK');
    assert.ok(!z.runs.some(r=>r.kind==='send'&&r.userIds.includes(uid)),'送りの便から外れる'); }
  console.log('noRide pull OK',un);
 }
+// いつもは家族送迎の人（馬場）を、この日はこちらから迎える（2026-11-11 依頼者「送迎変更ラベルで」）
+{
+ const D='2026-11-02', u=m.users.find(x=>x.name==='馬場');
+ assert.ok(u&&u.noRideDefault&&u.noRideDefault.meet,'馬場はいつも家族送り');
+ const ev={id:'ev_go000001',rev:1,date:D,endDate:D,allDay:true,title:'馬場 こちらから迎え9:00',label:'ride',sg:{type:'user_time',users:['馬場'],staff:[],meet:'9:00',goMeet:true}};
+ const x=C.reconcile(m,sheet,[ev],D), nr=(x.noRide||{})[u.id];
+ assert.ok(nr&&nr.meet===''&&nr.send===u.noRideDefault.send,'迎えだけ送迎する・送りはいつもの家族迎え '+JSON.stringify(nr));
+ assert.strictEqual((x.userTime||{})[u.id].meet,'9:00','迎えの時刻');
+ // 送迎表の画面と同じ合わせ方（いつもの送迎なし＋その日の値）で、迎えは送迎する＝未割当に出る
+ const eff=Object.assign({},{[u.id]:u.noRideDefault},x.noRide||{})[u.id];
+ assert.ok(!eff.meet&&eff.send,'迎えは送迎なしでなくなる');
+ const back=C.reconcile(m,x,[],D);
+ assert.ok(!(back.noRide||{})[u.id]&&!((back.userTime||{})[u.id]||{}).meet,'予定を消すといつもどおり '+JSON.stringify((back.noRide||{})[u.id]));
+ const both={...ev,id:'ev_go000002',sg:{...ev.sg,goSend:true,send:'17:00'}}, xb=C.reconcile(m,sheet,[both],D);
+ assert.deepStrictEqual(xb.noRide[u.id],{meet:'',send:''},'迎え・送りとも');
+ console.log('go meet OK');
+}
 // 休日出勤の中抜け（2026-11-10 依頼者「6:00〜9:00と17:00〜22:00のときは9:00〜17:00が不在の網掛けに」）
 {
  const D='2026-11-02', sid=S('白戸').id;

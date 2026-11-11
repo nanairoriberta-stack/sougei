@@ -88,6 +88,8 @@ function normSg(x) {
   const t = (v) => (TIME_RE.test(v) ? v : "");
   return { type: x.type, staff: names(x.staff), users: names(x.users), meet: t(x.meet), send: t(x.send), noMeet: str(x.noMeet, 40), noSend: str(x.noSend, 40), half: x.type === "staff_off" && (x.half === "am" || x.half === "pm") ? x.half : "",
     reason: str(x.reason, 40), note: str(x.note, 40),                            // 理由（欠席・勤務時間変更）／行き先（ヘルプ）
+    // いつもは家族送り・家族迎えの人を、この日はこちらから迎える／送る（2026-11-11 依頼者「馬場・猪原など」）
+    ...(x.type === "user_time" && x.goMeet ? { goMeet: true } : {}), ...(x.type === "user_time" && x.goSend ? { goSend: true } : {}),
     dept: x.type === "hwork" || x.type === "shift" ? str(x.dept, 40) : "",       // その日の部署は送迎表の名前で持つ
     wstart: x.type === "shift" ? t(x.wstart) : "", wend: x.type === "shift" ? t(x.wend) : "",  // 勤務時間変更：出勤・退勤の時刻（空ならいつもどおり）
     meetPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.meetPlace, 40) : "", sendPlace: x.type === "user_time" || x.type === "user_extra" ? str(x.sendPlace, 40) : "",

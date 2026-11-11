@@ -44,7 +44,7 @@ const D = path.join(__dirname, "../gas/out");
   { // 送迎表のルール⑪（送迎なしの理由）を変えておく → カレンダーの「送迎」の選択肢に出る
     const m2 = api(t, "kv.get", ["v2:master"]).data.value;
     api(t, "kv.merge", [{ key: "v2:master", base: m2, baseKnown: true, mine: { ...m2, rules: { ...(m2.rules || {}), noRideReasons: [{ kind: "meet", text: "家族送り" }, { kind: "meet", text: "母送り" }, { kind: "send", text: "家族迎え" }, { kind: "send", text: "ショートへ" }] } } }]);
-    for (const k of [...g.cache.keys()]) if (k === "names6") g.cache.delete(k); }
+    for (const k of [...g.cache.keys()]) if (k === "names7") g.cache.delete(k); }
   const A = await open("calendar.html", { width: 1200, height: 900 }, boot, "restore_cal.html");
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const restore = async () => {

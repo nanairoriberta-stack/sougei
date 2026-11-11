@@ -65,7 +65,7 @@ function specsFor(master, events, date) {
     out.push({ id: ev.id, rev: ev.rev, type: sg0.type, koma: !ev.sg, title: title0, whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(sg0.meet), send: appTime(sg0.send), noMeet: sg0.noMeet || "", noSend: sg0.noSend || "", missing,
       reason: sg0.reason || "", note: sg0.note || "", deptId: dept ? dept.id : "",
-      wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, at: appTime(sg0.at),
+      goMeet: !!sg0.goMeet, goSend: !!sg0.goSend, wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, at: appTime(sg0.at),
       memo: memoOf(ev), missUsers: missingUsers, lib: sg0.lib || "off", libParts: sg0.type === "liberta" ? libParts(ev, date) : null });
   }
   return out;
@@ -199,6 +199,17 @@ function pullRider(sheet, k, uid) {
   }
   return out;
 }
+/* いつもの送迎なし（送迎表の noRideDefaults と同じ決め方）：利用者のタブの迎え先・送り先が「家族…・母…・父…」ならそれ、空欄なら以前からの基本の送迎なし（曜日指定つき） */
+function familyDefaults(u, wd) {
+  const e = {};
+  for (const k of ["meet", "send"]) {
+    const v = String((k === "send" ? u.sendPlace : u.meetPlace) || "").trim();
+    if (v) { if (/^(家族|母|父)/.test(v)) e[k] = v; continue; }
+    const d = u.noRideDefault;
+    if (d && d[k] && (!d[k + "Days"] || wd == null || d[k + "Days"].includes(wd))) e[k] = d[k];
+  }
+  return e;
+}
 function applySpec(next, spec, keepStaff) {
   const rec = { rev: spec.rev, title: spec.title, type: spec.type, staffOv: {}, userAbsent: {}, userTime: {}, noRide: {}, userExtra: {}, libertaOff: {}, libertaOn: {}, blocks: [] };
   const put = (field, id, val) => {
@@ -241,6 +252,13 @@ function applySpec(next, spec, keepStaff) {
   if (spec.type === "user_extra") spec.users.forEach((u) => put("userExtra", u.id, true));
   if (spec.type === "user_time" || spec.type === "user_extra") spec.users.forEach((u) => {
     if (spec.meet || spec.send) put("userTime", u.id, Object.assign({}, (next.userTime || {})[u.id] || {}, spec.meet ? { meet: spec.meet } : {}, spec.send ? { send: spec.send } : {}));
+    // いつもは家族送り・家族迎え（送迎なし）の人を、この日はこちらから迎える／送る（2026-11-11 依頼者「馬場・猪原など」）：
+    // 送迎表の送迎なしの欄にその日の値を入れて、いつもの送迎なしを止める（迎え・送りを ""＝この日は送迎する）。迎え・送りの未割当に出て、担当は送迎表で決める。予定を消すといつもどおり
+    if (spec.type === "user_time" && (spec.goMeet || spec.goSend)) {
+      const cur = Object.assign({}, familyDefaults(u, spec.wd), (next.noRide || {})[u.id] || {});
+      if (spec.goMeet) cur.meet = ""; if (spec.goSend) cur.send = "";
+      put("noRide", u.id, cur);
+    }
     if (spec.noMeet || spec.noSend) put("noRide", u.id, Object.assign({}, (next.noRide || {})[u.id] || {}, spec.noMeet ? { meet: spec.noMeet } : {}, spec.noSend ? { send: spec.noSend } : {}));
     // 迎えなし（受診後来所・家族送りなど）／送りなしにしたら、その日の迎え／送りの便からその人を外す（2026-11-10 依頼者「受診後来所を選んだら迎えの欄から自動で消えるように」）。
     // 外した便と位置を覚えておき、予定を消したら元の便に戻す
@@ -408,7 +426,7 @@ function summary0(master, sheet, events, date) {
       s.type === "shift" ? [s.wstart && `出勤${s.wstart}`, s.wend && `退勤${s.wend}`, s.afrom && `中抜け${s.afrom}〜${s.ato}`, s.noAway && "中抜けなし", s.noRide && "送迎なし"].filter(Boolean).join("・") || "部署の変更" :
       s.type === "liberta" ? `リベルタ${[s.libParts && s.libParts.am && "朝", s.libParts && s.libParts.pm && "夜"].filter(Boolean).join("・")}${s.lib === "on" ? "あり" : "なし"}` :
       s.type === "help_cancel" ? `${s.at ? s.at + "の" : "その日の"}ヘルプをなしに${(() => { const r = ((sheet && sheet.calApplied) || {})[s.id]; const n = ((r && r.cancelled) || []).length; return n ? `（${n}件）` : "（送迎表にまだ無い）"; })()}` :
-      s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) : s.type === "user_time" || s.type === "user_extra" ? [s.type === "user_extra" ? "今日だけ利用" : "", s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
+      s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) : s.type === "user_time" || s.type === "user_extra" ? [s.type === "user_extra" ? "今日だけ利用" : "", s.goMeet && "こちらから迎える", s.goSend && "こちらから送る", s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
 }
 
 /* ===== りんく・ぷれいす版（放課後デイ）→ 生活介護への送迎の依頼 =====

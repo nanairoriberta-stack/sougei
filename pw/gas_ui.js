@@ -464,7 +464,7 @@ const D = path.join(__dirname, "../gas/out");
   // よみがな：送迎表の名前は「よみがな」シートに自動で並ぶ。読みを入れると、ひらがなで予測が出る
   const ys = g.sheets.get("よみがな"); assert.ok(ys && ys.data.some((r) => r[0] === "中村" && r[2] === "利用者"), "よみがなシートに利用者が並ぶ");
   ys.data.forEach((r) => { if (r[0] === "中村") r[1] = "なかむら"; if (r[0] === "日野") r[1] = "ひの"; });
-  for (const k of [...g.cache.keys()]) if (k === "names6") g.cache.delete(k);
+  for (const k of [...g.cache.keys()]) if (k === "names7") g.cache.delete(k);
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
@@ -499,9 +499,23 @@ const D = path.join(__dirname, "../gas/out");
     const evs = Object.values(api(t, "docs.query", [{ col: "days", from: D24, to: D24 }]).data.reduce((a, d) => Object.assign(a, d.events), {}));
     assert.ok(evs.some((e) => e.label === "user" && (e.sg.users || []).join() === "中村"), "選ばずに保存しても中村の欠席が入る " + evs.map((e) => e.title).join(","));
     await add("user"); await A.pg.fill("#f-sgq-users", "なかむ"); await save(600);
-    assert.match(await A.pg.locator("#f-err").textContent(), /利用者を選んで/, "途中まで（候補にそのままない名前）は入れない");
+    assert.match(await A.pg.locator("#f-err").textContent(), /「なかむ」はまだ選ばれていません/, "途中まで（候補にそのままない名前）は入れない");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
+    { // 2026-11-11 依頼者「利用者の名前をプルダウンから選択せずに終わると名前が消えて、プルダウンからも消えて選択できない」
+      // よみがなの無い人をひらがなで打つ（ばば）→ 「合う名前がありません」と全員の一覧（選べる）。ほかのボタンを押しても打った文字は残り、「まだ選ばれていません」
+      await add("ride"); await A.pg.fill("#f-sgq-users", "ばば"); await A.pg.waitForTimeout(300);
+      assert.ok(await A.pg.locator("[data-sg-nohit]").isVisible(), "合う名前が無いと案内");
+      assert.ok(await A.pg.locator('#sghits-users [data-sgpick="users"][data-name="馬場"]').count(), "それでも一覧から選べる");
+      await A.pg.click('label:has(input[name="w-meet"][value="time"])'); await A.pg.waitForTimeout(400);
+      assert.strictEqual(await A.pg.inputValue("#f-sgq-users"), "ばば", "ほかを押しても打った文字は消えない");
+      assert.match(await A.pg.locator('[data-sg-unpicked="users"]').innerText(), /まだ選ばれていません/);
+      await save(600); assert.match(await A.pg.locator("#f-err").textContent(), /「ばば」はまだ選ばれていません/, "保存のときも分かる");
+      await A.pg.click("#f-sgq-users"); await A.pg.waitForTimeout(300);
+      await A.pg.click('#sghits-users [data-sgpick="users"][data-name="馬場"]'); await A.pg.waitForTimeout(300);
+      assert.deepStrictEqual(await chipsOf("users"), ["馬場"], "一覧から選べる");
+      assert.strictEqual(await A.pg.locator('[data-sg-unpicked="users"]').count(), 0, "選んだら案内は消える");
+      await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
     console.log("ラベルを変えても名前はそのまま・打った名前はそのまま入る OK"); }
   { // カレンダーからシフト表へ切り替えるボタン（使える人だけ。2026-11-02）
     await A.pg.waitForTimeout(500);
@@ -637,6 +651,26 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
     console.log("遅刻・早退・家族迎えの時刻:", [la.title, ea.title, fm.title].join(" / ")); }
+  { // いつもは家族送迎の人（馬場）を、この日はこちらから迎える（2026-11-11 依頼者「送迎変更ラベルで」）
+    const D24 = "2026-11-26";
+    await add("ride"); await A.pg.fill("#f-date", D24); await A.pg.fill("#f-enddate", D24);
+    assert.strictEqual(await A.pg.locator('input[name="w-meet"][value="go"]').count(), 0, "名前を選ぶ前は出さない");
+    await pick("users", "馬場"); await A.pg.waitForTimeout(300);
+    assert.match(await A.pg.locator('[data-go-hint="meet"]').innerText(), /いつもは「家族送り」/, "いつもの家族送りを案内");
+    await A.pg.check('input[name="w-meet"][value="go"]'); await A.pg.waitForTimeout(300);
+    await save(); assert.match(await A.pg.locator("#f-err").textContent(), /時刻を入れて/, "迎えに行く時刻が要る");
+    await A.pg.fill("#w-meett", "09:00"); await save(2500);
+    const evs = Object.values(api(t, "docs.query", [{ col: "days", from: D24, to: D24 }]).data.reduce((a, d) => Object.assign(a, d.events), {}));
+    const ev = evs.find((e) => e.users && e.users.includes("馬場") || (e.sg && (e.sg.users || []).includes("馬場")));
+    assert.ok(ev && ev.sg.goMeet === true && ev.sg.meet === "09:00" && /馬場 こちらから迎え/.test(ev.title), "予定 " + JSON.stringify(ev && { t: ev.title, sg: ev.sg }));
+    const mm = api(t, "kv.get", ["master"]).data.value, uid = mm.users.find((x) => x.name === "馬場").id, v = api(t, "kv.get", ["sheet:" + D24]).data;
+    if (v && v.value) assert.ok(v.value.noRide[uid].meet === "" && v.value.noRide[uid].send, "送迎表：迎えは送迎する・送りはいつもの家族迎え " + JSON.stringify(v.value.noRide[uid]));
+    // 送迎表に出る「時刻」のコマ（時刻を入れたので、普通の迎えの時刻の変更と同じ）
+    if (v && v.value) assert.strictEqual(v.value.userTime[uid].meet, "09:00");
+    // 開き直しても「こちらから迎える」
+    await A.pg.locator("#panel .ev-row", { hasText: "馬場 こちらから迎え" }).evaluate((b) => b.click()).catch(() => {}); await A.pg.waitForTimeout(400);
+    if (await A.pg.locator('input[name="w-meet"]').count()) { assert.strictEqual(await A.pg.evaluate(() => document.querySelector('input[name="w-meet"]:checked').value), "go", "開き直しても"); await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
+    console.log("家族送迎の人をこちらから迎える:", ev.title); }
   { // ヘルプキャンセル（いつものヘルプをその日だけなし。2026-11-07 依頼者）
     const D25 = "2026-11-27";
     await add("hcancel"); await A.pg.fill("#f-date", D25); await A.pg.fill("#f-enddate", D25);
