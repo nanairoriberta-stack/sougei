@@ -243,7 +243,8 @@ function applySpec(next, spec, keepStaff) {
     const hits = helpCancelHits(next, spec);
     if (hits.length) { const ids = new Set(hits.map((b) => b.id)); rec.cancelled = hits.map(clone); next.blocks = (next.blocks || []).filter((b) => !ids.has(b.id)); }
   }
-  if (spec.type === "user_absent") spec.users.forEach((u) => put("userAbsent", u.id, true));
+  // 欠席：その日の迎え・送りの便からも外す（2026-11-11 依頼者「欠席者含むになっていじれない。パターンから読み込みしたときも消えるように」）。予定を消すと元の便に戻る
+  if (spec.type === "user_absent") spec.users.forEach((u) => { put("userAbsent", u.id, true); for (const k of ["meet", "send"]) for (const e of pullRider(next, k, u.id)) (rec.pulled = rec.pulled || []).push(e); });
   // リベルタ：なし＝libertaOff、あり＝libertaOn に、その日の朝(am)・夜(pm)（送迎表の「リベルタ泊の調整」と同じ欄）
   if (spec.type === "liberta" && spec.libParts) spec.users.forEach((u) => {
     const f = spec.lib === "on" ? "libertaOn" : "libertaOff", p = spec.libParts, add = Object.assign({}, p.am ? { am: true } : {}, p.pm ? { pm: true } : {});
@@ -323,11 +324,13 @@ function healHeld(get, work, sp) {
 /* 迎えなし・送りなしの人が、パターン読込などでまた便に入っていたら外す。
    送迎表の「迎えなし／送りなし」をカレンダーの理由のままにしている間だけ（手で迎えなしを外した・理由を変えたなら触らない） */
 function healPulled(get, work, sp) {
-  if (sp.type !== "user_time" && sp.type !== "user_extra") return;
-  for (const [k, on] of [["meet", sp.noMeet], ["send", sp.noSend]]) {
+  if (sp.type !== "user_time" && sp.type !== "user_extra" && sp.type !== "user_absent") return;
+  const abs = sp.type === "user_absent";
+  for (const [k, on] of abs ? [["meet", true], ["send", true]] : [["meet", sp.noMeet], ["send", sp.noSend]]) {
     if (!on) continue;
     for (const u of sp.users) {
-      if ((((get().noRide || {})[u.id]) || {})[k] !== on) continue;
+      // 欠席は送迎表の欠席がついている間だけ（手で欠席を外したら触らない）
+      if (abs ? !((get().userAbsent || {})[u.id]) : (((get().noRide || {})[u.id]) || {})[k] !== on) continue;
       const hits = (get().runs || []).filter((r) => r.kind === k && (r.userIds || []).includes(u.id));
       if (!hits.length) continue;
       const n = work(), ids = new Set(hits.map((r) => r.id)), r2 = n.calApplied[sp.id];

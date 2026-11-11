@@ -658,6 +658,13 @@ async function bootstrap() {
       await admin.call("shift.save", Object.assign({ kind: "month", base: a4, baseKnown: true, mine: a5 }, q12)); while ((await admin.call("shift.syncCal", q12)).left > 0);
       assert.strictEqual(await cal12(), 0, "確定を取り消すとカレンダーから消える");
       assert.ok((await yoko.call("shift.get", q12)).month.value.hidden, "また見えなくなる");
+      { // 表の職員が日勤の希望を入れると、サーバーでその日の早番・遅番の枠を空けて日勤へ（2026-11-11 依頼者「早の秋山の欄を空ける」）
+        const D2 = "2026-12-12", b0 = (await admin.call("shift.get", q12)).month.value, b1 = JSON.parse(JSON.stringify(b0)); b1.days[D2] = { e: { 1: { n: "横田" } }, l: { 1: { n: "近藤" } }, d: [] };
+        await admin.call("shift.save", Object.assign({ kind: "month", base: b0, baseKnown: true, mine: b1 }, q12));
+        const y1 = (await yoko.call("shift.get", q12)).month.value, y2 = JSON.parse(JSON.stringify(y1)); y2.wish = Object.assign({}, y2.wish, { "横田": Object.assign({}, (y2.wish || {})["横田"], { [D2]: "日" }) });
+        await yoko.call("shift.save", Object.assign({ kind: "month", base: y1, baseKnown: true, mine: y2 }, q12));
+        const b2 = (await admin.call("shift.get", q12)).month.value;
+        assert.ok(!b2.days[D2].e[1] && b2.days[D2].d.includes("横田") && b2.days[D2].l[1].n === "近藤", "早番の枠を空けて日勤へ " + JSON.stringify(b2.days[D2])); }
       const lg = g.sheets.get("変更履歴").data.slice(1).map((r) => r.join(" | "));
       assert.ok(lg.some((l) => l.includes("2026-12") && l.includes("シフトを確定")) && lg.some((l) => l.includes("確定を取り消し")), "変更履歴に確定・取り消し"); }
     await yoko.call("shift.save", Object.assign({ kind: "cfg", base: null, baseKnown: true, mine: { members: [] } }, q)).then(() => assert.fail("設定は変えられない"), (e) => assert.strictEqual(e.code, "invalid_argument"));

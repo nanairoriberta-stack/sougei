@@ -357,6 +357,16 @@ const belongDeptOf = (master, s, wd) => {
 };
 // 基本が送迎なしの利用者(馬場=家族送迎、猪原=母送迎など)の初期値。シート側で削除・変更可能。
 // meetDays/sendDaysを指定すると、その曜日だけ送迎なし(例: 野津周=月木の朝のみ家族送り)
+// 便から欠席の人を外す（乗る人・訓練の指定・その日だけの行き先とも）
+const dropAbsentRiders = (r, absent) => {
+  const ab = (id) => !!(absent || {})[id];
+  if (!r || !(r.userIds || []).some(ab)) return r;
+  const out = { ...r, userIds: (r.userIds || []).filter((id) => !ab(id)) };
+  for (const k of ["trainUserIds", "trainBothIds", "trainDropIds", "trainEndIds", "riderIds"]) if (Array.isArray(r[k])) out[k] = r[k].filter((id) => !ab(id));
+  if (r.places) { out.places = { ...r.places }; for (const id of Object.keys(out.places)) if (ab(id)) delete out.places[id]; }
+  return out;
+};
+const HELP_OK_FILTER = "__helpok__";   // 送迎表の「表示：」の「ヘルプ可」（職員のタブでヘルプ可にした人だけの列）
 const noRideDefaults = (m, wd) => {
   const o = {};
   (m.users || []).forEach((u) => {
@@ -4705,6 +4715,15 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
   const [note, setNote] = useState(initial.note || "");
   const [staffRiderIds, setStaffRiderIds] = useState(initial.staffRiderIds || []);
   const [durMin, setDurMin] = useState(initial.durMin ? String(initial.durMin) : "");
+  // この時間に使えない車（活動時間の車・ほかの便や予定で使っている車）は一覧で赤字に（2026-11-11 依頼者「この時間帯使用不可の車は赤文字に」）
+  const vehNg = (v) => {
+    const t0 = toMin(time); if (t0 == null || !v) return "";
+    const dur = Number(durMin) || Number(initial.durMin) || 30;
+    if (ACTIVITY_VEHICLES[v.name] && inActivityWindow(t0, t0 + dur) && initial.mode !== "train") return "この時間は活動で使用";
+    const trips = buildVehicleTrips({ runs: (data && data.runs) || [], blocks: (data && data.blocks) || [] })[v.id] || [];
+    const hit = trips.find((e) => e.id !== initial.id && e.t < t0 + dur && t0 < e.end);
+    return hit ? `${hit.time || ""}に使用中` : "";
+  };
   const [destDeptId, setDestDeptId] = useState(initial.destDeptId || "");
   const [noteOnly, setNoteOnly] = useState(!!initial.noteOnly); // 表にはコマを出さず、特記事項・連絡事項にだけ残す(その他予定・ヘルプ)
   const [places, setPlaces] = useState({ ...(initial.places || {}) }); // その日だけの行き先変更 {利用者ID: 行き先}
@@ -4825,11 +4844,11 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
                 if (!vs.length) return null;
                 return (
                   <optgroup key={dpt.id} label={dpt.name}>
-                    {vs.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name}(定員{v.capNormal}/♿{v.wheelchairOK ? v.capWc : "不可"})
+                    {vs.map((v) => { const ng = vehNg(v); return (
+                      <option key={v.id} value={v.id} data-veh-ng={ng ? v.id : undefined} style={ng ? { color: "#dc2626", fontWeight: 700 } : undefined}>
+                        {v.name}(定員{v.capNormal}/♿{v.wheelchairOK ? v.capWc : "不可"}){ng ? `・${ng}` : ""}
                       </option>
-                    ))}
+                    ); })}
                   </optgroup>
                 );
               })}
@@ -4851,7 +4870,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
               if (!vs.length) return null;
               return (
                 <optgroup key={dpt.id} label={dpt.name}>
-                  {vs.map((v) => <option key={v.id} value={v.id}>{v.name}(定員{v.capNormal}/♿{v.wheelchairOK ? v.capWc : "不可"})</option>)}
+                  {vs.map((v) => { const ng = vehNg(v); return <option key={v.id} value={v.id} data-veh-ng={ng ? v.id : undefined} style={ng ? { color: "#dc2626", fontWeight: 700 } : undefined}>{v.name}(定員{v.capNormal}/♿{v.wheelchairOK ? v.capWc : "不可"}){ng ? `・${ng}` : ""}</option>; })}
                 </optgroup>
               );
             })}
@@ -6758,7 +6777,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
     if (overKey !== key) setOverKey(key);
   };
 
-  let cols = master.staff.filter((s) => s.emp !== "パート" && !s.noGrid && worksToday(s) && (deptFilter === "all" || belongDeptOf(master, s, weekday) === deptFilter || s.deptId === deptFilter));
+  let cols = master.staff.filter((s) => s.emp !== "パート" && !s.noGrid && worksToday(s) && (deptFilter === "all" || (deptFilter === HELP_OK_FILTER ? !!s.helpOk : (belongDeptOf(master, s, weekday) === deptFilter || s.deptId === deptFilter))));
   cols = [...cols].sort((a, b) => staffColKey(master, a) - staffColKey(master, b));
   // 休みの職員は右端へ
   const actives = cols.filter((s) => !(ovMap[s.id] && ovMap[s.id].off));
@@ -7066,7 +7085,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
               return (
                 <th key={s.id} className={`border border-stone-300 p-0 min-w-20 w-20 align-top ${ov.off ? "bg-stone-100" : "bg-white"}`}>
                   <div className={`${ov.off ? "bg-stone-400" : c.band} h-1.5`} />
-                  <div className="px-1 py-0.5 cursor-pointer" onClick={() => onStaff && onStaff(s)} title={sheetMode ? "クリックで休み・時間・部署の変更" : "クリックで部署の変更"}>
+                  <div className="px-1 py-0.5 cursor-pointer" data-staff-col={s.id} onClick={() => onStaff && onStaff(s)} title={sheetMode ? "クリックで休み・時間・部署の変更" : "クリックで部署の変更"}>
                     <div className={`text-[13px] font-bold leading-tight truncate ${ov.off ? "line-through text-stone-400" : "text-stone-800"}`}>
                       {s.name}
                       {ov.off && <span className="ml-0.5 text-[10px] text-rose-600 font-bold">休</span>}
@@ -8496,7 +8515,7 @@ function StaffTab({ master, update }) {
         <thead>
           <tr className="text-xs text-stone-500 text-left bg-stone-200">
             <th className="p-1 w-4"></th><th className="p-1">氏名</th><th className="p-1">基本部署</th><th className="p-1">兼務先</th><th className="p-1">曜日別部署</th><th className="p-1">固定休</th><th className="p-1">形態</th><th className="p-1">職位</th>
-            <th className="p-1">勤務時間</th><th className="p-1"></th><th className="p-1"></th><th className="p-1"></th>
+            <th className="p-1">勤務時間</th><th className="p-1"></th><th className="p-1"></th><th className="p-1"></th><th className="p-1"></th>
           </tr>
         </thead>
         <tbody>
@@ -8567,6 +8586,11 @@ function StaffTab({ master, update }) {
               <td className="p-1 w-px whitespace-nowrap text-center px-2">
                 <div className="text-[10px] text-stone-400 leading-none mb-0.5">男性</div>
                 <input type="checkbox" checked={!!s.isMale} onChange={(e) => upd(s.id, { isMale: e.target.checked })} />
+              </td>
+              <td className="p-1 w-px whitespace-nowrap text-center px-2">
+                {/* ヘルプに行ける人（2026-11-11 依頼者「職員の所にヘルプ可のチェックボックス」）。送迎表の「表示：」の「ヘルプ可」でこの人たちだけの列にできる */}
+                <div className="text-[10px] text-stone-400 leading-none mb-0.5">ヘルプ可</div>
+                <input type="checkbox" data-help-ok={s.id} checked={!!s.helpOk} onChange={(e) => upd(s.id, { helpOk: e.target.checked })} />
               </td>
               <td className="p-1 text-center"><button className="text-rose-500 text-xs hover:underline" onClick={() => del(s.id)}>削除</button></td>
             </tr>
@@ -9804,7 +9828,8 @@ function AppInner() {
     }
     updateSheet((prev) => ({
       ...(prev || emptySheet()),
-      runs: remapRetired(master, date, (p.runs || []).map((r) => ({ ...r, id: r.id ? `${r.id}@${date}` : uid() }))),
+      // その日の欠席の人は便に入れない（2026-11-11 依頼者「欠席者ある時はパターンから読み込みしたときも消えるように」）
+      runs: remapRetired(master, date, (p.runs || []).map((r) => dropAbsentRiders({ ...r, id: r.id ? `${r.id}@${date}` : uid() }, (prev && prev.userAbsent) || {}))),
       blocks: remapRetired(master, date, canonHelpBlocks(p.blocks || []).map((b) => ({ ...b, id: b.id ? `${b.id}@${date}` : uid() }))),
       training: p.training || (prev && prev.training) || "",
       // パターンが特記情報(Excel取り込み由来)を持っていれば一緒に反映(無い場合は現状維持)
@@ -10787,6 +10812,8 @@ function AppInner() {
                       <span key={dpt.id} className={`text-xs px-2.5 py-1 rounded-full border cursor-pointer select-none ${c2.chip} ${on2 ? "ring-2 ring-stone-700 font-bold" : "opacity-80 hover:opacity-100"}`} onClick={() => setDeptFilter(on2 ? "all" : dpt.id)}>{dpt.name}</span>
                     );
                   })}
+                  {/* ヘルプ可の職員だけの列（2026-11-11 依頼者「一番右にヘルプ可の人だけ表示されるボタン」。職員のタブの「ヘルプ可」） */}
+                  <span data-help-filter className={`text-xs px-2.5 py-1 rounded-full border cursor-pointer select-none ${deptFilter === HELP_OK_FILTER ? "bg-emerald-700 text-white border-emerald-700 font-bold" : "bg-white border-emerald-400 text-emerald-800 hover:bg-emerald-50"}`} onClick={() => setDeptFilter(deptFilter === HELP_OK_FILTER ? "all" : HELP_OK_FILTER)}>🆘 ヘルプ可</span>
                 </div>
                 <TimeGrid
                   searchQ={searchQ}
@@ -11264,6 +11291,8 @@ function AppInner() {
                       <span key={dpt.id} className={`text-xs px-2.5 py-1 rounded-full border cursor-pointer select-none ${c2.chip} ${on2 ? "ring-2 ring-stone-700 font-bold" : "opacity-80 hover:opacity-100"}`} onClick={() => setDeptFilter(on2 ? "all" : dpt.id)}>{dpt.name}</span>
                     );
                   })}
+                  {/* ヘルプ可の職員だけの列（2026-11-11 依頼者「一番右にヘルプ可の人だけ表示されるボタン」。職員のタブの「ヘルプ可」） */}
+                  <span data-help-filter className={`text-xs px-2.5 py-1 rounded-full border cursor-pointer select-none ${deptFilter === HELP_OK_FILTER ? "bg-emerald-700 text-white border-emerald-700 font-bold" : "bg-white border-emerald-400 text-emerald-800 hover:bg-emerald-50"}`} onClick={() => setDeptFilter(deptFilter === HELP_OK_FILTER ? "all" : HELP_OK_FILTER)}>🆘 ヘルプ可</span>
                 </div>
               <TimeGrid
                 searchQ={searchQ}

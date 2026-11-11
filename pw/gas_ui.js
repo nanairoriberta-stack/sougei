@@ -133,6 +133,19 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(!(await unsent()), "「通常の送りと同じ」→ 送り漏れに出ない");
     const s1 = api(t, "kv.get", ["sheet:" + date]).data.value.runs.find((r) => r.id === r0.id); assert.ok(s1.mode === "train" && s1.trainBothIds.includes(r0.userIds[0]));
     await edit(async () => { await P.pg.locator(`[data-same="${un}"]`).uncheck(); await kindSel().selectOption("send"); });   // 元に戻す
+    // その時間に使えない車は赤字（2026-11-11 依頼者「この時間帯使用不可の車は赤文字に」）：ほかの便で使っている車・活動時間の車
+    { const sx = api(t, "kv.get", ["sheet:" + date]).data.value, mv = api(t, "kv.get", ["master"]).data.value;
+      const rA = sx.runs.find((r) => r.vehicleId && r.id !== r0.id && (r.kind === "meet" || r.kind === "send"));
+      await P.pg.click(`[data-item-id="${r0.id}"]`); await P.pg.waitForTimeout(300);
+      const tSel = P.pg.locator('input[placeholder="8:30"]').first(); const orig = await tSel.inputValue();
+      await tSel.fill(rA.time); await P.pg.waitForTimeout(200);
+      const ng = await P.pg.$$eval("[data-veh-ng]", (l) => l.map((o) => ({ id: o.getAttribute("data-veh-ng"), t: o.textContent, c: getComputedStyle(o).color })));
+      assert.ok(ng.some((x) => x.id === rA.vehicleId && /使用中/.test(x.t) && x.c === "rgb(220, 38, 38)"), "同じ時間にほかの便で使う車は赤字 " + JSON.stringify(ng).slice(0, 300));
+      await tSel.fill("11:00"); await P.pg.waitForTimeout(200);
+      const pika = mv.vehicles.find((v) => v.name === "ピカチュウ");
+      if (pika) assert.ok((await P.pg.$$eval("[data-veh-ng]", (l) => l.map((o) => o.getAttribute("data-veh-ng")))).includes(pika.id), "活動時間（11:00）のピカチュウは赤字");
+      await P.pg.click('button:text-is("キャンセル")').catch(async () => { await P.pg.keyboard.press("Escape"); }); await P.pg.waitForTimeout(300);
+      console.log("使えない車は赤字:", ng.length, "台", orig); }
     const s2 = api(t, "kv.get", ["sheet:" + date]).data.value.runs.find((r) => r.id === r0.id); assert.ok(!s2.mode && !s2.trainBothIds, "元に戻る");
     console.log("訓練送り:", un, "チェックなし→送り漏れ / 通常の送りと同じ→出ない"); }
   // ルール：「使い始める日」を選ぶと、その前の日までは前のルールのままと出る
@@ -373,6 +386,11 @@ const D = path.join(__dirname, "../gas/out");
     await wp("2026-11-12", "休");
     assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("12(木)：休"), "今月の希望の列");
     assert.ok((await T.pg.locator("[data-conf-list]").innerText()).includes("11/12(木) 秋山さんは「休」の希望ですが入っています"));
+    // 日勤の希望を入れると、その日の早番・遅番の枠を空けて日勤へ（2026-11-11 依頼者「秋山は基本早番だが、日勤希望となった場合、早の秋山の欄を空ける」）
+    { const D3 = "2026-11-17", inE = async () => (await T.pg.$$eval(`[data-slot^="${D3}|e|"]`, (l) => l.map((x) => x.innerText))).some((x) => x.includes("秋山"));
+      const had = await inE(); assert.ok(had, "11/17は秋山が早番に入っている（紙の表）"); await wp(D3, "日");
+      assert.ok(!(await inE()), "早番の枠から秋山が外れる（入っていた: " + had + "）");
+      assert.ok((await T.pg.locator(`td[data-day="${D3}"]`).innerText()).includes("秋山"), "日勤に入る"); }
     // 希望は日付を押すと出る小さな画面で選ぶ（2026-11-07 依頼者「日付選んでポップアップで」）：早ﾏﾝｼｮﾝのみ・その他（時刻）・消す
     await T.pg.click('td[data-day="2026-11-13"] .dnum'); await T.pg.waitForTimeout(200);
     assert.ok((await T.pg.locator("[data-wish-pick] h3").innerText()).includes("11/13(金) 秋山さんの希望"), "その日・その人の希望の画面");

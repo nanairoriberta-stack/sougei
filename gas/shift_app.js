@@ -109,7 +109,9 @@
     const v = penValue(); if (S.pen === "time" && !v) { alert("その他は、時刻（何時から）を入れてから入れてください"); return; }
     S.month = S.month || {}; S.month.wish = Object.assign({}, S.month.wish); const w = Object.assign({}, S.month.wish[who]);
     if (!v || (!noToggle && w[date] === v)) delete w[date]; else w[date] = v;
-    S.month.wish[who] = w; changed("month");
+    S.month.wish[who] = w;
+    if (w[date]) S.month = X.fitWish(S.month, who, date);   // 希望に合わない番の枠を空ける（日勤の希望なら早番・遅番から外して日勤へ）。サーバーでも同じことをする
+    changed("month");
   }
   // かんたん入力：職員・日にち・希望を選んで「入れる」（2026-11-07 依頼者「職員、何日、どの休みか出勤形態かをシンプルに選択だけで」）
   const wishText = (v) => ({ "休": "休み", "早": "早番", "遅": "遅番", "日": "日勤", "早ﾏﾝのみ": "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝのみ": "遅ﾏﾝｼｮﾝのみ" })[v] || v;

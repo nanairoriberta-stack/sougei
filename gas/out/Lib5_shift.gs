@@ -222,6 +222,28 @@
     return out;
   }
   // 希望休なのに入っている人（希望とちがう）
+  /* 希望に合わせて、その日のほかの番の枠を空ける（2026-11-11 依頼者「秋山は基本早番だが、日勤希望となった場合、早の秋山の欄を空ける」）。
+     早番（早ﾏﾝｼｮﾝのみ）＝遅番・日勤から外す／遅番（遅ﾏﾝｼｮﾝのみ）＝早番・日勤から外す／日勤＝早番・遅番から外して日勤に入れる。
+     休み・AM休・PM休・時刻の希望は変えない（休みは今までどおり「希望とちがう」に出して組む人が決める。半休・時刻は時間の補足で入っているかもしれない）。空いた枠は「空き」（黄色）になり、自動で作る・下書きで埋まる。月の写しを返す */
+  const WISH_KIND = { "早": "e", "早ﾏﾝのみ": "e", "遅": "l", "遅ﾏﾝのみ": "l", "日": "d" };
+  function fitWish(month, name, date) {
+    const w = wishOf(month, name, date), kind = WISH_KIND[w];
+    if (!kind || !name) return month;
+    const out = JSON.parse(JSON.stringify(month || {})); out.days = out.days || {};
+    const d = out.days[date] = Object.assign({}, out.days[date]);
+    for (const k of ["e", "l"]) if (k !== kind && d[k]) { const o = Object.assign({}, d[k]); for (const i of Object.keys(o)) if (slotName(o[i]) === name) delete o[i]; d[k] = o; }
+    const dl = (d.d || []).filter((x) => splitName(x).n !== name || kind === "d");
+    if (kind === "d" && !dl.some((x) => splitName(x).n === name)) dl.push(name);
+    d.d = dl;
+    return out;
+  }
+  // 前と後で希望が変わった人・日に fitWish を当てる（サーバーの保存・画面の希望の入力で同じ）
+  function fitWishes(before, after) {
+    let out = after;
+    const wa = (after && after.wish) || {}, wb = (before && before.wish) || {};
+    for (const name of Object.keys(wa)) for (const date of Object.keys(wa[name] || {})) if ((wb[name] || {})[date] !== wa[name][date]) out = fitWish(out, name, date);
+    return out;
+  }
   function conflicts(month, cfg, ym) {
     const out = [];
     // 「休」の希望なのに入っている／AM休・PM休なのに時間の補足なしで入っている（「近藤(~13)」のように時間を添えていればよい）
@@ -435,5 +457,5 @@
   /* シフトの確定（2026-11-07 依頼者「管理者以外は休日出勤が誰がどこに出るとか、シフト確定までは見えないように。最終確定ボタン」）。
      month.fixed = {at, by}（確定）／false（取り消した）。2026年11月までで fixed の欄が無い月は、以前から使っていた表なので確定とみなす */
   const isFixed = (month, ym) => { const f = month && month.fixed; return f === undefined || f === null ? String(ym) <= "2026-11" : !!f; };
-  return { isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  return { fitWish, fitWishes, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

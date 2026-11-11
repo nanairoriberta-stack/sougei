@@ -467,6 +467,18 @@ console.log('extra OK');
  assert.deepStrictEqual(xb.noRide[u.id],{meet:'',send:''},'迎え・送りとも');
  console.log('go meet OK');
 }
+// 欠席にした人は迎え・送りの便から外す・パターン読込でまた入っても外す・予定を消すと戻る（2026-11-11 依頼者「欠席者含むになっていじれない」）
+{
+ const D='2026-11-02', r0=sheet.runs.find(r=>r.kind==='meet'&&(r.userIds||[]).length), uid0=r0.userIds[0], un=m.users.find(u=>u.id===uid0).name;
+ const ev={id:'ev_abs00001',rev:1,date:D,endDate:D,allDay:true,title:un+' 欠席',label:'user',sg:{type:'user_absent',users:[un],staff:[]}};
+ const x=C.reconcile(m,sheet,[ev],D);
+ assert.ok(x.userAbsent[uid0]&&!x.runs.some(r=>(r.userIds||[]).includes(uid0)),'欠席の人は便から外れる');
+ const re=JSON.parse(JSON.stringify(x)); re.runs=JSON.parse(JSON.stringify(sheet.runs));   // パターン読込でまた入った
+ assert.ok(!C.reconcile(m,re,[ev],D).runs.some(r=>(r.userIds||[]).includes(uid0)),'パターン読込のあとも外す');
+ const back=C.reconcile(m,x,[],D);
+ assert.ok(!back.userAbsent[uid0]&&back.runs.find(r=>r.id===r0.id).userIds.includes(uid0),'予定を消すと元の便に戻る');
+ console.log('absent pull OK',un);
+}
 // 休日出勤の中抜け（2026-11-10 依頼者「6:00〜9:00と17:00〜22:00のときは9:00〜17:00が不在の網掛けに」）
 {
  const D='2026-11-02', sid=S('白戸').id;

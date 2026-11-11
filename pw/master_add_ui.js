@@ -145,6 +145,22 @@ const D = path.join(__dirname, "../gas/out");
     const g13 = await cellOf(hi.id, "13:00"), g12 = await cellOf(hi.id, "12:00");
     assert.ok(g13 && g13.grey && g12 && g12.grey, "日野さん：カレンダーの中抜け13:00・職員のタブの中抜け12:00も灰色 " + JSON.stringify([g12, g13]));
     console.log("中抜け：灰色（コマにしない）・職員のタブで入れられる OK"); }
+  { // ヘルプ可（2026-11-11 依頼者「職員の所にヘルプ可のチェックボックス、表示の一番右にヘルプ可の人だけ表示されるボタン」）
+    const mv = api(t, "kv.get", ["v2:master"]).data.value, hi = mv.staff.find((x) => x.name === "日野");
+    await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(500);
+    await P.pg.check(`[data-help-ok="${hi.id}"]`); await P.pg.waitForTimeout(3000);
+    assert.strictEqual(api(t, "kv.get", ["v2:master"]).data.value.staff.find((x) => x.id === hi.id).helpOk, true, "ヘルプ可が保存される");
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
+    const cols = () => P.pg.$$eval("[data-staff-col]", (l) => [...new Set(l.map((x) => x.getAttribute("data-staff-col")))]);
+    const all = await cols();
+    const chips = await P.pg.$$eval("[data-help-filter]", (l) => l.map((x) => x.previousElementSibling && x.previousElementSibling.textContent));
+    assert.ok(chips.length >= 1, "表示：の一番右にヘルプ可");
+    await P.pg.click("[data-help-filter] >> nth=0"); await P.pg.waitForTimeout(500);
+    const only = await cols();
+    assert.deepStrictEqual(only, [hi.id], "ヘルプ可の人だけの列 " + JSON.stringify(only) + " / 全部 " + all.length);
+    await P.pg.click("[data-help-filter] >> nth=0"); await P.pg.waitForTimeout(500);
+    assert.strictEqual((await cols()).length, all.length, "もう一度押すと全部署");
+    console.log("ヘルプ可：職員のタブのチェック・表示のボタン OK", all.length, "→", only.length); }
   { // 週間パターンを印刷（Excel）・ヘルプ表は週間パターンとは別（2026-11-06 依頼者）
     await P.pg.click('button:text-is("週間パターン")'); await P.pg.waitForTimeout(1200);
     await P.pg.click('button:text-is("月")'); await P.pg.waitForTimeout(1200);

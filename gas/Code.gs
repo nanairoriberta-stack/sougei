@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.11d',
+  VERSION: '2026.11.11e',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -899,6 +899,8 @@ function shiftSave_(me, a) {
         merged[k] = merged[k] || {}; if (r === undefined || r === null) delete merged[k][who]; else merged[k][who] = r;
       });
     } else merged = a.baseKnown && SGKV.eq(a.base, theirs) ? a.mine : SGKV.merge3(a.baseKnown ? a.base : null, a.mine, theirs).value;
+    // 希望が変わった人・日は、その希望に合わない番の枠を空ける（日勤の希望なら早番・遅番から外して日勤へ。2026-11-11 依頼者）
+    if (kind === 'month') merged = SGShift.fitWishes(theirs, merged);
     if (!SGKV.eq(merged, theirs)) {
       rev = rev + 1;
       docSet_(path, merged, rev, { k: path }, idx);

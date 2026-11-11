@@ -212,3 +212,20 @@ console.log("shift extra ok");
   for (const mb of cm.members) { let c = 0, mx = 0; for (const dt of S.daysOfMonth(ym4)) { c = S.workers(r2.month, dt).has(mb.name) ? c + 1 : 0; mx = Math.max(mx, c); }
     assert.ok(mx < 12 || !r2.filled.some((x) => x.name === mb.name && x.how === "休日出勤"), `${mb.name} 休日出勤で12日連続にしない ${mx}`); }
   console.log("auto shift:", r2.filled.map((x) => `${x.date.slice(8)}${x.kind}${x.idx} ${x.name} ${x.how}`).join(" / "), "空き", r2.holes.length, "遅→早", S.lateEarly(r2.month, cm, ym4).length); }
+// 希望に合わせて、その日のほかの番の枠を空ける（2026-11-11 依頼者「秋山は基本早番だが、日勤希望となった場合、早の秋山の欄を空ける」）
+{ const D = "2026-12-12";
+  const m0 = { days: { [D]: { e: { 1: { n: "秋山" }, 2: { n: "近藤" } }, l: { 1: { n: "余村慎" }, 2: { n: "宮永" } }, d: ["横田", "長島", "野津"] } }, wish: {} };
+  const m1 = { ...m0, wish: { "秋山": { [D]: "日" } } };
+  const a = S.fitWishes(m0, m1);
+  assert.ok(!a.days[D].e[1] && a.days[D].e[2].n === "近藤", "早①の秋山を空ける " + JSON.stringify(a.days[D].e));
+  assert.ok(a.days[D].d.includes("秋山"), "日勤に入れる");
+  assert.ok(m1.days[D].e[1], "元の月は変えない");
+  const b = S.fitWishes(m0, { ...m0, wish: { "近藤": { [D]: "遅" } } });
+  assert.ok(!b.days[D].e[2] && !Object.values(b.days[D].l).some((x) => x.n === "近藤"), "遅番の希望：早番から外す（遅番に入れるのは自動で作る・手で）");
+  const c = S.fitWishes(m0, { ...m0, wish: { "横田": { [D]: "休" } } });
+  assert.deepStrictEqual(c.days, m0.days, "休みの希望は変えない（今までどおり「希望とちがう」に出す）");
+  const e = S.fitWishes(m0, { ...m0, wish: { "秋山": { [D]: "PM休" } } });
+  assert.deepStrictEqual(e.days, m0.days, "AM休・PM休は変えない");
+  const f = S.fitWishes(m1, m1);
+  assert.deepStrictEqual(f, m1, "希望が変わっていなければ触らない（あとで手で戻した枠はそのまま）");
+  console.log("fit wish OK"); }
