@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.10j";
+const APP_VERSION="2026.11.11a";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -651,7 +651,7 @@ function drawSheet(){
     </div>
     ${isOth(d.label)?`<div class="field"><label for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="会議室A / オンライン など" ${v()}></div>`:""}
     ${isOth(d.label)&&!NAME_FIRST(d.label)?box:""}
-    <div class="field"><label for="f-memo">メモ</label><textarea class="input" id="f-memo" maxlength="2000" placeholder="${isOth(d.label)?"議題、持ち物、URL など":"伝えたいこと（送迎表には出ません）"}" ${v()}>${esc(d.memo)}</textarea></div>
+    <div class="field"><label for="f-memo">メモ</label><textarea class="input" id="f-memo" maxlength="2000" placeholder="${isOth(d.label)?"議題、持ち物、URL など":"伝えたいこと（送迎表のコマ・特記事項にも出ます）"}" ${v()}>${esc(d.memo)}</textarea></div>
     <p class="err" id="f-err" ${ed.err?"":"hidden"}>${esc(ed.err)}</p>
     ${ed.base&&ed.base.updatedBy?`<p class="by" id="byline"></p>`:""}
     ${ed.base&&ed.base.prev&&!ro&&!ed.base.pending?`<div><button type="button" class="ghost sm" data-revert>1つ前の内容に戻す</button> <span class="by">「${esc(ed.base.prev.title)}」${timeText(ed.base.prev)}</span></div>`:""}
@@ -660,7 +660,7 @@ function drawSheet(){
     ed.confirmDel?`<span class="by">この予定をゴミ箱に移します（30日間は元に戻せます）。</span><span class="spacer"></span><button class="ghost" data-cancel-del>やめる</button><button class="danger solid" data-do-del>削除する</button>`:
     `${ed.base?`<button class="danger" data-del>削除</button>`:""}<span class="spacer"></span><button class="ghost" data-close>キャンセル</button><button class="primary" data-save>保存</button>`}</div>
   ${ed.base?`<div class="comments"><h3>コメント</h3><div id="cmts"></div>${!ro?`<form class="cmt-form" id="cmtForm"><input class="input" id="f-cmt" maxlength="500" placeholder="コメントを書く" autocomplete="off"><button class="primary">送信</button></form>`:""}</div>`:""}
-  </div></div>`;
+  </div>${ro||ed.confirmDel?"":`<button type="button" class="primary fab-save" data-fsave aria-label="保存">保存</button>`}</div>`;
   drawMembers();drawComments();drawSg();
   if(keep){const sh=document.querySelector("#sheetRoot .sheet");if(sh)sh.scrollTop=keep}
   if(ed.base&&ed.base.updatedBy)profiles([ed.base.updatedBy]).then(ps=>{const b=$("byline");if(b)b.textContent=`最終更新：${ps[ed.base.updatedBy]?.name||"メンバー"}（${fmtAt(ed.base.updatedAt)}）`});
@@ -851,7 +851,7 @@ document.addEventListener("click",async e=>{
     $("bkSlot").innerHTML=`<p class="by">復元を始めました（${restorePlan.add.length+restorePlan.undel.length}件）。右上の件数が消えたら完了です。</p>`;restorePlan=null;render();return}
   /* 編集画面 */
   if(!ed)return;
-  if(t.closest("[data-save]")||t.closest("[data-hsave]")){save();return}
+  if(t.closest("[data-save]")||t.closest("[data-hsave]")||t.closest("[data-fsave]")){save();return}
   if(t.closest("[data-del]")){readForm();ed.confirmDel=true;drawSheet();return}
   if(t.closest("[data-cancel-del]")){ed.confirmDel=false;drawSheet();return}
   if(t.closest("[data-do-del]")){core.remove(ed.base);closeEditor();toast("ゴミ箱に移しました（30日間は元に戻せます）");return}

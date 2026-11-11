@@ -91,7 +91,10 @@ const D = path.join(__dirname, "../gas/out");
   assert.ok(await pg.evaluate(() => document.documentElement.classList.contains("kb")), "入力中の印");
   assert.ok(await pg.locator(".sheet-foot").isHidden(), "入力中は下の帯を隠す");
   assert.ok(await pg.locator("[data-hsave]").isVisible(), "右上に保存");
-  await pg.click("[data-hsave]"); await pg.waitForTimeout(2500);
+  // 右下にも保存（2026-11-11 依頼者）：入力中も見えている所の右下。押すと保存
+  { const fb = await pg.locator("[data-fsave]").boundingBox(), vp = pg.viewportSize();
+    assert.ok(fb && fb.x + fb.width > vp.width - 40 && fb.y + fb.height > vp.height - 80 && fb.y + fb.height <= vp.height, "右下に保存 " + JSON.stringify(fb)); }
+  await pg.click("[data-fsave]"); await pg.waitForTimeout(2500);
   console.log("一般職員が選べないラベル:", dis.join("/"), "/ 休日出勤の職員:", self);
   const m = api(t, "kv.get", ["master"]).data.value, s = api(t, "kv.get", ["sheet:" + date]).data.value; const sid = m.staff.find((x) => x.name === "余村慎").id;
   assert.ok(s.staffOv[sid].workToday && s.staffOv[sid].start === "9:00" && s.staffOv[sid].end === "17:00", "休日出勤（時間）が送迎表に");

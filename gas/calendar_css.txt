@@ -392,3 +392,10 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 .ev-row.g-user:hover,.ds-row.g-user:hover,html[data-biz] .daysheet .ds-row.g-user:hover{background:color-mix(in srgb,#d88a1e 18%,var(--g-user))}
 .ev-row.g-other:hover,.ds-row.g-other:hover,html[data-biz] .daysheet .ds-row.g-other:hover{background:color-mix(in srgb,#888 18%,var(--g-other))}
 :root[data-theme="dark"]{--g-staff:#1f2a3d;--g-user:#3a2e1c;--g-other:#2a2d31}
+
+/* スマホの入力画面：右下にも保存ボタン（2026-11-11 依頼者。上の帯の保存は遠いので）。下の帯（保存・キャンセル）の上、キーボードが出ているときは見えている所の右下 */
+.fab-save{display:none}
+@media (max-width:560px){
+  .fab-save{display:inline-flex;align-items:center;justify-content:center;position:absolute;right:14px;bottom:calc(74px + env(safe-area-inset-bottom,0px));z-index:5;height:46px;padding:0 22px;border-radius:23px;font-size:16px;font-weight:700;box-shadow:0 4px 14px color-mix(in srgb,#000 30%,transparent)}
+  html.kb .fab-save{bottom:12px}
+}
