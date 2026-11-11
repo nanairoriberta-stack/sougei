@@ -41,6 +41,7 @@ const D = path.join(__dirname, "../gas/out");
   putEv("ev_note0001", { title: uN + " 通院", allDay: false, start: "10:00", end: "12:00" });
   putEv("ev_note0002", { title: pS.name + " PM休み", label: "leave", sg: { type: "staff_off", staff: [pS.name], half: "pm" } });
   putEv("ev_note0003", { title: "松養生高２女性 現場実習" });
+  putEv("ev_kotaki01", { title: "小瀧 研修", label: "sother", tanto: ["小瀧"] });   // 職員その他・終日（2026-11-11 依頼者「小瀧 研修 出てない」）
   putEv("ev_away0001", { title: "日野 中抜け", label: "leave", allDay: false, start: "13:00", end: "15:00", sg: { type: "staff_off", staff: ["日野"], reason: "中抜け" } });   // 中抜けは灰色（コマにしない。2026-11-05 依頼者）
   { // Excelから取り込んだような通常外のヘルプ（同じものが2件、保留・18:00）。「送迎表にある通常外の予定で、この欄に無いもの」から消せる（2026-11-04 依頼者）
     const s0 = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value;
@@ -145,6 +146,12 @@ const D = path.join(__dirname, "../gas/out");
     const g13 = await cellOf(hi.id, "13:00"), g12 = await cellOf(hi.id, "12:00");
     assert.ok(g13 && g13.grey && g12 && g12.grey, "日野さん：カレンダーの中抜け13:00・職員のタブの中抜け12:00も灰色 " + JSON.stringify([g12, g13]));
     console.log("中抜け：灰色（コマにしない）・職員のタブで入れられる OK"); }
+  { // 職員その他「小瀧 研修」（終日）が小瀧さんの欄の8:30にコマで出る（2026-11-11 依頼者「出てない・検索でも引っかからない」）
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
+    const kt = await P.pg.$$eval('[data-item-id^="cal_ev_kotaki01"]', (l) => l.map((x) => x.innerText));
+    const sv = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value, kb = sv.blocks.find((b) => b.calId === "ev_kotaki01");
+    assert.ok(kt.some((x) => x.includes("小瀧 研修")), "表にコマ " + JSON.stringify(kt) + " / 保存 " + JSON.stringify(kb));
+    console.log("小瀧 研修のコマ OK", JSON.stringify(kb && { t: kb.time, s: kb.staffId })); }
   { // ヘルプ可（2026-11-11 依頼者「職員の所にヘルプ可のチェックボックス、表示の一番右にヘルプ可の人だけ表示されるボタン」）
     const mv = api(t, "kv.get", ["v2:master"]).data.value, hi = mv.staff.find((x) => x.name === "日野");
     await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(500);

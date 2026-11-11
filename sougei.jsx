@@ -1356,7 +1356,7 @@ function calNoteLines(master, events, date, edition) {
     // 利用者その他で時間があるものは保留の欄のコマになり、そこから特記事項に出る（二重にしない。2026-11-10）
     if (e.label === "uother" && (e.users || []).some((n) => users.includes(n))) continue;   // 終日も（2026-11-10）
     // 職員その他・その他予定もコマになる（担当の職員の欄・保留の欄）→ コマから特記事項に出るので、ここでは出さない（2026-11-10）
-    if ((e.label === "sother" || e.label === "other") && !/^(sh|tt)/.test(String(e.id || ""))) {
+    if ((e.label === "sother" || e.label === "other") && !/^sh/.test(String(e.id || "")) && !(/^tt/.test(String(e.id || "")) && e.label === "other")) {
       const tn = (e.tanto || []).filter(Boolean);
       const sameBiz = (e.biz === "houkago" ? "houkago" : "seikatsu") === ((master.linkSeed2) ? "houkago" : "seikatsu");
       if (tn.length ? (tn.some((n) => staff.includes(n)) || sameBiz) : e.label === "other" && sameBiz) continue;

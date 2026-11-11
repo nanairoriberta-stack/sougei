@@ -532,6 +532,9 @@ console.log('extra OK');
  const xn=C.reconcile(m,sheet,no,D);
  assert.ok(!xn.blocks.some(b=>/ev_oth0000[35]|shm2026|tt2026/.test(b.id)),'入れない '+JSON.stringify(xn.blocks.filter(b=>/^cal_/.test(b.id))));
  // 担当がこの版の職員にいなくても、同じ事業の予定なら保留の欄に出して「見つからない名前」に出す（2026-11-11 依頼者「小瀧研修 出てない（現体制版）」）
+ // TimeTreeから写した予定を職員その他に直したものはコマにする（写したままのその他予定はしない）
+ const tts=Object.assign({},so,{id:'tt20261102_02'}), xt=C.reconcile(m,sheet,[tts],D);
+ assert.ok(xt.blocks.some(b=>b.calId==='tt20261102_02'),'TimeTreeの予定を職員その他に直したらコマ');
  const kt=Object.assign({},so,{id:'ev_oth00004',title:'小瀧X 研修',tanto:['小瀧X'],allDay:true,start:'',end:''}), xk=C.reconcile(m,sheet,[kt],D), bk=xk.blocks.find(b=>b.calId==='ev_oth00004');
  assert.ok(bk&&bk.staffId==='__hold__'&&bk.label==='小瀧X 研修'&&bk.time==='8:30','保留の欄 '+JSON.stringify(bk));
  const sk=C.summary(m,xk,[kt],D).find(x=>x.id==='ev_oth00004');

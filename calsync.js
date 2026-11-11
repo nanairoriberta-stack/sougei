@@ -19,7 +19,9 @@ const HOLD_ID = "__hold__";                                  // 送迎表の「�
 function komaSg(master, ev) {
   if (!ev || ev.sg || ev.deleted) return null;
   const id = String(ev.id || "");
-  if (/^(sh|tt)/.test(id)) return null;
+  // シフト表から入った予定（sh…）はコマにしない。TimeTreeから写した予定（tt…）も、写したままの「その他予定」はコマにしない（数が多い）。
+  // 職員その他・利用者その他に直した予定はコマにする（2026-11-11 依頼者「小瀧 研修 出てない」＝写した予定を職員その他に直したものだった、と見て）
+  if (/^sh/.test(id) || (/^tt/.test(id) && ev.label === "other")) return null;
   if (ev.label === "uother") return (ev.users || []).length ? { type: "staff_plan", staff: [], users: ev.users } : null;
   if (ev.label !== "sother" && ev.label !== "other") return null;
   const names = new Set(((master && master.staff) || []).map((s) => s.name));
