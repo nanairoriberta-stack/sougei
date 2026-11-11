@@ -24,10 +24,16 @@ function komaSg(master, ev) {
   if (ev.label !== "sother" && ev.label !== "other") return null;
   const names = new Set(((master && master.staff) || []).map((s) => s.name));
   const tanto = (ev.tanto || []).filter(Boolean);
-  if (tanto.length) { const hit = tanto.filter((n) => names.has(n)); return hit.length ? { type: "staff_plan", staff: hit, users: [] } : null; }
+  const edBiz = master && master.linkSeed2 ? "houkago" : "seikatsu", sameBiz = (ev.biz === "houkago" ? "houkago" : "seikatsu") === edBiz;
+  if (tanto.length) {
+    const hit = tanto.filter((n) => names.has(n));
+    if (hit.length) return { type: "staff_plan", staff: hit, users: [] };
+    // 担当がこの版の職員にいなくても、この版と同じ事業の予定なら保留の欄に出し、「反映中」に「送迎表に見つからない名前」と出す
+    // （2026-11-11 依頼者「小瀧研修 出てない・検索でも引っかからない・保留の欄もない（現体制版）」＝担当がこの版の職員に見つからず、だまって入れていなかった）
+    return sameBiz ? { type: "staff_plan", staff: tanto, users: [] } : null;
+  }
   if (ev.label === "sother") return null;
-  const edBiz = master && master.linkSeed2 ? "houkago" : "seikatsu";
-  return (ev.biz === "houkago" ? "houkago" : "seikatsu") === edBiz ? { type: "staff_plan", staff: [], users: [] } : null;
+  return sameBiz ? { type: "staff_plan", staff: [], users: [] } : null;
 }
 
 /* カレンダーのメモ（2026-11-10 依頼者「カレンダーのメモの部分は送迎表に出るように」）：コマの（ ）書きに付ける。改行は空白に、長いものは60字で切る */
@@ -422,7 +428,7 @@ function summary(master, sheet, events, date) {
   });
 }
 function summary0(master, sheet, events, date) {
-  return specsFor(master, events, date).filter((s) => s.staff.length || s.users.length || (s.type === "help" && (s.missUsers || []).length)).map((s) => ({ id: s.id, type: s.type, typeLabel: TYPE_LABEL[s.type], title: s.title,
+  return specsFor(master, events, date).filter((s) => s.staff.length || s.users.length || (s.type === "help" && (s.missUsers || []).length) || (s.koma && (s.missingStaff || []).length)).map((s) => ({ id: s.id, type: s.type, typeLabel: TYPE_LABEL[s.type], title: s.title,
     who: [...s.staff.map((x) => x.name), ...s.users.map((x) => x.name)], missing: s.missing, missingStaff: s.missingStaff, biz: s.biz,
     time: s.half ? (s.half === "am" ? "AM休（午後から出勤）" : "PM休（午前で退勤）") :
       s.type === "help" ? `${s.from}〜${s.note ? `・${s.note}` : ""}${s.staff.length ? "" : "・担当は未定（保留欄）"}` :

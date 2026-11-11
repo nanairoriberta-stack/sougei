@@ -34,6 +34,8 @@
       if (!S.canEdit) S.mode = "wish";
       S.loaded = true;
       if (pc) save("cfg", JSON.parse(pc).base, pendKey("cfg")); if (pm) save("month", JSON.parse(pm).base, pendKey("month"));
+      // まだ当てていない希望（新しい版の前に入った希望など）に合わせて枠を空ける。組む人の画面で開いたときだけ（2026-11-11 依頼者「きえてないよ」）
+      if (S.canEdit && !pm && S.month && !S.month.hidden) { const f = X.fitPending(S.month, S.ym); if (f !== S.month) { S.month = f; changed("month"); } }
       if (!S.resent) { S.resent = true; setTimeout(resendAll, 1500); }
     } catch (e) { S.err = (e && e.message) || "読み込めませんでした。通信を確かめて、もう一度開いてください"; S.loaded = false; }
     render();
@@ -110,7 +112,7 @@
     S.month = S.month || {}; S.month.wish = Object.assign({}, S.month.wish); const w = Object.assign({}, S.month.wish[who]);
     if (!v || (!noToggle && w[date] === v)) delete w[date]; else w[date] = v;
     S.month.wish[who] = w;
-    if (w[date]) S.month = X.fitWish(S.month, who, date);   // 希望に合わない番の枠を空ける（日勤の希望なら早番・遅番から外して日勤へ）。サーバーでも同じことをする
+    S.month = X.fitPending(S.month, S.ym);   // 希望に合わない番の枠を空ける（日勤の希望なら早番・遅番から外して日勤へ）。サーバーでも同じことをする
     changed("month");
   }
   // かんたん入力：職員・日にち・希望を選んで「入れる」（2026-11-07 依頼者「職員、何日、どの休みか出勤形態かをシンプルに選択だけで」）
@@ -263,7 +265,7 @@
     if (at("[data-mon]")) { const [y, m] = S.ym.split("-").map(Number), d = new Date(y, m - 1 + Number(at("[data-mon]").dataset.mon), 1); S.ym = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; load(); return; }
     if (at("[data-mode]")) { S.mode = at("[data-mode]").dataset.mode; render(); return; }
     if (!S.loaded) return;
-    if (at("[data-wish-del]")) { if (!S.canEdit && S.wishWho !== S.myName) return; const d = at("[data-wish-del]").dataset.wishDel, who = S.wishWho; S.month.wish = Object.assign({}, S.month.wish); const w = Object.assign({}, S.month.wish[who]); delete w[d]; S.month.wish[who] = w; changed("month"); return; }
+    if (at("[data-wish-del]")) { if (!S.canEdit && S.wishWho !== S.myName) return; const d = at("[data-wish-del]").dataset.wishDel, who = S.wishWho; S.month.wish = Object.assign({}, S.month.wish); const w = Object.assign({}, S.month.wish[who]); delete w[d]; S.month.wish[who] = w; S.month = X.fitPending(S.month, S.ym); changed("month"); return; }
     if (at("[data-wpick]") && S.pick && S.pick.wish) { S.pen = at("[data-wpick]").dataset.wpick; cycleWish(S.pick.date, true); S.pick = null; drawPick(); return; }
     if (at("[data-wpick-time]") && S.pick && S.pick.wish) { S.penFrom = ($("shPenFrom") || {}).value || ""; S.penTo = ($("shPenTo") || {}).value || ""; if (!S.penFrom) { alert("何時からを入れてください"); return; } S.pen = "time"; cycleWish(S.pick.date, true); S.pick = null; drawPick(); return; }
     if (S.mode === "wish" && at("td.day") && !at(".ov")) { if (!S.canEdit && S.wishWho !== S.myName) return; S.pick = { date: at("td.day").dataset.day, wish: true }; drawPick(); return; }

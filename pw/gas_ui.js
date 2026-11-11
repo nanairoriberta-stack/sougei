@@ -388,9 +388,23 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await T.pg.locator("[data-conf-list]").innerText()).includes("11/12(木) 秋山さんは「休」の希望ですが入っています"));
     // 日勤の希望を入れると、その日の早番・遅番の枠を空けて日勤へ（2026-11-11 依頼者「秋山は基本早番だが、日勤希望となった場合、早の秋山の欄を空ける」）
     { const D3 = "2026-11-17", inE = async () => (await T.pg.$$eval(`[data-slot^="${D3}|e|"]`, (l) => l.map((x) => x.innerText))).some((x) => x.includes("秋山"));
-      const had = await inE(); assert.ok(had, "11/17は秋山が早番に入っている（紙の表）"); await wp(D3, "日");
-      assert.ok(!(await inE()), "早番の枠から秋山が外れる（入っていた: " + had + "）");
-      assert.ok((await T.pg.locator(`td[data-day="${D3}"]`).innerText()).includes("秋山"), "日勤に入る"); }
+      const had = await inE(); assert.ok(had, "11/17は秋山が早番に入っている（紙の表）");
+      await wp(D3, "日"); assert.ok(await inE(), "確定した月（11月の紙の表）は動かさない");
+      await wp(D3, "");   // 消す
+      T.pg.once("dialog", (d) => d.accept()); await T.pg.click('[data-act="unfix"]'); await T.pg.waitForTimeout(800);   // 確定を取り消す
+      assert.ok(await T.pg.locator('[data-fix="off"]').isVisible(), "確定を取り消した");
+      await wp(D3, "日");
+      assert.ok(!(await inE()), "早番の枠から秋山が外れる");
+      assert.ok((await T.pg.locator(`td[data-day="${D3}"]`).innerText()).includes("秋山"), "日勤に入る");
+      await wp(D3, "");
+      await T.pg.click('[data-mode="shift"]'); await T.pg.waitForTimeout(200);   // 元に戻す（シフトを組む画面で早①に秋山）
+      await T.pg.click(`[data-slot="${D3}|e|1"]`); await T.pg.waitForTimeout(200);
+      if (await T.pg.locator('[data-pick="秋山"]').count()) { await T.pg.click('[data-pick="秋山"]'); await T.pg.waitForTimeout(300); }
+      if (await T.pg.locator("[data-close-pick]").count()) { await T.pg.click("button[data-close-pick]").catch(() => {}); await T.pg.waitForTimeout(200); }
+      assert.ok(await inE(), "早番に戻した");
+      T.pg.once("dialog", (d) => d.accept()); await T.pg.click("[data-fix-btn]"); await T.pg.waitForTimeout(800);   // 確定し直す
+      assert.ok(await T.pg.locator('[data-fix="on"]').isVisible(), "確定し直した");
+      await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", "秋山"); }
     // 希望は日付を押すと出る小さな画面で選ぶ（2026-11-07 依頼者「日付選んでポップアップで」）：早ﾏﾝｼｮﾝのみ・その他（時刻）・消す
     await T.pg.click('td[data-day="2026-11-13"] .dnum'); await T.pg.waitForTimeout(200);
     assert.ok((await T.pg.locator("[data-wish-pick] h3").innerText()).includes("11/13(金) 秋山さんの希望"), "その日・その人の希望の画面");

@@ -257,8 +257,10 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 
 ## 2026-11-11 依頼者（その3）
 - シフト表：希望に合わない番の枠を空ける（「秋山は基本早番だが、日勤希望となった場合、早の秋山の欄を空ける」）。`SGShift.fitWish`/`fitWishes`（`WISH_KIND`）：早番・早ﾏﾝｼｮﾝのみ＝遅番・日勤から外す、遅番・遅ﾏﾝｼｮﾝのみ＝早番・日勤から外す、日勤＝早番・遅番から外して日勤へ。休み・AM休・PM休・時刻は変えない（休みは今までどおり「希望とちがう」）。
-  希望が変わった人・日だけ（サーバーの `shiftSave_` で前と後の希望を比べる＝表の職員の保存でも効く。画面の `cycleWish` でもすぐ）。空いた枠は「空き」。テスト `test-shift.js`・`gas/test-gas.js`・`pw/gas_ui.js`
+  確定した月（11月までの紙の表を含む `isFixed`）は動かさない。まだ当てていない希望だけ（`fitPending`：当てた希望は `month.wishFit` に覚える＝そのあと組む人が手で戻した枠は動かさない。消えた・変わった希望の覚えは消す）。サーバーの `shiftSave_`（表の職員の保存でも効く）・画面の `cycleWish`／希望を消す・組む人が開いたとき（`load`。新しい版の前に入っていた希望にも当てる＝2026-11-11 依頼者「きえてないよ」）。空いた枠は「空き」。テスト `test-shift.js`・`gas/test-gas.js`・`pw/gas_ui.js`
 - 職員の「ヘルプ可」（職員のタブのチェック `helpOk`・`data-help-ok`）と、送迎表の「表示：」の一番右の「🆘 ヘルプ可」（`data-help-filter`・`HELP_OK_FILTER`＝`TimeGrid` の `deptFilter`）でヘルプ可の人だけの列。表の職員の見出しに `data-staff-col`。テスト `pw/master_add_ui.js`
+- 職員その他・その他予定の担当がこの版の職員にいなくても、この版と同じ事業の予定なら保留の欄にコマ（「小瀧 研修」が現体制版に出なかった＝小瀧さんが現体制版の職員に見つからず、だまって入れていなかった）。「反映中」に「送迎表に見つからない名前」（`komaSg`・`summary0` の `koma`）。テスト `test-cal.js`
+- 送迎表の上の版の表示（`data-app-ver`）・説明・確認の欄は `appVerLabel()`＝「Ver293(2026.11.11f)」（以前は v293 だけ）
 - 欠席の人は迎え・送りの便から外す（「欠席者含むになっていじれない。パターンから読み込みしたときも消えるように」）：カレンダーの欠席（`calsync` の user_absent → `pullRider`、`healPulled` は欠席がついている間だけ、予定を消すと元の便に戻る）・パターンから読込（`loadFromPattern` の `dropAbsentRiders`）。送迎表で欠席にしたときは以前から外していた。テスト `test-cal.js`
 - 便・予定の画面の車の一覧で、その時間に使えない車は赤字＋「・10:00に使用中」「・この時間は活動で使用」（`ItemModal` の `vehNg`、`data-veh-ng`。ほかの便・予定で使っている車＝`buildVehicleTrips`、活動時間の車＝`ACTIVITY_VEHICLES`）。テスト `pw/gas_ui.js`
 

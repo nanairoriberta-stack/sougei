@@ -1358,7 +1358,8 @@ function calNoteLines(master, events, date, edition) {
     // 職員その他・その他予定もコマになる（担当の職員の欄・保留の欄）→ コマから特記事項に出るので、ここでは出さない（2026-11-10）
     if ((e.label === "sother" || e.label === "other") && !/^(sh|tt)/.test(String(e.id || ""))) {
       const tn = (e.tanto || []).filter(Boolean);
-      if (tn.length ? tn.some((n) => staff.includes(n)) : e.label === "other" && (e.biz === "houkago" ? "houkago" : "seikatsu") === ((master.linkSeed2) ? "houkago" : "seikatsu")) continue;
+      const sameBiz = (e.biz === "houkago" ? "houkago" : "seikatsu") === ((master.linkSeed2) ? "houkago" : "seikatsu");
+      if (tn.length ? (tn.some((n) => staff.includes(n)) || sameBiz) : e.label === "other" && sameBiz) continue;
     }
     // 送迎表に反映しない予定（その他予定・TimeTreeから写した予定など）：名前で分ける
     if (inText(userOnly, title) || (e.users || []).some((n) => users.includes(n))) out.user.push(line);
@@ -10649,7 +10650,7 @@ function AppInner() {
               {EDITION_LABEL}<span className="font-normal ml-1 opacity-70">{EDITION_NOTE}</span>
             </span>
             <EditionSwitcher />
-            <span className="text-[10px] text-stone-400 font-normal self-end mb-0.5" title="アプリの版数。サポート時にお伝えください">{`v${SEED_VERSION}`}</span>
+            <span className="text-[10px] text-stone-400 font-normal self-end mb-0.5" title="アプリの版数。サポート時にお伝えください" data-app-ver>{appVerLabel()}</span>
             <button className="text-[10px] px-1.5 py-0.5 rounded border border-stone-300 text-stone-500 hover:bg-stone-50 self-end mb-0.5"
               title="全データ(マスタ・週間パターン・日別送迎表・リベCSV)を1つのファイルに保存します。アプリを新しい版に乗り換える前に押してください"
               onClick={async () => {
@@ -11379,7 +11380,7 @@ function AppInner() {
       </div>
 
       <div className="px-3 text-[11px] text-stone-400">
-        ※ このアプリのデータは、このアプリを開く全員に共有されます。Excel出力は通常のExcelファイル(.xlsx)で保存されます。 <b>アプリ版: v{SEED_VERSION}</b>(この番号が古い場合は最新のファイルでアプリを開き直してください)
+        ※ このアプリのデータは、このアプリを開く全員に共有されます。Excel出力は通常のExcelファイル(.xlsx)で保存されます。 <b>アプリ版: {appVerLabel()}</b>(この番号が古い場合は最新のファイルでアプリを開き直してください)
       </div>
 
       {/* ---------- Excel出力のあとのカレンダーの変更（ほかの日も）：右上にお知らせ ---------- */}
@@ -12129,7 +12130,7 @@ function SyncPanel({ onClose, online }) {
             <dt className="text-stone-500">通信</dt><dd>{online ? "オンライン" : "オフライン"}</dd>
             <dt className="text-stone-500">未送信</dt><dd>{st.queued}件{st.queued ? (st.lastError ? `(${Math.round(st.retryDelay / 1000)}秒ごとに自動で再送)` : "(送信中)") : ""}</dd>
             <dt className="text-stone-500">端末への一時保存</dt><dd>{st.persistent ? "有効(画面を閉じても未送信は消えません)" : "使えません(画面を閉じると未送信が消えます)"}</dd>
-            <dt className="text-stone-500">アプリの版</dt><dd>{`v${SEED_VERSION}`}・{EDITION_LABEL}・保存形式{KV.SCHEMA}</dd>
+            <dt className="text-stone-500">アプリの版</dt><dd>{appVerLabel()}・{EDITION_LABEL}・保存形式{KV.SCHEMA}</dd>
           </dl>
           {st.loadFailedKeys.length > 0 && <div className="p-2 rounded border border-rose-300 bg-rose-50 text-rose-800 text-[13px]">読み込めなかったデータ: {st.loadFailedKeys.map(nameOf).join("、")}。この間の内容は保存しません。通信を確認して再読み込みしてください。</div>}
           <div className="flex gap-2 flex-wrap">

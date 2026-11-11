@@ -236,13 +236,24 @@
     d.d = dl;
     return out;
   }
-  // 前と後で希望が変わった人・日に fitWish を当てる（サーバーの保存・画面の希望の入力で同じ）
-  function fitWishes(before, after) {
-    let out = after;
-    const wa = (after && after.wish) || {}, wb = (before && before.wish) || {};
-    for (const name of Object.keys(wa)) for (const date of Object.keys(wa[name] || {})) if ((wb[name] || {})[date] !== wa[name][date]) out = fitWish(out, name, date);
+  // まだ当てていない希望に fitWish を当てる（当てた希望は month.wishFit に覚える＝そのあと組む人が手で戻した枠は動かさない）。
+  // 2026-11-11 依頼者「きえてないよ」：新しい版を入れる前に入っていた希望（秋山 12日 日勤）にも当てる。消えた・変わった希望の覚えは消す（また入れたら当てる）
+  function fitPending(month, ym) {
+    if (!month) return month;
+    if (ym && isFixed(month, ym)) return month;   // 確定した月（11月までの紙の表も）は動かさない
+    const wish = month.wish || {}, done = month.wishFit || {};
+    let out = month, nf = {}, changed = false;
+    for (const name of Object.keys(done)) for (const date of Object.keys(done[name] || {})) if ((wish[name] || {})[date] === done[name][date]) (nf[name] = nf[name] || {})[date] = done[name][date]; else changed = true;
+    for (const name of Object.keys(wish)) for (const date of Object.keys(wish[name] || {})) {
+      const w = wish[name][date]; if (!WISH_KIND[w] || (nf[name] || {})[date] === w) continue;
+      out = fitWish(out, name, date); (nf[name] = nf[name] || {})[date] = w; changed = true;
+    }
+    if (!changed) return month;
+    out = out === month ? JSON.parse(JSON.stringify(month)) : out;
+    if (Object.keys(nf).length) out.wishFit = nf; else delete out.wishFit;
     return out;
   }
+  const fitWishes = (before, after, ym) => fitPending(after, ym);
   function conflicts(month, cfg, ym) {
     const out = [];
     // 「休」の希望なのに入っている／AM休・PM休なのに時間の補足なしで入っている（「近藤(~13)」のように時間を添えていればよい）
@@ -456,5 +467,5 @@
   /* シフトの確定（2026-11-07 依頼者「管理者以外は休日出勤が誰がどこに出るとか、シフト確定までは見えないように。最終確定ボタン」）。
      month.fixed = {at, by}（確定）／false（取り消した）。2026年11月までで fixed の欄が無い月は、以前から使っていた表なので確定とみなす */
   const isFixed = (month, ym) => { const f = month && month.fixed; return f === undefined || f === null ? String(ym) <= "2026-11" : !!f; };
-  return { fitWish, fitWishes, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  return { fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

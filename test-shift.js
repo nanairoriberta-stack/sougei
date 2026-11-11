@@ -226,6 +226,11 @@ console.log("shift extra ok");
   assert.deepStrictEqual(c.days, m0.days, "休みの希望は変えない（今までどおり「希望とちがう」に出す）");
   const e = S.fitWishes(m0, { ...m0, wish: { "秋山": { [D]: "PM休" } } });
   assert.deepStrictEqual(e.days, m0.days, "AM休・PM休は変えない");
-  const f = S.fitWishes(m1, m1);
-  assert.deepStrictEqual(f, m1, "希望が変わっていなければ触らない（あとで手で戻した枠はそのまま）");
+  // 前から入っていた希望（新しい版の前）にも当てる。当てたら覚えて、そのあと手で戻した枠は動かさない（2026-11-11 依頼者「きえてないよ」）
+  const f = S.fitPending(m1);
+  assert.ok(!f.days[D].e[1] && f.wishFit["秋山"][D] === "日", "前から入っていた日勤の希望にも当てる");
+  const g = JSON.parse(JSON.stringify(f)); g.days[D].e[1] = { n: "秋山" };
+  assert.strictEqual(S.fitPending(g), g, "一度当てた希望は、手で戻した枠を動かさない");
+  const h = JSON.parse(JSON.stringify(g)); delete h.wish["秋山"][D];
+  assert.ok(!S.fitPending(h).wishFit, "希望を消すと覚えも消える");
   console.log("fit wish OK"); }

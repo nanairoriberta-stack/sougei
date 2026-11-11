@@ -526,11 +526,16 @@ console.log('extra OK');
  assert.ok(bo&&bo.staffId==='__hold__'&&bo.label==='避難訓練'&&bo.durMin===30,'担当なしのその他予定は保留の欄 '+JSON.stringify(bo));
  const ot2=Object.assign({},ot,{id:'ev_oth00002',tanto:[st.name]}), bo2=C.reconcile(m,sheet,[ot2],D).blocks.find(b=>b.id==='cal_ev_oth00002_'+st.id);
  assert.ok(bo2&&bo2.staffId===st.id,'担当つきのその他予定は担当の欄');
- // ほかの事業・この版にいない担当・シフト表の予定・TimeTreeの予定はコマにしない
- const no=[Object.assign({},ot,{id:'ev_oth00003',biz:'houkago'}),Object.assign({},ot,{id:'ev_oth00004',tanto:['だれでもない人']}),
+ // ほかの事業・シフト表の予定・TimeTreeの予定・ほかの事業でこの版にいない担当はコマにしない
+ const no=[Object.assign({},ot,{id:'ev_oth00003',biz:'houkago'}),Object.assign({},so,{id:'ev_oth00005',tanto:['だれでもない人'],biz:'houkago'}),
    Object.assign({},so,{id:'shm20261102_a'}),Object.assign({},ot,{id:'tt20261102_01'})];
  const xn=C.reconcile(m,sheet,no,D);
- assert.ok(!xn.blocks.some(b=>/ev_oth0000[34]|shm2026|tt2026/.test(b.id)),'入れない '+JSON.stringify(xn.blocks.filter(b=>/^cal_/.test(b.id))));
+ assert.ok(!xn.blocks.some(b=>/ev_oth0000[35]|shm2026|tt2026/.test(b.id)),'入れない '+JSON.stringify(xn.blocks.filter(b=>/^cal_/.test(b.id))));
+ // 担当がこの版の職員にいなくても、同じ事業の予定なら保留の欄に出して「見つからない名前」に出す（2026-11-11 依頼者「小瀧研修 出てない（現体制版）」）
+ const kt=Object.assign({},so,{id:'ev_oth00004',title:'小瀧X 研修',tanto:['小瀧X'],allDay:true,start:'',end:''}), xk=C.reconcile(m,sheet,[kt],D), bk=xk.blocks.find(b=>b.calId==='ev_oth00004');
+ assert.ok(bk&&bk.staffId==='__hold__'&&bk.label==='小瀧X 研修'&&bk.time==='8:30','保留の欄 '+JSON.stringify(bk));
+ const sk=C.summary(m,xk,[kt],D).find(x=>x.id==='ev_oth00004');
+ assert.ok(sk&&(sk.missingStaff||[]).includes('小瀧X'),'反映中に見つからない名前 '+JSON.stringify(sk));
  assert.ok(!C.reconcile(m,xo,[],D).blocks.some(b=>b.id==='cal_ev_oth00001_hold'),'予定を消すとコマも消える');
  console.log('other koma OK');
 }
