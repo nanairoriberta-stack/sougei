@@ -310,7 +310,14 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     const mn = E9.calNoteLines(m, mv, date, "v1");
     assert.deepStrictEqual(mn.user, ["中村 受診後来所（母が送る）"], "特記事項の行にメモ " + JSON.stringify(mn));
     const an3 = E9.buildAutoNotes(m, ms2.blocks);
-    assert.ok(an3.userNotes.includes("中村 入浴（着替え持参） 13:00〜14:00") && an3.staffNotes.includes("三島 研修（松江で） 8:30〜"), "コマから特記事項にメモ " + JSON.stringify(an3)); }
+    assert.ok(an3.userNotes.includes("中村 入浴（着替え持参） 13:00〜14:00") && an3.staffNotes.includes("三島 研修（松江で）"), "コマから特記事項にメモ " + JSON.stringify(an3)); }
+  // 終日の予定から入ったコマ（8:30）は、特記事項に時刻を出さない。コマだけ消しても同じ（2026-11-11 依頼者）。送迎表で別の時刻へ動かしたらその時刻
+  { const wv = [ev("w1", "避難訓練", { label: "other", tanto: [] })];
+    const ws = C9.reconcile(m, E9.emptySheet(), wv, date), wb0 = ws.blocks.find((b) => b.calId === "w1");
+    assert.ok(wb0 && wb0.time === "8:30" && wb0.wholeDay, "終日は8:30のコマ " + JSON.stringify(wb0));
+    assert.deepStrictEqual(E9.buildAutoNotes(m, ws.blocks).bizNotes, ["避難訓練"], "時刻なし");
+    wb0.noteOnly = true; assert.deepStrictEqual(E9.buildAutoNotes(m, ws.blocks).bizNotes, ["避難訓練"], "コマだけ消しても時刻なし");
+    wb0.time = "13:00"; assert.deepStrictEqual(E9.buildAutoNotes(m, ws.blocks).bizNotes, ["避難訓練 13:00〜"], "動かした時刻は出す"); }
   if (!(mt.offDays || []).includes(1)) has("鳥屋尾"), assert.ok(/鳥屋尾 [^\n]*\(13:00〜15:00不在\)/.test(all), "中抜けはパート欄に（不在）");
   console.log("cal notes OK", cn.user.length, cn.staff.length, cn.biz.length, "/ パート:", (all.match(/三島 [^\n]*/) || [""])[0]);
 })().catch((e) => { console.error(e); process.exit(1); });

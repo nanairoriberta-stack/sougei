@@ -1306,7 +1306,7 @@ function buildAutoNotes(master, blocks) {
       // 行き先（家以外。カレンダーのヘルプの「行き先」など）も付ける（2026-11-09 依頼者「ヘルプの行き先は送迎表にも備考にも」）
       // カレンダーの予定から入ったコマ（cal_…・ヘルプ以外）で時刻のある予定は終わりの時刻も（10:00〜12:00。終日の予定から入ったコマ wholeDay は始まりだけ）
       const t1 = String(b.id || "").startsWith("cal_") && b.kind !== "help" && !b.wholeDay && b.durMin > 0 && toMin(b.time) != null ? ((m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`)(toMin(b.time) + b.durMin) : "";
-      const line = `${(b.label || "").trim()}${b.note && String(b.note).trim() ? `（${String(b.note).trim()}）` : ""} ${b.time}〜${t1}`;
+      const line = `${(b.label || "").trim()}${b.note && String(b.note).trim() ? `（${String(b.note).trim()}）` : ""} ${b.wholeDay && toMin(b.time) === 510 ? "" : `${b.time}〜${t1}`}`.trim();   // 終日の予定から入ったコマ（8:30に置いた仮の時刻）は時刻を出さない（2026-11-11 依頼者「備考に8:30〜と出るのはおかしい」。送迎表で別の時刻へ動かしたらその時刻を出す）
       if (startsWithUser((b.label || "").trim())) userNotes.push(line);
       // カレンダーから入った職員の予定・不在（cal_…）は特記事項(職員)へ（2026-11-03 依頼者「職員の所には職員の予定」）
       // ただし担当の決まっていない（保留の欄の）その他予定のコマは連絡事項へ（2026-11-10）
