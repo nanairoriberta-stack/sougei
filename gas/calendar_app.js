@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.11b";
+const APP_VERSION="2026.11.11c";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -303,7 +303,7 @@ document.addEventListener("touchend",e=>{if(!sw)return;const s=sw;sw=null;const 
 /* ---------- 書きかけ（端末に自動保存） ---------- */
 const DKEY="tc:draft";
 function draftGet(){try{const v=store.get(DKEY);return v?JSON.parse(v):null}catch{return null}}
-let dT;function draftSave(){clearTimeout(dT);dT=setTimeout(()=>{if(!ed||ed.ro)return;try{readForm();store.set(DKEY,JSON.stringify({id:ed.id,base:ed.base,form:ed.d,savedAt:new Date().toISOString()}))}catch{}},500)}
+let dT;function draftSave(){clearTimeout(dT);dT=setTimeout(()=>{if(!ed||ed.ro)return;try{readForm(false);store.set(DKEY,JSON.stringify({id:ed.id,base:ed.base,form:ed.d,savedAt:new Date().toISOString()}))}catch{}},500)}
 function draftDrop(){clearTimeout(dT);store.del(DKEY)}
 
 /* ---------- ラベルごとの入力項目と、送迎表への反映 ----------
@@ -542,9 +542,10 @@ function typedPick(kind){
   const w=ed.d.w;if(oneOnly(ed.d.label,kind))w[kind]=[names[0]];else if(!w[kind].includes(names[0]))w[kind].push(names[0]);
   inp.value="";ed.d.w["q_"+kind]="";
 }
-function readSg(){
+function readSg(pick){
   if(!ed||!$("sgArea"))return;const w=ed.d.w;
-  typedPick("staff");typedPick("users");
+  // 打った名前を選んだことにするのは、作り直す・保存するときだけ（pick）。打っている途中の下書き保存などで勝手に選ぶと、欄から名前が消えて一覧からも消え、選べなくなっていた（2026-11-11 依頼者）
+  if(pick){typedPick("staff");typedPick("users")}
   for(const k of["staff","users"]){const i=$("f-sgq-"+k);if(i)w["q_"+k]=i.value.trim()}   // 打っただけで選んでいない名前は、作り直しても欄に残す
   const rv=n=>{const x=document.querySelector(`input[name="${n}"]:checked`);return x?x.value:null};
   const iv=id=>{const x=$(id);return x?x.value.trim():null};
@@ -626,9 +627,9 @@ function openEditor(ev,day,draft){
   setTimeout(()=>{const c=document.querySelector('input[name="f-label"]:checked');(c||$("f-title")||{focus(){}}).focus()},30);   // 選んであるラベルに合わせる
 }
 function closeEditor(keepDraft){unsubCm?.();unsubCm=null;if(!keepDraft)draftDrop();ed=null;$("sheetRoot").innerHTML="";render()}
-function readForm(){
+function readForm(pick=true){
   if(!$("f-date"))return;const d=ed.d;if($("f-title"))d.title=$("f-title").value.trim();d.allDay=$("f-allday").checked;d.date=$("f-date").value;d.endDate=$("f-enddate").value||d.date;
-  d.start=$("f-start").value;d.end=$("f-end").value;d.label=document.querySelector('input[name="f-label"]:checked')?.value||"other";d.biz=document.querySelector('input[name="f-biz"]:checked')?.value||bizOf(d);d.place=$("f-place")?$("f-place").value.trim():d.place;d.memo=$("f-memo").value;readSg();fixTimes(d);
+  d.start=$("f-start").value;d.end=$("f-end").value;d.label=document.querySelector('input[name="f-label"]:checked')?.value||"other";d.biz=document.querySelector('input[name="f-biz"]:checked')?.value||bizOf(d);d.place=$("f-place")?$("f-place").value.trim():d.place;d.memo=$("f-memo").value;readSg(pick);fixTimes(d);
 }
 function liveCheck(){
   if(!ed||!ed.base||!ed.id||!S.loaded)return;const cur=core?core.overlay(S.server)[ed.id]:S.server[ed.id];

@@ -516,6 +516,22 @@ const D = path.join(__dirname, "../gas/out");
       assert.deepStrictEqual(await chipsOf("users"), ["馬場"], "一覧から選べる");
       assert.strictEqual(await A.pg.locator('[data-sg-unpicked="users"]').count(), 0, "選んだら案内は消える");
       await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
+    { // 2026-11-11 依頼者「名前を入れて送り先の変更に入っていた文字を消すと、利用者名が消える」
+      // 原因：打っている途中の下書き保存（readForm→readSg→typedPick）が「森」を選んだことにして欄を空にし、表示は作り直さず、一覧からも外していた
+      await add("ride"); await A.pg.fill("#f-sgq-users", "森"); await A.pg.waitForTimeout(900);
+      assert.strictEqual(await A.pg.inputValue("#f-sgq-users"), "森", "打っている途中で勝手に選ばない（森井と打つつもりかもしれない）");
+      await A.pg.click("#w-splace"); await A.pg.keyboard.type("実家"); await A.pg.waitForTimeout(300);
+      for (let k = 0; k < 2; k++) await A.pg.keyboard.press("Backspace"); await A.pg.click("#w-mplace"); await A.pg.waitForTimeout(900);
+      assert.strictEqual(await A.pg.inputValue("#f-sgq-users"), "森", "送り先を消しても打った名前はそのまま");
+      await A.pg.click("#f-sgq-users"); await A.pg.waitForTimeout(300);
+      assert.ok(await A.pg.locator('#sghits-users [data-sgpick="users"][data-name="森"]').count(), "一覧から森を選べる");
+      await A.pg.fill("#f-sgq-users", "森井"); await A.pg.click('#sghits-users [data-sgpick="users"][data-name="森井"]'); await A.pg.waitForTimeout(300);
+      assert.deepStrictEqual(await chipsOf("users"), ["森井"], "森井を選べる（森と取り違えない）");
+      await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+      // 打ったまま保存すれば（候補とそのまま同じ名前なら）入る＝以前どおり
+      await add("ride"); await A.pg.fill("#f-sgq-users", "森"); await A.pg.click('label:has(input[name="w-send"][value="time"])'); await A.pg.waitForTimeout(300);
+      assert.deepStrictEqual(await chipsOf("users"), ["森"], "ほかのボタンを押して作り直すときは、打った名前が入る");
+      await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
     console.log("ラベルを変えても名前はそのまま・打った名前はそのまま入る OK"); }
   { // カレンダーからシフト表へ切り替えるボタン（使える人だけ。2026-11-02）
     await A.pg.waitForTimeout(500);
