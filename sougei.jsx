@@ -536,6 +536,8 @@ const deptTravelMin = (a, b) => {
 };
 const ACTIVITY_WINDOWS = [[10 * 60 + 30, 12 * 60], [13 * 60 + 30, 15 * 60]];
 const ACTIVITY_VEHICLES = { "ピカチュウ": "嫁島", "セレナ": "津田", "マイメロ": "川津" };
+// 車の一覧で、その時間に使えない車は薄い灰色の文字＋灰色の背景＋「✕」（2026-11-12 依頼者「赤文字よりも薄い色か背景を変えてぱっと見で分かるように」）
+const VEH_NG_STYLE = { color: "#9ca3af", backgroundColor: "#e5e7eb" };
 const inActivityWindow = (t, end) => ACTIVITY_WINDOWS.some(([a, b]) => t < b && end > a);
 const TIME_GAP_WARN_MIN = 75; // 回り便は出発と自宅着に30-60分の差が出るため、75分以上のズレだけ警告 // 利用者の希望時刻と便の時刻のズレ警告の閾値(分)
 const toStr = (min) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, "0")}`;
@@ -4726,7 +4728,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
   const [note, setNote] = useState(initial.note || "");
   const [staffRiderIds, setStaffRiderIds] = useState(initial.staffRiderIds || []);
   const [durMin, setDurMin] = useState(initial.durMin ? String(initial.durMin) : "");
-  // この時間に使えない車（活動時間の車・ほかの便や予定で使っている車）は一覧で赤字に（2026-11-11 依頼者「この時間帯使用不可の車は赤文字に」）
+  // この時間に使えない車（活動時間の車・ほかの便や予定で使っている車）は一覧で薄い灰色に（2026-11-11 依頼者「この時間帯使用不可の車は赤文字に」）
   const vehNg = (v) => {
     const t0 = toMin(time); if (t0 == null || !v) return "";
     const dur = Number(durMin) || Number(initial.durMin) || 30;
@@ -4735,6 +4737,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
     const hit = trips.find((e) => e.id !== initial.id && e.t < t0 + dur && t0 < e.end);
     return hit ? `${hit.time || ""}に使用中` : "";
   };
+  const selNg = vehNg(master.vehicles.find((v) => v.id === vehicleId)); // 選んでいる車が使えないときは欄を赤く・下に注意
   const [destDeptId, setDestDeptId] = useState(initial.destDeptId || "");
   const [noteOnly, setNoteOnly] = useState(!!initial.noteOnly); // 表にはコマを出さず、特記事項・連絡事項にだけ残す(その他予定・ヘルプ)
   const [places, setPlaces] = useState({ ...(initial.places || {}) }); // その日だけの行き先変更 {利用者ID: 行き先}
@@ -4842,7 +4845,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
           </Field>
         ) : canPickVehicle ? (
           <Field label={isHelp ? "車両(公用車・自車で行く場合に選択)" : "車両"}>
-            <select className={inputCls} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+            <select className={inputCls} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} style={selNg ? { backgroundColor: "#fee2e2", borderColor: "#dc2626" } : undefined}>
               <option value="">{isHelp ? "選択してください(車が無いと出力前の確認でエラー)" : "選択してください"}</option>
               {!isHelp && <option value="__walk__">🚶 徒歩(車を使わない・徒歩迎え/徒歩送りになります)</option>}
               {isHelp && effStaffId && effStaffId !== HOLD_ID && (
@@ -4856,14 +4859,15 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
                 return (
                   <optgroup key={dpt.id} label={dpt.name}>
                     {vs.map((v) => { const ng = vehNg(v); return (
-                      <option key={v.id} value={v.id} data-veh-ng={ng ? v.id : undefined} style={ng ? { color: "#dc2626", fontWeight: 700 } : undefined}>
-                        {v.name}(定員{v.capNormal}/♿{v.wheelchairOK ? v.capWc : "不可"}){ng ? `・${ng}` : ""}
+                      <option key={v.id} value={v.id} data-veh-ng={ng ? v.id : undefined} style={ng ? VEH_NG_STYLE : undefined}>
+                        {ng ? "✕ " : ""}{v.name}(定員{v.capNormal}/♿{v.wheelchairOK ? v.capWc : "不可"}){ng ? `・${ng}` : ""}
                       </option>
                     ); })}
                   </optgroup>
                 );
               })}
             </select>
+            {selNg && <div className="text-xs font-bold text-red-600 mt-1" data-veh-ng-sel>⚠ この車は使えません（{selNg}）</div>}
           </Field>
         ) : (
           <Field label="内容">
@@ -4874,18 +4878,19 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
 
       {!isRun && !isHelp && !isOwn && (
         <Field label="車両(この予定で公用車を使う場合に選択)">
-          <select className={inputCls} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+          <select className={inputCls} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} style={selNg ? { backgroundColor: "#fee2e2", borderColor: "#dc2626" } : undefined}>
             <option value="">車なし</option>
             {master.departments.map((dpt) => {
               const vs = master.vehicles.filter((v) => v.deptId === dpt.id);
               if (!vs.length) return null;
               return (
                 <optgroup key={dpt.id} label={dpt.name}>
-                  {vs.map((v) => { const ng = vehNg(v); return <option key={v.id} value={v.id} data-veh-ng={ng ? v.id : undefined} style={ng ? { color: "#dc2626", fontWeight: 700 } : undefined}>{v.name}(定員{v.capNormal}/♿{v.wheelchairOK ? v.capWc : "不可"}){ng ? `・${ng}` : ""}</option>; })}
+                  {vs.map((v) => { const ng = vehNg(v); return <option key={v.id} value={v.id} data-veh-ng={ng ? v.id : undefined} style={ng ? VEH_NG_STYLE : undefined}>{ng ? "✕ " : ""}{v.name}(定員{v.capNormal}/♿{v.wheelchairOK ? v.capWc : "不可"}){ng ? `・${ng}` : ""}</option>; })}
                 </optgroup>
               );
             })}
           </select>
+          {selNg && <div className="text-xs font-bold text-red-600 mt-1" data-veh-ng-sel>⚠ この車は使えません（{selNg}）</div>}
         </Field>
       )}
 

@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.12e";
+const APP_VERSION="2026.11.12g";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"nintei",n:"認定調査"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -324,8 +324,10 @@ const KINMU_NORIDE=new Set(["早遅ﾏﾝｼｮﾝのみ","早ﾏﾝｼｮﾝの
 /* 勤務の時刻（2026-11-12 依頼者「ﾏﾝｼｮﾝの出勤で早番は6:00〜14:00、遅番は14:00〜22:00、早遅は6:00〜9:00と17:00〜22:00（中抜け9:00〜17:00）」。
    以前の9時間の職員（余村慎・森・窪田）の 6:00〜15:00／13:00〜22:00 はやめた。押したあと時刻は直せる） */
 const KINMU_AWAY={"早遅ﾏﾝｼｮﾝのみ":["09:00","17:00"]};
-function kinmuTimes(k,name){
-  return{"日勤":["08:30","17:30"],"早番":["06:00","14:00"],"遅番":["14:00","22:00"],"早遅ﾏﾝｼｮﾝのみ":["06:00","22:00"],"早ﾏﾝｼｮﾝのみ":["06:00","14:00"],"遅ﾏﾝｼｮﾝのみ":["14:00","22:00"]}[k]||null}
+// 9時間の職員（余村慎・森・窪田）は早 6:00〜15:00・遅 13:00〜22:00（2026-11-12 依頼者「この3人は早6:00〜15:00、遅13:00〜22:00」。余村和さんは8時間）
+const MANSION9=n=>/^(余村慎|森|窪田)$/.test(n||"");
+function kinmuTimes(k,name){const n9=MANSION9(name),e=["06:00",n9?"15:00":"14:00"],l=[n9?"13:00":"14:00","22:00"];
+  return{"日勤":["08:30","17:30"],"早番":e,"遅番":l,"早遅ﾏﾝｼｮﾝのみ":["06:00","22:00"],"早ﾏﾝｼｮﾝのみ":e,"遅ﾏﾝｼｮﾝのみ":l}[k]||null}
 /* 理由の欄に「勤務・理由」として持つ（例：早ﾏﾝｼｮﾝのみ・送迎の応援） */
 const splitKinmu=r=>{const k=KINMU.find(x=>r===x||String(r||"").startsWith(x+"・"));return k?[k,String(r).slice(k.length+1)]:["",r||""]};
 function applyKinmu(w,d){if(!w.kinmu)return;
@@ -884,7 +886,7 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-do-del]")){core.remove(ed.base);closeEditor();toast("ゴミ箱に移しました（30日間は元に戻せます）");return}
   if(t.closest("[data-revert]")){const p=ed.base.prev;core.save({title:p.title,date:p.date,endDate:p.endDate,allDay:p.allDay,start:p.start,end:p.end,label:p.label,biz:bizOf(p),place:p.place,memo:p.memo,members:p.members,tanto:p.tanto||[],sg:p.sg||null},ed.base);closeEditor();toast("1つ前の内容に戻しました");return}
   const fl=t.closest("[data-fill]");if(fl){const i=$(fl.dataset.fill);if(i){i.value=i.value===fl.dataset.v?"":fl.dataset.v;readSg();drawSg();draftSave()}return}
-  const sgp=t.closest("[data-sgpick]");if(sgp){readSg();const k=sgp.dataset.sgpick;const w=ed.d.w;w["q_"+k]="";if(oneOnly(ed.d.label,k))w[k]=[sgp.dataset.name];else if(!w[k].includes(sgp.dataset.name))w[k].push(sgp.dataset.name);if(ed.d.label==="shift"&&k==="staff"&&(KINMU_NORIDE.has(w.kinmu)||w.kinmu==="中抜け"))applyKinmu(w,ed.d);drawSg();setTimeout(()=>{const i=$("f-sgq-"+k);if(i){i.focus();sgHits(k,"")}},0);draftSave();return}
+  const sgp=t.closest("[data-sgpick]");if(sgp){readSg();const k=sgp.dataset.sgpick;const w=ed.d.w;w["q_"+k]="";if(oneOnly(ed.d.label,k))w[k]=[sgp.dataset.name];else if(!w[k].includes(sgp.dataset.name))w[k].push(sgp.dataset.name);if(ed.d.label==="shift"&&k==="staff"&&w.kinmu)applyKinmu(w,ed.d);drawSg();setTimeout(()=>{const i=$("f-sgq-"+k);if(i){i.focus();sgHits(k,"")}},0);draftSave();return}
   const sgr=t.closest("[data-sgrm]");if(sgr){readSg();const k=sgr.dataset.sgrm;ed.d.w[k]=ed.d.w[k].filter(n=>n!==sgr.dataset.name);drawSg();draftSave();return}
   if(!t.closest(".sgsub")){for(const k of["staff","users"]){const h=$("sghits-"+k);if(h)h.hidden=true}}
   const rm=t.closest("[data-rm]");if(rm){ed.d.members=ed.d.members.filter(i=>i!==rm.dataset.rm);drawMembers();draftSave();return}
