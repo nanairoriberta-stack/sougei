@@ -1537,6 +1537,14 @@ function awayBlockAt(blocks, sid, m) {
   return (blocks || []).some((b) => b.staffId === sid && isAwayBlock(b) && !b.noteOnly && (() => { const t = toMin(b.time); return t != null && m + SLOT > t && m < t + (Number(b.durMin) || SLOT); })());
 }
 function awayMin(s, ov) { const a = awayOf(s, ov); const f = toMin(a.from), t = toMin(a.to); return f != null && t != null && t > f ? [f, t] : [null, null]; }
+// カレンダー（送迎変更・利用日外利用）で入ったその日の時刻だけ（calApplied の userTime の mine。今の送迎表の値と同じものだけ）
+function calUserTimeOf(data) {
+  const out = {}, cur = (data && data.userTime) || {};
+  for (const rec of Object.values((data && data.calApplied) || {})) for (const [uid, r] of Object.entries((rec && rec.userTime) || {})) {
+    const m = (r && r.mine) || {}; for (const k of ["meet", "send"]) if (m[k] && (cur[uid] || {})[k] === m[k]) (out[uid] = out[uid] || {})[k] = m[k];
+  }
+  return out;
+}
 // 利用者の実効利用時間: 日別上書き(sheet.userTime) → 曜日別(user.timeByDay) → 基本(meetTime/sendTime)
 function userTimeOf(u, weekday, sheetUserTime) {
   const dayOv = (u.timeByDay || {})[weekday] || {};
@@ -2187,7 +2195,9 @@ function runWarnings(run, master, data, wd) {
       const u = master.users.find((x) => x.id === id);
       if (!u) return;
       if ((u.libertaAM || u.libertaPM) && isLibOn(u, run.kind)) return;
-      const want = userTimeOf(u, wd, data.userTime)[run.kind];
+      // 比べるのは利用者タブの時刻（曜日ごと→基本）。その日の変更はカレンダーの送迎変更で入ったものだけ使う
+      // （2026-11-12 依頼者「週間パターンと突き合わせてエラーが出ている。利用者タブと突き合わせて」＝パターンから読み込んだ利用時間は見ない）
+      const want = userTimeOf(u, wd, calUserTimeOf(data))[run.kind];
       const wm = toMin(want);
       if (wm != null && Math.abs(wm - t) >= TIME_GAP_WARN_MIN) {
         if ((run.trainUserIds || []).includes(u.id) || (run.trainBothIds || []).includes(u.id)) return; // 訓練の迎え/送りは自宅の希望時刻の対象外

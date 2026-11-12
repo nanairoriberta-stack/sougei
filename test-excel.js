@@ -434,3 +434,18 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.ok(hidden >= shown, "休みの列を出さないほうが大きく印刷できる " + shown + " " + hidden);
   console.log("off columns hidden OK", offA.name, offB.name, "同じ日で 休みの列あり", Math.round(shown * 1000) / 10 + "% → なし", Math.round(hidden * 1000) / 10 + "%");
 })().catch((e) => { console.error(e); process.exit(1); });
+// 便の時刻のずれの警告は利用者タブの時刻と比べる（週間パターンから入った利用時間では比べない。カレンダーの送迎変更は使う）（2026-11-12 依頼者）
+{
+ const assert=require('assert'); const E6=require('./eng.cjs');
+ const m=E6.mergeSeedMaster(null,E6.seedMaster()); const date='2026-11-02', wd=1; const dm=E6.applyDayDept(m,wd,null,null,null,date);
+ const u=dm.users.find(x=>!x.libertaAM&&!x.libertaPM&&(x.days||[]).includes(wd)); u.meetTime='9:00'; u.timeByDay={};
+ const st=dm.staff[0];
+ const mk=(ut,ca)=>Object.assign(E6.emptySheet(),{userTime:ut,calApplied:ca||{},runs:[{id:'r1',kind:'meet',time:'9:00',staffId:st.id,vehicleId:'',userIds:[u.id],staffRiderIds:[]}]});
+ const w=(sh)=>E6.runWarnings(sh.runs[0],dm,sh,wd).join(' ');
+ assert.ok(!/希望迎え/.test(w(mk({[u.id]:{meet:'11:00'}}))),'パターンから入った利用時間(11:00)では警告しない（利用者タブは9:00で便も9:00）: '+w(mk({[u.id]:{meet:'11:00'}})));
+ const ca={ev_x:{userTime:{[u.id]:{prev:null,mine:{meet:'11:00'}}}}};
+ assert.ok(/希望迎え\(11:00\)/.test(w(mk({[u.id]:{meet:'11:00'}},ca))),'カレンダーで11:00にした日は警告する');
+ const sh2=mk({}); sh2.runs[0].time='11:00';
+ assert.ok(/希望迎え\(9:00\)/.test(w(sh2)),'利用者タブ(9:00)と2時間ずれたら警告');
+ console.log('time gap vs user tab OK');
+}
