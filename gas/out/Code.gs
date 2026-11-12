@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.11g',
+  VERSION: '2026.11.12c',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -472,8 +472,9 @@ function exportAlerts_(ns) {
   out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
   return out.slice(0, 31);
 }
+function toMinG_(t) { var m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : 9999; }
 function namesList_() {
-  var c = CacheService.getScriptCache(), hit = c.get('names7');
+  var c = CacheService.getScriptCache(), hit = c.get('names8');
   if (hit) return JSON.parse(hit);
   // 利用者の候補：生活介護＝現体制版・新体制版（users）、放課後デイ＝りんく・ぷれいす版（kids）
   // 職員がどちらの事業か（staffBiz：名前→["seikatsu"]/["houkago"]/両方）。カレンダーで最初に開くタブと、事業の取り違えの確認に使う
@@ -482,6 +483,13 @@ function namesList_() {
   ['v1', 'v2', 'v3'].forEach(function (ed) {
     var d = docGet_(kvPath_(APP.EDITIONS[ed] + 'master'), idx); var m = d ? d.value.v : null; if (!m) return;
     var dn = function (id) { var x = (m.departments || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ''; };
+    // 週間パターンでの迎え・送りの時刻（利用者タブに時刻が無い人のいつもの時刻。2026-11-12 依頼者「その利用者のデフォルトのその日の送り時間」）
+    var patT = {};
+    for (var pw = 0; pw < 7; pw++) { var pd = docGet_(kvPath_(APP.EDITIONS[ed] + 'pattern:' + pw), idx), pv = pd && pd.value ? pd.value.v : null;
+      ((pv && pv.runs) || []).forEach(function (r) { if (!r || (r.kind !== 'meet' && r.kind !== 'send') || !r.time) return; var ix = r.kind === 'meet' ? 0 : 1;
+        (r.userIds || []).forEach(function (uid) { var a = (patT[uid] = patT[uid] || {}), b = (a[pw] = a[pw] || ['', '']); if (!b[ix] || toMinG_(r.time) < toMinG_(b[ix])) b[ix] = r.time; }); }); }
+    var tbOf = function (u) { var tb = {}; for (var w = 0; w < 7; w++) { var o = (u.timeByDay || {})[w] || {}, pt = (patT[u.id] || {})[w] || ['', ''];
+      var mt = o.meet || u.meetTime || pt[0] || '', st = o.send || u.sendTime || pt[1] || ''; if (mt || st) tb[w] = [mt, st]; } return tb; };
     var bz = ed === 'v3' ? 'houkago' : 'seikatsu';
     (m.staff || []).forEach(function (st) { if (!st || !st.name || (st.retireDate && st.retireDate <= today_())) return; var a = staffBiz[st.name] || (staffBiz[st.name] = []); if (a.indexOf(bz) < 0) a.push(bz); });
     // 職員のいつもの部署（版ごと。曜日で違う人は w）。休日出勤・職員時間変更で、最初から「嫁島」などを出すため
@@ -492,12 +500,19 @@ function namesList_() {
       if (st.start && st.end) sd[st.name].t = [st.start, st.end];
       if (Object.keys(sb).length) sd[st.name].sb = sb;
       if (st.awayFrom && st.awayTo) sd[st.name].a = [st.awayFrom, st.awayTo]; });
-    if (ed === 'v3') (m.users || []).forEach(function (u) { if (u && u.name && !seenK[u.name]) { seenK[u.name] = 1; kids.push({ name: u.name, dept: dn(u.deptId) }); } });
+    if (ed === 'v3') (m.users || []).forEach(function (u) { if (u && u.name && !seenK[u.name]) { seenK[u.name] = 1;
+      var tb3 = tbOf(u);
+      kids.push(Object.assign({ name: u.name, dept: dn(u.deptId), tm: [u.meetTime || '', u.sendTime || ''] }, Object.keys(tb3).length ? { tb: tb3 } : {})); } });
     else (m.users || []).forEach(function (u) {
       if (!u || !u.name) return; var isLib = !!(u.libertaAM || u.libertaPM);
       // いつもは家族送り・家族迎え（送迎なし）の人（馬場・猪原など）：fm/fs にその文言。カレンダーの送迎変更で「こちらから迎える／送る」を出すため（2026-11-11 依頼者）
       var fam = function (k) { var v = String((k === 'send' ? u.sendPlace : u.meetPlace) || '').trim(); if (v) return /^(家族|母|父)/.test(v) ? v : ''; var d = u.noRideDefault; return d && d[k] ? String(d[k]) : ''; };
       var fm = fam('meet'), fs = fam('send'), ext = Object.assign({}, isLib ? { lib: true } : {}, fm ? { fm: fm } : {}, fs ? { fs: fs } : {});
+      // いつもの迎え・送りの時刻（tm=[迎え,送り]、tb=曜日ごと）。カレンダーの送迎変更で「時間・場所変更」の時刻に薄い灰色で入れる（2026-11-12 依頼者）。新体制版の値を優先
+      var tb = tbOf(u);
+      var tmx = { tm: [u.meetTime || '', u.sendTime || ''] }; if (Object.keys(tb).length) tmx.tb = tb;
+      if (ed === 'v2') users.forEach(function (x) { if (x.name === u.name) { x.tm = tmx.tm; if (tmx.tb) x.tb = tmx.tb; else delete x.tb; } });
+      Object.assign(ext, tmx);
       if (!seen[u.name]) { seen[u.name] = 1; users.push(Object.assign({ name: u.name, dept: dn(u.deptId) }, ext)); }
       else users.forEach(function (x) { if (x.name === u.name) Object.keys(ext).forEach(function (k) { if (!x[k]) x[k] = ext[k]; }); });
     });   // lib＝リベルタ（ﾏﾝｼｮﾝ）の利用者（2026-11-07 依頼者：リベルタ利用ラベルはその人たちだけ）
@@ -515,7 +530,7 @@ function namesList_() {
   });
   if (!anyNr) noRide = { meet: ['家族送り', '受診後送り'], send: ['家族迎え'] };
   var out = { users: users, kids: kids, staffBiz: staffBiz, staffDept: staffDept, depts: depts, places: places, noRide: noRide, yomi: yomiMap_() };
-  try { c.put('names7', JSON.stringify(out), 300); } catch (e) {}
+  try { c.put('names8', JSON.stringify(out), 300); } catch (e) {}
   return out;
 }
 /* 送迎表の職員マスタ（3つの版）から職員番号を自動で振る。既にある名前は番号を変えない */
@@ -683,7 +698,7 @@ function kvMerge_(me, a) {
       docSet_(path, { k: key, v: merged, by: me.no }, rev, { k: key }, idx);
       linkAfterSave_(key, merged, idx);
       log_(me, '送迎表', kvLabel_(key), diffSummary_(cur, merged) + (conflicts.length ? '（同じ箇所の同時変更 ' + conflicts.length + 'か所：この変更を優先）' : ''));
-      if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names7'); } catch (e) {} }
+      if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names8'); } catch (e) {} }
     }
     return { rev: rev, value: merged, conflicts: conflicts.length };
   });
@@ -700,7 +715,7 @@ function kvImportMany_(me, items) {
       docSet_(path, { k: key, v: v, by: me.no }, (cur ? cur.rev : 0) + 1, { k: key }, idx); n++; linkAfterSave_(key, v, idx);
     });
     log_(me, '送迎表', 'バックアップから復元', n + '件');
-    syncStaffIds_(); try { CacheService.getScriptCache().remove('names7'); } catch (e) {}
+    syncStaffIds_(); try { CacheService.getScriptCache().remove('names8'); } catch (e) {}
     return { written: n };
   });
 }
@@ -716,7 +731,7 @@ function kvCas_(me, a) {
     docSet_(path, { k: key, v: a.value, by: me.no }, rev + 1, { k: key }, idx);
     linkAfterSave_(key, a.value, idx);
     log_(me, '送迎表', kvLabel_(key), '初期データの取り込み');
-    if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names7'); } catch (e) {} }
+    if (/(^|:)master$/.test(key)) { syncStaffIds_(); try { CacheService.getScriptCache().remove('names8'); } catch (e) {} }
     return { conflict: false, rev: rev + 1, value: a.value };
   });
 }

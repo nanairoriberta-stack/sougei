@@ -44,7 +44,7 @@ const D = path.join(__dirname, "../gas/out");
   { // 送迎表のルール⑪（送迎なしの理由）を変えておく → カレンダーの「送迎」の選択肢に出る
     const m2 = api(t, "kv.get", ["v2:master"]).data.value;
     api(t, "kv.merge", [{ key: "v2:master", base: m2, baseKnown: true, mine: { ...m2, rules: { ...(m2.rules || {}), noRideReasons: [{ kind: "meet", text: "家族送り" }, { kind: "meet", text: "母送り" }, { kind: "send", text: "家族迎え" }, { kind: "send", text: "ショートへ" }] } } }]);
-    for (const k of [...g.cache.keys()]) if (k === "names7") g.cache.delete(k); }
+    for (const k of [...g.cache.keys()]) if (k === "names8") g.cache.delete(k); }
   const A = await open("calendar.html", { width: 1200, height: 900 }, boot, "restore_cal.html");
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const restore = async () => {
@@ -100,8 +100,8 @@ const D = path.join(__dirname, "../gas/out");
     await pickLabel(A.pg, "ride"); await A.pg.waitForTimeout(300);
     const mo = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
     const so = await A.pg.$$eval('input[name="w-send"]', (o) => o.map((x) => x.parentElement.innerText));
-    assert.deepStrictEqual(mo, ["いつもどおり", "時間変更", "家族送り", "母送り"], "迎えの選択肢 " + JSON.stringify(mo));
-    assert.deepStrictEqual(so, ["いつもどおり", "時間変更", "家族迎え", "ショートへ"], "送りの選択肢 " + JSON.stringify(so));
+    assert.deepStrictEqual(mo, ["いつもどおり", "時間・場所変更", "家族送り", "母送り", "その他"], "迎えの選択肢 " + JSON.stringify(mo));
+    assert.deepStrictEqual(so, ["いつもどおり", "時間・場所変更", "家族迎え", "ショートへ", "その他"], "送りの選択肢 " + JSON.stringify(so));
     const u1 = api(t, "kv.get", ["v2:master"]).data.value.users[0].name;
     await A.pg.fill("#f-sgq-users", u1); await A.pg.click(`[data-sgpick="users"][data-name="${u1}"]`); await A.pg.waitForTimeout(200);
     await A.pg.check('input[name="w-meet"][value="r:母送り"]'); await A.pg.waitForTimeout(200);

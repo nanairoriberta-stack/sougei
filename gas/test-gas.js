@@ -325,7 +325,7 @@ async function bootstrap() {
     const rows = ys.data.slice(1); assert.ok(rows.some((r) => r[0] === "八壁" && r[2] === "職員") && rows.some((r) => r[0] === "中村" && r[2] === "利用者"));
     const n0 = rows.length; g.ctx.syncYomi_(); assert.strictEqual(ys.data.length - 1, n0, "2回目は増えない（重複なし）");
     rows.find((r) => r[0] === "中村")[1] = "なかむら";
-    for (const k of [...g.cache.keys()]) if (k === "names7") g.cache.delete(k);
+    for (const k of [...g.cache.keys()]) if (k === "names8") g.cache.delete(k);
     const nl = await admin.call("names.list"); assert.strictEqual(nl.yomi["中村"], "なかむら"); assert.ok(!("八壁" in nl.yomi), "空の読みは送らない");
     return `職員と利用者 ${n0}名が並ぶ。読みは names.list で届く`;
   });
@@ -699,7 +699,7 @@ async function bootstrap() {
     await ippan.call("sg.attendance", { from: "2026-11-02", to: "2026-11-03" }).then(() => assert.fail("一般は出せない"), (e) => assert.strictEqual(e.code, "invalid_argument"));
     await admin.call("sg.attendance", { from: "2026-11-01", to: "2027-03-01" }).then(() => assert.fail("長すぎる"), (e) => assert.ok(/93日/.test(e.message)));
     // リベルタ（ﾏﾝｼｮﾝ）の利用者の目印：リベルタ利用ラベルの候補はこの人たちだけ
-    for (const k of [...g.cache.keys()]) if (k === "names7") g.cache.delete(k);
+    for (const k of [...g.cache.keys()]) if (k === "names8") g.cache.delete(k);
     const nl = await admin.call("names.list");
     const libN = nl.users.filter((u) => u.lib).map((u) => u.name), want = m2.users.filter((u) => u.libertaAM || u.libertaPM).map((u) => u.name);
     assert.ok(libN.length > 10 && want.every((n) => libN.includes(n)) && !nl.users.find((u) => !u.lib && want.includes(u.name)), "リベルタの利用者 " + libN.length + "名");

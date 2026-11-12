@@ -19,6 +19,7 @@ const D = path.join(__dirname, "../gas/out");
   { const m1 = api(t, "kv.get", ["master"]).data.value; api(t, "kv.cas", [{ key: "v3:master", rev: 0, value: { ...m1, users: [{ ...m1.users[0], id: "k_hoshino", name: "星野こども" }], staff: [...m1.staff.slice(0, 3), { ...m1.staff[0], id: "st_hd1", name: "放デイ太郎" }] } }]); }   // りんく・ぷれいす版（放課後デイ）の利用者・職員
   { const s0 = api(t, "kv.get", ["sheet:" + date]).data.value, m0 = api(t, "kv.get", ["master"]).data.value;   // その他予定「黒田給食利用」（コマだけ消すの試し）
     api(t, "kv.merge", [{ key: "sheet:" + date, base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, { id: "blkNote1", kind: "block", time: "12:00", staffId: m0.staff.find((x) => x.name === "八壁").id, label: "黒田給食利用", vehicleId: "" }] } }]); }
+  { const E2 = engFor("v2"), m2 = api(t, "kv.get", ["v2:master"]).data.value; api(t, "kv.cas", [{ key: "v2:pattern:1", rev: 0, value: E2.resolveSeedPattern(m2, E2.SEED_PATTERNS.mon) }]); }   // 月曜の週間パターン（いつもの時刻・2026-11-12）
   const yo = rows().find((r) => r[1] === "余村慎");
   const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js", "exceljs.min.js": "node_modules/exceljs/dist/exceljs.min.js" };
   const b = await chromium.launch();
@@ -496,13 +497,13 @@ const D = path.join(__dirname, "../gas/out");
   // よみがな：送迎表の名前は「よみがな」シートに自動で並ぶ。読みを入れると、ひらがなで予測が出る
   const ys = g.sheets.get("よみがな"); assert.ok(ys && ys.data.some((r) => r[0] === "中村" && r[2] === "利用者"), "よみがなシートに利用者が並ぶ");
   ys.data.forEach((r) => { if (r[0] === "中村") r[1] = "なかむら"; if (r[0] === "日野") r[1] = "ひの"; });
-  for (const k of [...g.cache.keys()]) if (k === "names7") g.cache.delete(k);
+  for (const k of [...g.cache.keys()]) if (k === "names8") g.cache.delete(k);
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };
   await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300);
   assert.deepStrictEqual(await A.pg.$$eval('input[name="f-grp"]', (o) => o.map((x) => x.value)), ["staff", "user", "other"], "ラベルの1段目の並び");
-  assert.deepStrictEqual(await A.pg.$$eval('input[name="f-label"]', (o) => o.map((x) => x.value)), ["help", "hcancel", "user", "ride", "extra", "monitor", "shien", "liberta", "uother"], "利用者の中の並び");
+  assert.deepStrictEqual(await A.pg.$$eval('input[name="f-label"]', (o) => o.map((x) => x.value)), ["help", "hcancel", "user", "ride", "extra", "monitor", "shien", "nintei", "liberta", "uother"], "利用者の中の並び");
   assert.strictEqual(await A.pg.evaluate(() => { const c = document.querySelector('input[name="f-label"]:checked'); return c && c.value + (document.activeElement === c ? ":focus" : ""); }), "help:focus", "開いたときはヘルプ");
   await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(200);
   const add = async (label) => { await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await pickLabel(A.pg, label); await A.pg.waitForTimeout(300); };
@@ -552,13 +553,14 @@ const D = path.join(__dirname, "../gas/out");
       // 原因：打っている途中の下書き保存（readForm→readSg→typedPick）が「森」を選んだことにして欄を空にし、表示は作り直さず、一覧からも外していた
       await add("ride"); await A.pg.fill("#f-sgq-users", "森"); await A.pg.waitForTimeout(900);
       assert.strictEqual(await A.pg.inputValue("#f-sgq-users"), "森", "打っている途中で勝手に選ばない（森井と打つつもりかもしれない）");
-      await A.pg.click("#w-splace"); await A.pg.keyboard.type("実家"); await A.pg.waitForTimeout(300);
-      for (let k = 0; k < 2; k++) await A.pg.keyboard.press("Backspace"); await A.pg.click("#w-mplace"); await A.pg.waitForTimeout(900);
-      assert.strictEqual(await A.pg.inputValue("#f-sgq-users"), "森", "送り先を消しても打った名前はそのまま");
       await A.pg.click("#f-sgq-users"); await A.pg.waitForTimeout(300);
       assert.ok(await A.pg.locator('#sghits-users [data-sgpick="users"][data-name="森"]').count(), "一覧から森を選べる");
       await A.pg.fill("#f-sgq-users", "森井"); await A.pg.click('#sghits-users [data-sgpick="users"][data-name="森井"]'); await A.pg.waitForTimeout(300);
       assert.deepStrictEqual(await chipsOf("users"), ["森井"], "森井を選べる（森と取り違えない）");
+      await A.pg.click('label:has(input[name="w-send"][value="time"])'); await A.pg.waitForTimeout(300);   // 送り先の欄は「時間・場所変更」のときだけ（2026-11-12）
+      await A.pg.click("#w-splace"); await A.pg.keyboard.type("実家"); await A.pg.waitForTimeout(300);
+      for (let k = 0; k < 2; k++) await A.pg.keyboard.press("Backspace"); await A.pg.click("#w-sendt"); await A.pg.waitForTimeout(900);
+      assert.deepStrictEqual(await chipsOf("users"), ["森井"], "送り先を消しても名前はそのまま");
       await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
       // 打ったまま保存すれば（候補とそのまま同じ名前なら）入る＝以前どおり
       await add("ride"); await A.pg.fill("#f-sgq-users", "森"); await A.pg.click('label:has(input[name="w-send"][value="time"])'); await A.pg.waitForTimeout(300);
@@ -719,6 +721,44 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.locator("#panel .ev-row", { hasText: "馬場 こちらから迎え" }).evaluate((b) => b.click()).catch(() => {}); await A.pg.waitForTimeout(400);
     if (await A.pg.locator('input[name="w-meet"]').count()) { assert.strictEqual(await A.pg.evaluate(() => document.querySelector('input[name="w-meet"]:checked').value), "go", "開き直しても"); await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
     console.log("家族送迎の人をこちらから迎える:", ev.title); }
+  { // 送迎なしの理由に「その他」（送り・迎えそれぞれ。2026-11-12 依頼者）
+    const D25 = "2026-11-27";
+    await add("ride"); await A.pg.fill("#f-date", D25); await A.pg.fill("#f-enddate", D25); await pick("users", "森"); await A.pg.waitForTimeout(200);
+    assert.ok(await A.pg.locator('input[name="w-meet"][value="other"]').count() && await A.pg.locator('input[name="w-send"][value="other"]').count(), "迎え・送りに「その他」");
+    await A.pg.check('input[name="w-send"][value="other"]'); await A.pg.waitForTimeout(300);
+    assert.ok(await A.pg.locator('[data-nro="send"]').isVisible(), "理由の欄"); assert.strictEqual(await A.pg.locator("#w-splace").count(), 0, "送り先の欄は出さない");
+    await save(600); assert.match(await A.pg.locator("#f-err").textContent(), /理由を入れて/, "理由が要る");
+    await A.pg.fill("#w-nrso", "祖母迎え"); await A.pg.fill("#w-nrst", "16:00"); await save(2500);
+    const evs = Object.values(api(t, "docs.query", [{ col: "days", from: D25, to: D25 }]).data.reduce((a, d) => Object.assign(a, d.events), {}));
+    const ev = evs.find((e) => e.sg && (e.sg.users || []).includes("森") && e.sg.type === "user_time");
+    assert.ok(ev && ev.sg.noSend === "祖母迎え16:00" && ev.title === "森 祖母迎え16:00", "その他の理由 " + JSON.stringify(ev && { t: ev.title, sg: ev.sg }));
+    console.log("送迎なしの理由（その他）:", ev.title); }
+  { // 「時間・場所変更」：いつもの時刻を薄い灰色で入れておく（2026-11-12 依頼者）。保存した予定を開いて送り先を消しても利用者の名前は消えない（2026-11-12 依頼者）
+    const chipsOf = (k) => A.pg.$$eval(`.sgbox [data-sgrm="${k}"]`, (o) => o.map((x) => x.dataset.name));
+    // いつもの時刻は利用者タブの時刻、無ければ週間パターンの便の時刻（月曜のパターンを入れて試す）
+    const D26 = "2026-11-30", mm = api(t, "kv.get", ["v2:master"]).data.value, E2 = engFor("v2"), pat = E2.resolveSeedPattern(mm, E2.SEED_PATTERNS.mon);
+    const r0 = pat.runs.filter((r) => r.kind === "send" && (r.userIds || []).length).find((r) => { const u = mm.users.find((x) => x.id === r.userIds[0]); return u && !u.sendTime && !(u.timeByDay || {})[1]; });
+    const mu = mm.users.find((x) => x.id === r0.userIds[0]), un = mu.name;
+    const dflt = pat.runs.filter((r) => r.kind === "send" && (r.userIds || []).includes(mu.id)).map((r) => r.time).sort((a, b) => a.padStart(5, "0").localeCompare(b.padStart(5, "0")))[0].replace(/^(\d):/, "0$1:");
+    await add("ride"); await A.pg.fill("#f-date", D26); await A.pg.fill("#f-enddate", D26); await pick("users", un); await A.pg.waitForTimeout(200);
+    assert.ok(await A.pg.locator('label:has(input[name="w-send"][value="time"])').innerText().then((x) => x.includes("時間・場所変更")), "時間・場所変更");
+    assert.strictEqual(await A.pg.locator("#w-splace").count(), 0, "いつもどおりのときは送り先の欄を出さない");
+    await A.pg.check('input[name="w-send"][value="time"]'); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await A.pg.inputValue("#w-sendt"), dflt, "いつもの送りの時刻が入っている " + dflt);
+    assert.ok(await A.pg.locator("#w-sendt.dflt").count(), "薄い灰色 " + await A.pg.locator("#w-sendt").evaluate((x) => x.outerHTML));
+    await save(600); assert.match(await A.pg.locator("#f-err").textContent(), /いつもと同じ/, "いつものままでは保存しない");
+    await A.pg.fill("#w-splace", "実家"); await save(2500);
+    const evs = Object.values(api(t, "docs.query", [{ col: "days", from: D26, to: D26 }]).data.reduce((a, d) => Object.assign(a, d.events), {}));
+    const ev = evs.find((e) => e.sg && (e.sg.users || []).includes(un) && e.sg.type === "user_time");
+    assert.ok(ev && ev.sg.sendPlace === "実家" && !ev.sg.send, "送り先だけ（時刻はいつものまま＝変えない） " + JSON.stringify(ev && ev.sg));
+    await A.pg.click(`.cell[data-day="${D26}"]`); await A.pg.waitForTimeout(400); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
+    await A.pg.locator("#panel .ev-row", { hasText: un }).first().evaluate((b) => b.click()); await A.pg.waitForTimeout(500);
+    assert.deepStrictEqual(await chipsOf("users"), [un], "開いた");
+    assert.strictEqual(await A.pg.inputValue("#w-splace"), "実家", "送り先が出る");
+    await A.pg.click("#w-splace"); await A.pg.keyboard.press("End"); for (let k = 0; k < 2; k++) await A.pg.keyboard.press("Backspace"); await A.pg.click("#w-mplace").catch(() => {}); await A.pg.waitForTimeout(900);
+    assert.deepStrictEqual(await chipsOf("users"), [un], "送り先を消しても利用者の名前は消えない");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+    console.log("時間・場所変更（いつもの時刻 " + dflt + "）OK"); }
   { // ヘルプキャンセル（いつものヘルプをその日だけなし。2026-11-07 依頼者）
     const D25 = "2026-11-27";
     await add("hcancel"); await A.pg.fill("#f-date", D25); await A.pg.fill("#f-enddate", D25);
@@ -754,7 +794,7 @@ const D = path.join(__dirname, "../gas/out");
   await add("ride"); assert.strictEqual(await A.pg.locator("#f-title").count(), 0, "その他予定以外はタイトルの欄なし"); await pick("users", "森");
   const meetOpts = await A.pg.$$eval('input[name="w-meet"]', (o) => o.map((x) => x.parentElement.innerText));
   const sendOpts = await A.pg.$$eval('input[name="w-send"]', (o) => o.map((x) => x.parentElement.innerText));
-  assert.deepStrictEqual(meetOpts, ["いつもどおり", "時間変更", "家族送り", "受診後送り"]); assert.deepStrictEqual(sendOpts, ["いつもどおり", "時間変更", "家族迎え"]);
+  assert.deepStrictEqual(meetOpts, ["いつもどおり", "時間・場所変更", "家族送り", "受診後送り", "その他"]); assert.deepStrictEqual(sendOpts, ["いつもどおり", "時間・場所変更", "家族迎え", "その他"]);
   await A.pg.check('input[name="w-meet"][value="r:受診後送り"]'); await A.pg.waitForTimeout(200);
   await A.pg.evaluate(() => { document.querySelector("#sheetRoot .sheet").scrollTop = 400; });
   const before = await A.pg.evaluate(() => document.querySelector("#sheetRoot .sheet").scrollTop);
