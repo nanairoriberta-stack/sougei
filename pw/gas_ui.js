@@ -625,27 +625,27 @@ const D = path.join(__dirname, "../gas/out");
     assert.deepStrictEqual(await A.pg.evaluate(() => [document.querySelector('input[name="f-grp"]:checked').value, document.querySelector('input[name="f-label"]:checked').value]), ["staff", "sother"], "開き直しても職員のその他のまま");
     await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
   }
-  { // 職員時間変更の勤務：ﾏﾝｼｮﾝは時刻が入り送迎なし。9時間の職員（余村・森・窪田）は早6:00〜15:00、ほかは6:00〜14:00。休みは中抜け・時間休みの題名
+  { // 職員時間変更の勤務（2026-11-12 依頼者）：早番・早ﾏﾝｼｮﾝ 6:00〜14:00、遅番・遅ﾏﾝｼｮﾝ 14:00〜22:00、早遅ﾏﾝｼｮﾝ 6:00〜22:00＋中抜け9:00〜17:00（職員で変わらない）。ﾏﾝｼｮﾝは送迎なし。休みは中抜け・時間休みの題名
     const D20 = "2026-11-20", setDay = async () => { await A.pg.fill("#f-date", D20); await A.pg.fill("#f-enddate", D20); };
+    const kin = async (k) => { await A.pg.locator(`label:has(input[name="w-kinmu"][value="${k}"])`).click(); await A.pg.waitForTimeout(300); };
+    const times = async () => [await A.pg.inputValue("#w-wst"), await A.pg.inputValue("#w-wet")];
     await add("shift"); await setDay(); await pick("staff", "森");
     assert.deepStrictEqual(await A.pg.$$eval('input[name="w-kinmu"]', (o) => o.map((x) => x.value)), ["", "中抜け", "早番", "遅番", "日勤", "早遅ﾏﾝｼｮﾝのみ", "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝｼｮﾝのみ"]);
-    await A.pg.locator('label:has(input[name="w-kinmu"][value="早ﾏﾝｼｮﾝのみ"])').click(); await A.pg.waitForTimeout(300);
-    assert.deepStrictEqual([await A.pg.inputValue("#w-wst"), await A.pg.inputValue("#w-wet")], ["06:00", "15:00"], "森は9時間");
+    await kin("早ﾏﾝｼｮﾝのみ"); assert.deepStrictEqual(await times(), ["06:00", "14:00"], "早ﾏﾝｼｮﾝ 6:00〜14:00（森も）");
     assert.ok((await A.pg.locator(".sgbox").innerText()).includes("送迎（便）には入りません"));
+    await kin("遅ﾏﾝｼｮﾝのみ"); assert.deepStrictEqual(await times(), ["14:00", "22:00"], "遅ﾏﾝｼｮﾝ 14:00〜22:00");
+    await kin("早遅ﾏﾝｼｮﾝのみ"); assert.deepStrictEqual(await times(), ["06:00", "22:00"], "早遅ﾏﾝｼｮﾝ 6:00〜22:00");
+    assert.deepStrictEqual([await A.pg.inputValue("#w-awf"), await A.pg.inputValue("#w-awt")], ["09:00", "17:00"], "早遅は中抜け9:00〜17:00");
+    assert.match(await A.pg.locator("[data-away-two]").innerText(), /06:00〜09:00 と 17:00〜22:00/, "勤務は 6:00〜9:00 と 17:00〜22:00");
+    await kin("早番"); assert.deepStrictEqual(await times(), ["06:00", "14:00"], "早番 6:00〜14:00");
+    assert.strictEqual(await A.pg.locator("#w-awf").count(), 0, "早番に変えると中抜けは外れる");
+    await kin("遅番"); assert.deepStrictEqual(await times(), ["14:00", "22:00"], "遅番 14:00〜22:00");
     await A.pg.click('[data-sgrm="staff"][data-name="森"]'); await A.pg.waitForTimeout(200); await pick("staff", "八壁"); await A.pg.waitForTimeout(200);
-    assert.deepStrictEqual([await A.pg.inputValue("#w-wst"), await A.pg.inputValue("#w-wet")], ["06:00", "14:00"], "ほかの職員は8時間");
-    for (const [nm, end] of [["余村和", "14:00"], ["余村慎", "15:00"]]) {   // 9時間の余村は慎さんだけ
-      await A.pg.click('.sgbox [data-sgrm="staff"]'); await A.pg.waitForTimeout(200); await pick("staff", nm); await A.pg.waitForTimeout(200);
-      assert.strictEqual(await A.pg.inputValue("#w-wet"), end, nm); }
-    await A.pg.click('.sgbox [data-sgrm="staff"]'); await A.pg.waitForTimeout(200); await pick("staff", "八壁"); await A.pg.waitForTimeout(200);
+    await kin("早ﾏﾝｼｮﾝのみ"); assert.deepStrictEqual(await times(), ["06:00", "14:00"], "八壁も同じ");
     await A.pg.locator(".sgbox").screenshot({ path: "g_kinmu.png" });
     await save(1500);
-    await add("shift"); await setDay(); await pick("staff", "窪田"); await A.pg.locator('label:has(input[name="w-kinmu"][value="遅ﾏﾝｼｮﾝのみ"])').click(); await A.pg.waitForTimeout(300);
-    assert.deepStrictEqual([await A.pg.inputValue("#w-wst"), await A.pg.inputValue("#w-wet")], ["13:00", "22:00"], "窪田の遅は13:00から");
-    await save(1500);
-    await add("shift"); await setDay(); await pick("staff", "日野"); await A.pg.locator('label:has(input[name="w-kinmu"][value="早番"])').click(); await A.pg.waitForTimeout(300);
-    assert.ok((await A.pg.locator(".sgbox").innerText()).includes("早番の出勤・退勤の時刻を入れてください"), "早番は時刻を入れる");
-    await A.pg.fill("#w-wst", "07:00"); await A.pg.fill("#w-wet", "16:00"); await save(1500);
+    await add("shift"); await setDay(); await pick("staff", "窪田"); await kin("早遅ﾏﾝｼｮﾝのみ"); await save(1500);
+    await add("shift"); await setDay(); await pick("staff", "日野"); await kin("早番"); await A.pg.fill("#w-wst", "07:00"); await A.pg.fill("#w-wet", "15:00"); await save(1500);
     await add("leave"); await setDay(); await pick("staff", "白戸"); await A.pg.locator('label:has(input[name="w-leave"][value="naka"])').click(); await A.pg.waitForTimeout(300);
     await A.pg.fill("#f-start", "10:00"); await A.pg.fill("#f-end", "11:00"); await save(1500);
     await add("leave"); await setDay(); await pick("staff", "白戸"); await A.pg.locator('label:has(input[name="w-leave"][value="hours"])').click(); await A.pg.waitForTimeout(300);
@@ -654,7 +654,9 @@ const D = path.join(__dirname, "../gas/out");
     const evs = Object.values(api(t, "docs.query", [{ col: "days", from: D20, to: D20 }]).data.reduce((a, d) => Object.assign(a, d.events), {}));
     const by = (tt) => evs.find((e) => e.title === tt);
     assert.ok(by("八壁 早ﾏﾝｼｮﾝのみ") && by("八壁 早ﾏﾝｼｮﾝのみ").sg.noRide === true && by("八壁 早ﾏﾝｼｮﾝのみ").sg.wstart === "06:00", "題名・送迎なし " + evs.map((e) => e.title).join(","));
-    assert.ok(by("窪田 遅ﾏﾝｼｮﾝのみ") && by("日野 早番") && !by("日野 早番").sg.noRide, "早番は送迎あり");
+    const kb = by("窪田 早遅ﾏﾝｼｮﾝのみ");
+    assert.ok(kb && kb.sg.noRide && kb.sg.wstart === "06:00" && kb.sg.wend === "22:00" && kb.sg.afrom === "09:00" && kb.sg.ato === "17:00", "早遅ﾏﾝｼｮﾝ：送迎なし・中抜け9:00〜17:00 " + JSON.stringify(kb && kb.sg));
+    assert.ok(by("日野 早番") && !by("日野 早番").sg.noRide && by("日野 早番").sg.wstart === "07:00", "早番は送迎あり・時刻は直せる");
     assert.ok(by("白戸 中抜け") && by("白戸 2時間休み") && by("安部 PM休み"), "中抜け・時間休み・PM休みの題名 " + evs.map((e) => e.title).join(","));
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300);   // 選んでいる日を元に戻す
     console.log("勤務・休みの題名:", evs.map((e) => e.title).join(" / ")); }

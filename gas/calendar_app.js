@@ -1,6 +1,6 @@
 
 "use strict";
-const APP_VERSION="2026.11.12c";
+const APP_VERSION="2026.11.12d";
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"nintei",n:"認定調査"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -321,15 +321,18 @@ const HALF={am:"AM休み",pm:"PM休み"};
    ﾏﾝｼｮﾝの時間は9時間の職員（余村慎・森・窪田）が早6:00〜15:00・遅13:00〜22:00、ほかの職員は早6:00〜14:00・遅14:00〜22:00。早番・遅番は時刻を入れる */
 const KINMU=["中抜け","早番","遅番","日勤","早遅ﾏﾝｼｮﾝのみ","早ﾏﾝｼｮﾝのみ","遅ﾏﾝｼｮﾝのみ"];   // 中抜け＝新見さん・野津さん・橋本さんなど（2026-11-05 依頼者）
 const KINMU_NORIDE=new Set(["早遅ﾏﾝｼｮﾝのみ","早ﾏﾝｼｮﾝのみ","遅ﾏﾝｼｮﾝのみ"]);
-const MANSION9=n=>/^(余村慎|森|窪田)$/.test(n||"");   // 余村は慎さん（2026-10-31 依頼者。和さんは8時間）
-function kinmuTimes(k,name){const n9=MANSION9(name);
-  return{"日勤":["08:30","17:30"],"早遅ﾏﾝｼｮﾝのみ":["06:00","22:00"],"早ﾏﾝｼｮﾝのみ":["06:00",n9?"15:00":"14:00"],"遅ﾏﾝｼｮﾝのみ":[n9?"13:00":"14:00","22:00"]}[k]||null}
+/* 勤務の時刻（2026-11-12 依頼者「ﾏﾝｼｮﾝの出勤で早番は6:00〜14:00、遅番は14:00〜22:00、早遅は6:00〜9:00と17:00〜22:00（中抜け9:00〜17:00）」。
+   以前の9時間の職員（余村慎・森・窪田）の 6:00〜15:00／13:00〜22:00 はやめた。押したあと時刻は直せる） */
+const KINMU_AWAY={"早遅ﾏﾝｼｮﾝのみ":["09:00","17:00"]};
+function kinmuTimes(k,name){
+  return{"日勤":["08:30","17:30"],"早番":["06:00","14:00"],"遅番":["14:00","22:00"],"早遅ﾏﾝｼｮﾝのみ":["06:00","22:00"],"早ﾏﾝｼｮﾝのみ":["06:00","14:00"],"遅ﾏﾝｼｮﾝのみ":["14:00","22:00"]}[k]||null}
 /* 理由の欄に「勤務・理由」として持つ（例：早ﾏﾝｼｮﾝのみ・送迎の応援） */
 const splitKinmu=r=>{const k=KINMU.find(x=>r===x||String(r||"").startsWith(x+"・"));return k?[k,String(r).slice(k.length+1)]:["",r||""]};
 function applyKinmu(w,d){if(!w.kinmu)return;
   if(w.kinmu==="中抜け"){const si=staffInfo((w.staff||[])[0],d&&d.date,d&&bizOf(d));   // いつもの勤務時間と中抜けを最初から入れる（直せる）
     w.wsM="time";w.weM="time";w.wstart=si.t?hm2(si.t[0]):"";w.wend=si.t?hm2(si.t[1]):"";w.awM="time";w.afrom=si.a?hm2(si.a[0]):"";w.ato=si.a?hm2(si.a[1]):"";return}
-  const t=kinmuTimes(w.kinmu,(w.staff||[])[0]);w.wsM="time";w.weM="time";if(t){w.wstart=t[0];w.wend=t[1]}else{w.wstart="";w.wend=""}}
+  const t=kinmuTimes(w.kinmu,(w.staff||[])[0]);w.wsM="time";w.weM="time";if(t){w.wstart=t[0];w.wend=t[1]}else{w.wstart="";w.wend=""}
+  const a=KINMU_AWAY[w.kinmu];if(a){w.awM="time";w.afrom=a[0];w.ato=a[1]}else if(w.awM==="time"&&KINMU_AWAY["早遅ﾏﾝｼｮﾝのみ"][0]===w.afrom&&KINMU_AWAY["早遅ﾏﾝｼｮﾝのみ"][1]===w.ato){w.awM="same";w.afrom="";w.ato=""}}
 /* 中抜けの日の勤務：「09:30〜14:00 と 16:00〜19:00」 */
 function awayTwo(d,w){if((w.awM||"same")!=="time"||!w.afrom||!w.ato)return"";if(d.label==="hwork")return d.start&&d.end?`勤務は ${d.start}〜${w.afrom} と ${w.ato}〜${d.end} になります。`:"";const si=staffInfo((w.staff||[])[0],d.date,bizOf(d));
   const st=w.wsM==="time"&&w.wstart?w.wstart:si.t?hm2(si.t[0]):"",en=w.weM==="time"&&w.wend?w.wend:si.t?hm2(si.t[1]):"";
