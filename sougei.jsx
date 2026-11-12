@@ -4849,7 +4849,7 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
               <option value="">{isHelp ? "選択してください(車が無いと出力前の確認でエラー)" : "選択してください"}</option>
               {!isHelp && <option value="__walk__">🚶 徒歩(車を使わない・徒歩迎え/徒歩送りになります)</option>}
               {isHelp && effStaffId && effStaffId !== HOLD_ID && (
-                <option value={"own:" + effStaffId}>担当職員の自車で行く</option>
+                <option value={"own:" + effStaffId}>自車</option>
               )}
               {isHelp && <option value={BUS_ID}>🚌 バス</option>}
               {isHelp && <option value={WALK_ID}>🚶 徒歩(車を使わない)</option>}
@@ -6643,7 +6643,7 @@ function DayDeptModal({ master, name, baseDeptId, value, onSave, onClose }) {
 /* ============================================================
    職員の当日変更モーダル(休み・時間・部署移動・予定の保留)
    ============================================================ */
-function StaffOvModal({ master, staff, ov, itemCount, fixedOffToday, onSave, onMoveDept, onHoldAll, onClose }) {
+function StaffOvModal({ master, staff, ov, itemCount, fixedOffToday, onSave, onHoldAll, onClose }) {
   const [off, setOff] = useState(!!ov.off);
   const [start, setStart] = useState(ov.start || "");
   const [end, setEnd] = useState(ov.end || "");
@@ -6691,11 +6691,11 @@ function StaffOvModal({ master, staff, ov, itemCount, fixedOffToday, onSave, onM
         </div>
       )}
 
-      <Field label="基本部署の変更(毎日に影響・すぐ反映 / 曜日で違う場合は職員タブの「曜日別」で設定)">
-        <select className={inputCls} value={staff.baseDeptId || staff.deptId} onChange={(e) => onMoveDept(e.target.value)}>
-          {master.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-      </Field>
+      {/* 基本部署はここでは変えない（2026-11-12 依頼者「間違ってそこを変えるパターンある」）。変えるときは職員のタブで */}
+      <div className="text-xs text-stone-600 mb-3" data-base-dept>
+        基本部署：<b>{(master.departments.find((d) => d.id === (staff.baseDeptId || staff.deptId)) || {}).name || "—"}</b>
+        <span className="text-stone-400">（変えるときは「職員」のタブで。この日だけなら上の「本日の部署」）</span>
+      </div>
 
       <div className="flex justify-end gap-2 mt-2">
         <button className={btnSec} onClick={onClose}>キャンセル</button>
@@ -11462,7 +11462,6 @@ function AppInner() {
                 staffOv: { ...(prev.staffOv || {}), [stf.id]: ov },
               }));
             }}
-            onMoveDept={(deptId) => updateMaster((m) => ({ ...m, staff: m.staff.map((s) => (s.id === stf.id ? { ...s, deptId } : s)) }))}
             onHoldAll={() => { if (inSheet) moveStaffItemsToHold(stf.id); setModal(null); }}
             onClose={() => setModal(null)}
           />

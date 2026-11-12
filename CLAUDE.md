@@ -102,7 +102,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
   以前の仮の名前（部署りんく・ぷれいす・職員1〜5・車1〜3・午前/午後1〜10）は、開いたときに1回だけ中のIDのまま名前を直し足りない分を足す（`upgradeLinkSeed`・`linkSeed2`）。画面で変えた名前はそのまま
 
 ## ヘルプの車（2026-11-04 依頼者）
-- 車の欄に「🚌 バス」（`BUS_ID="__bus__"`）と「🚶 徒歩」（`WALK_ID="__walk__"`）。`resolveVehicle` が `{name:"バス"/"徒歩", own:true, notCar:true}` を返す（表・Excelに名前が出る。Excelは半角 ﾊﾞｽ）。車の動き（`buildVehicleTrips`）には入れない（`NOT_CAR`）
+- 車の欄の「担当職員の自車で行く」は「自車」（2026-11-12 依頼者）。車の欄に「🚌 バス」（`BUS_ID="__bus__"`）と「🚶 徒歩」（`WALK_ID="__walk__"`）。`resolveVehicle` が `{name:"バス"/"徒歩", own:true, notCar:true}` を返す（表・Excelに名前が出る。Excelは半角 ﾊﾞｽ）。車の動き（`buildVehicleTrips`）には入れない（`NOT_CAR`）
 - 車が入っていないヘルプは出力前の確認の「車」のエラー（`helpNoCarWarn`：担当が決まっているもの。保留・コマだけ消したものは除く）。初期データの週間パターンにも車なしのヘルプが5件あるので、実データでもエラーが出る＝依頼者が車・バス・徒歩を選ぶ
 - カレンダーの名前の候補は部署ごと（`sgHits`：見出し `.sghd`、職員は `usualDept`、利用者は送迎表の部署。何も打っていないときは嫁島・津田・川津・あいのて・リベ…の順 `DEPT_ORDER`、打っているときは合う人から）。テスト `pw/restore_ui.js`
 
@@ -139,6 +139,9 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 送迎表の上の「📅 右にカレンダーを出す」（`data-calside-btn`）→ 右側に `…/exec?page=calendar&embed=1` を iframe で出す（`data-calside`、幅はドラッグで360〜800px、開いているか・幅は端末に `sg:calSide`/`sg:calSideW`）。
 送迎表は右をあける（画面幅1000px以上）。`doGet` は calendar かつ `embed=1` のときだけ `XFrameOptionsMode.ALLOWALL`（ほかは今までどおり DEFAULT）。
 中のカレンダーは送り終わると `postMessage({sg:"cal-saved"})` → 送迎表がすぐ読み直す（`refreshCalendar`・`pollOnce`）。公開URLが分からないときは「設定シートB2」の案内
+
+## 送迎表の職員の変更の画面で基本部署は変えない（2026-11-12 依頼者「間違ってそこを変えるパターンある」）
+送迎表の日の画面で職員の名前を押して出る「○○ の変更」（`StaffOvModal`）の「基本部署の変更」の選択はなくし、今の基本部署を表示だけ（`data-base-dept`）。変えるのは職員のタブ。この日だけは「本日の部署」のまま
 
 ## 送迎表の右の欄から外したもの（2026-10-29 依頼者「見ていない」）
 「⚠ 送迎の抜けがあります／全員に迎え・送りが入っています」の箱（`MissingAlert` は2名体制の不足 `twoBox` だけ出す）と「🚗 使える車」（`VehicleNowPanel`）は出さない。抜けは未割当の一覧とExcel出力前の確認で分かる

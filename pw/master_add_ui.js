@@ -167,7 +167,13 @@ const D = path.join(__dirname, "../gas/out");
     assert.deepStrictEqual(only, [hi.id], "ヘルプ可の人だけの列 " + JSON.stringify(only) + " / 全部 " + all.length);
     await P.pg.click("[data-help-filter] >> nth=0"); await P.pg.waitForTimeout(500);
     assert.strictEqual((await cols()).length, all.length, "もう一度押すと全部署");
-    console.log("ヘルプ可：職員のタブのチェック・表示のボタン OK", all.length, "→", only.length); }
+    console.log("ヘルプ可：職員のタブのチェック・表示のボタン OK", all.length, "→", only.length);
+    // 職員の変更の画面では基本部署は変えられない（2026-11-12 依頼者「間違ってそこを変えるパターンある」）
+    await P.pg.click(`[data-staff-col="${all[0]}"] >> nth=0`); await P.pg.waitForTimeout(400);
+    assert.ok(/基本部署：/.test(await P.pg.textContent("[data-base-dept]")), "基本部署は表示だけ");
+    assert.strictEqual(await P.pg.locator('text=基本部署の変更').count(), 0, "基本部署の変更の選択はない");
+    await P.pg.click('button:text-is("キャンセル")'); await P.pg.waitForTimeout(300);
+    console.log("職員の変更の画面：基本部署は表示だけ OK"); }
   { // 週間パターンを印刷（Excel）・ヘルプ表は週間パターンとは別（2026-11-06 依頼者）
     await P.pg.click('button:text-is("週間パターン")'); await P.pg.waitForTimeout(1200);
     await P.pg.click('button:text-is("月")'); await P.pg.waitForTimeout(1200);
