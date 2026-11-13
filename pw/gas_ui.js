@@ -461,6 +461,10 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await Y.pg.locator("[data-slot]").count(), 0, "勤務の枠は出さない");
     assert.strictEqual(await Y.pg.locator(".sh-base, .sh-pat, .line.off, [data-legend]").count(), 0, "基本シフト・パターン・休みの行は出さない");
     assert.ok((await Y.pg.locator('td[data-day="2026-11-20"]').innerText()).includes("横田 休"), "希望は見える");
+    // スマホでも日付のマスに高さがある（2026-11-13 依頼者「日付が縦にすごく狭くて打ちづらい」）
+    { const hs = await Y.pg.$$eval("td[data-day]", (l) => l.map((e) => e.getBoundingClientRect().height)); assert.ok(Math.min(...hs) >= 60, "マスの高さ " + Math.min(...hs));
+      assert.ok(await Y.pg.locator('td[data-day="2026-11-04"] .dnum').evaluate((e) => parseFloat(getComputedStyle(e).fontSize) >= 16), "日付の数字は大きめ");
+      assert.strictEqual((await Y.pg.locator(".sh-grid th").first().innerText()).trim(), "月", "スマホの見出しは「月」だけ"); }
     await Y.pg.screenshot({ path: "g_shiftpage_mobile.png" });
     assert.deepStrictEqual(real(Y.errs), [], "画面エラーなし"); await Y.pg.context().close();
     // スマホでは早番（赤）・遅番（青）を1列にして名前が見える（2026-11-07 依頼者「スマホだと名前わからない」。組む人＝管理者の画面で）

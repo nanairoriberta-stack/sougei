@@ -151,7 +151,8 @@
     const ri = X.ruleIssues(S.month, c, S.ym), riSet = new Set(ri.map((x) => `${x.date}|${x.kind}|${x.now}`));
     const days = X.daysOfMonth(S.ym), lead = (X.wdOf(days[0]) + 6) % 7;   // 月曜始まり（2026-11-07 依頼者）
     if (!hidden) html += `<div class="sh-legend" data-legend><span class="e">赤＝早番</span>・<span class="l">青＝遅番</span>（①②③は番号）</div>`;
-    html += `<table class="sh-grid"><thead><tr>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th class="${i === 0 ? "su" : i === 6 ? "sa" : ""}">${X.WD[i]}曜日</th>`).join("")}</tr></thead><tbody>`;
+    // 希望を入れるだけの画面（男性の表の職員）はマスの高さをそろえて押しやすく（2026-11-13 依頼者「スマホで日付が縦にすごく狭くて打ちづらい」。.wo）。スマホの見出しは「月」だけ
+    html += `<table class="sh-grid${wishOnly ? " wo" : ""}"><thead><tr>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th class="${i === 0 ? "su" : i === 6 ? "sa" : ""}">${X.WD[i]}<span class="wdx">曜日</span></th>`).join("")}</tr></thead><tbody>`;
     const cells = Array(lead).fill(null).concat(days);
     while (cells.length % 7) cells.push(null);
     for (let r = 0; r < cells.length; r += 7) {
