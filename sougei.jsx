@@ -1353,7 +1353,9 @@ function calNoteLines(master, events, date, edition) {
     const line = title + (e.allDay || !e.start ? "" : ` ${hm(e.date === date ? e.start : "0:00")}〜${hm((e.endDate || e.date) === date ? e.end : "24:00")}`) + (memo1 ? `（${memo1}）` : "");
     if (!title || t === "help" || t === "staff_plan" || t === "user_absent") continue;
     if (t === "user_time" || t === "user_extra" || t === "help_cancel" || t === "liberta") { if ((sg.users || []).some((n) => users.includes(n))) out.user.push(line); continue; }   // ヘルプキャンセルも特記事項(利用者)に
-    if (t === "staff_off" || t === "hwork" || t === "shift") { if ((sg.staff || []).some((n) => staff.includes(n))) out.staff.push(line); continue; }
+    if (t === "staff_off" || t === "hwork" || t === "shift") { if ((sg.staff || []).some((n) => staff.includes(n))) { out.staff.push(line);
+      // 1日休み（メモなし）は Excel の特記事項(職員)の先頭「休み：八壁・…」と同じなので、そこに名前があれば出さない（2026-11-13 依頼者「ここ2重にならないように」）
+      if (t === "staff_off" && !sg.half && e.allDay && !memo1) (out.wholeOff = out.wholeOff || []).push({ line, staff: (sg.staff || []).slice() }); } continue; }
     if (t) continue;
     // 利用者その他で時間があるものは保留の欄のコマになり、そこから特記事項に出る（二重にしない。2026-11-10）
     if (e.label === "uother" && (e.users || []).some((n) => users.includes(n))) continue;   // 終日も（2026-11-10）
@@ -1368,7 +1370,7 @@ function calNoteLines(master, events, date, edition) {
     else if (inText(staff, title) || (e.tanto || []).some((n) => staff.includes(n))) out.staff.push(line);
     else if ((e.biz === "houkago" ? "houkago" : "seikatsu") === myBiz) out.biz.push(line);
   }
-  return { user: [...new Set(out.user)], staff: [...new Set(out.staff)], biz: [...new Set(out.biz)] };
+  return { user: [...new Set(out.user)], staff: [...new Set(out.staff)], biz: [...new Set(out.biz)], wholeOff: out.wholeOff || [] };
 }
 
 // seedのパターン(名前ベース)を現在のマスタのIDに解決してpattern形式へ
@@ -4194,6 +4196,9 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     }
   }
 
+  // カレンダーの「八壁 休み」（1日休み）は、先頭の「休み：八壁」に名前があれば出さない（二重にしない。2026-11-13 依頼者）
+  const offNames = new Set(offs.map((s) => s.name));
+  const calStaffLines = (calN.staff || []).filter((l) => !(calN.wholeOff || []).some((w) => w.line === l && w.staff.length && w.staff.every((n) => offNames.has(n))));
   // ---- 職員 / 連絡事項+訓練 ----
   const allStaffToday = master.staff.filter((s) => !s.hideInStaffList && (!fxOff(s) || wToday(s)));
   const deptMembers = (deptId) => allStaffToday.filter((s) =>
@@ -4231,7 +4236,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       ].filter(Boolean).join("\n");
     },
     staffCountOf,
-    [{ header: "連絡事項", lines: contactLines }, { header: "特記事項(職員)", lines: [...(offs.length ? ["休み：" + offs.map((s) => s.name).join("・")] : []), ...String(sheet.notesStaff || "").split("\n").filter(Boolean), ...staffNotes, ...calN.staff] }, { header: "訓練", lines: trainingLines }]
+    [{ header: "連絡事項", lines: contactLines }, { header: "特記事項(職員)", lines: [...(offs.length ? ["休み：" + offs.map((s) => s.name).join("・")] : []), ...String(sheet.notesStaff || "").split("\n").filter(Boolean), ...staffNotes, ...calStaffLines] }, { header: "訓練", lines: trainingLines }]
   );
 
   // ---- 配車 / パート職員 ----

@@ -318,6 +318,25 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     assert.deepStrictEqual(E9.buildAutoNotes(m, ws.blocks).bizNotes, ["避難訓練"], "時刻なし");
     wb0.noteOnly = true; assert.deepStrictEqual(E9.buildAutoNotes(m, ws.blocks).bizNotes, ["避難訓練"], "コマだけ消しても時刻なし");
     wb0.time = "13:00"; assert.deepStrictEqual(E9.buildAutoNotes(m, ws.blocks).bizNotes, ["避難訓練 13:00〜"], "動かした時刻は出す"); }
+  // 2026-11-11 より前に入ったコマ（終日の印なし・コマだけ消したもの）も、保存のときに印が付いて時刻を出さない（2026-11-13 依頼者「コマ消したら時間消えるようになってる？」）
+  { const wv = [ev("w2", "八壁ﾘﾍﾞﾙﾀ泊りなし", { label: "other", tanto: [] })];
+    const s1 = C9.reconcile(m, E9.emptySheet(), wv, date), old = JSON.parse(JSON.stringify(s1));
+    const ob = old.blocks.find((b) => b.calId === "w2"); delete ob.wholeDay; ob.noteOnly = true;
+    const nl = (bs) => { const a = E9.buildAutoNotes(m, bs); return [...a.userNotes, ...a.staffNotes, ...a.bizNotes].filter((l) => l.includes("ﾘﾍﾞﾙﾀ")); };
+    assert.deepStrictEqual(nl(old.blocks), ["八壁ﾘﾍﾞﾙﾀ泊りなし 8:30〜9:30"], "以前のコマは時刻が出ていた");
+    const s2 = C9.reconcile(m, old, wv, date);
+    assert.deepStrictEqual(nl(s2.blocks), ["八壁ﾘﾍﾞﾙﾀ泊りなし"], "印が付いて時刻なし " + JSON.stringify(s2.blocks.find((b) => b.calId === "w2")));
+    assert.ok(s2.blocks.find((b) => b.calId === "w2").noteOnly, "コマだけ消したまま"); }
+  // カレンダーの1日休み「八壁 休み」は、特記事項(職員)の先頭「休み：八壁」と二重にしない（2026-11-13 依頼者）。メモつき・PM休はそのまま
+  { const ov = [ev("o1", "八壁 休み", { sg: { type: "staff_off", staff: ["八壁"] } }), ev("o2", "白戸 休み", { memo: "通院", sg: { type: "staff_off", staff: ["白戸"] } }), ev("o3", "三島 PM休み", { sg: { type: "staff_off", staff: ["三島"], half: "pm" } })];
+    const os = C9.reconcile(m, E9.emptySheet(), ov, date), on = E9.calNoteLines(m, ov, date, "v1");
+    const ow = E9.buildWorkbook(ExcelJS, m, Object.assign({}, os, { calNotes: on }), date);
+    const ob = new ExcelJS.Workbook(); await ob.xlsx.load(await ow.xlsx.writeBuffer());
+    const ot = []; ob.getWorksheet("送迎表").eachRow((r) => r.eachCell((c) => ot.push(String(c.value || ""))));
+    const oall = ot.join("\n");
+    assert.ok(/休み：[^\n]*八壁/.test(oall), "先頭の休み：に八壁");
+    assert.ok(!oall.split("\n").includes("八壁 休み"), "「八壁 休み」は出さない（二重にしない）");
+    assert.ok(oall.includes("白戸 休み（通院）") && oall.includes("三島 PM休み"), "メモつき・PM休は出す"); }
   if (!(mt.offDays || []).includes(1)) has("鳥屋尾"), assert.ok(/鳥屋尾 [^\n]*\(13:00〜15:00不在\)/.test(all), "中抜けはパート欄に（不在）");
   console.log("cal notes OK", cn.user.length, cn.staff.length, cn.biz.length, "/ パート:", (all.match(/三島 [^\n]*/) || [""])[0]);
 })().catch((e) => { console.error(e); process.exit(1); });

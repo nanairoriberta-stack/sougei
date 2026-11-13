@@ -415,6 +415,8 @@ function reconcile(master, sheet, events, date) {
         r2.cancelled = (r2.cancelled || []).concat(hits.filter((b) => !ks.has(hcKey(b))).map(clone)); n.blocks = (n.blocks || []).filter((b) => !ids.has(b.id)); }
     }
     const bl = blocksOf(sp); const have = new Set(((next || sheet).blocks || []).map((b) => b.id));
+    // 終日の予定から入ったコマに「終日」の印が無いもの（2026-11-11 より前に入ったコマ）は印を足す＝特記事項に 8:30〜 を出さない（2026-11-13 依頼者「コマ消したら時間消えるようになってる？」）
+    for (const x of bl) if (x.wholeDay) { const old = ((next || sheet).blocks || []).find((b) => b.id === x.id); if (old && !old.wholeDay) { const n = work(), o2 = n.blocks.find((b) => b.id === x.id); o2.wholeDay = true; } }
     if (bl.some((b) => !have.has(b.id))) { const n = work(); n.blocks = (n.blocks || []).filter((b) => !bl.some((x) => x.id === b.id)).concat(bl); }
   }
   if (next && next.calApplied && !Object.keys(next.calApplied).length) delete next.calApplied;
