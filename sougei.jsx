@@ -4334,7 +4334,8 @@ function bestColW(ExcelJS, master, sheet, date) {
    足りない行を高くする（縦に結合したセルは一番下の行を足す）。少し多めに見積もる＝切れるより少し余るほうがよい。
    返り値：高くした行の数（テスト用） */
 function fitRowHeights(ws) {
-  const dispW = (s) => [...String(s)].reduce((a, ch) => a + (/[\uFF61-\uFF9F\x20-\x7E]/.test(ch) ? 0.55 : 1), 0);
+  // 半角（数字・ｶﾅ）は太字だと全角の約0.6（以前0.55）。2026-11-13 依頼者「エクセルで下がきれる文字がある」（連絡事項の「ﾄﾞﾗ … 8:30〜9:30」の行）
+  const dispW = (s) => [...String(s)].reduce((a, ch) => a + (/[\uFF61-\uFF9F\x20-\x7E]/.test(ch) ? 0.6 : 1), 0);
   const colW = (c) => { const w = ws.getColumn(c).width; return w == null ? 9 : w; };
   const merges = {};   // 親セルの番地 → {top,left,bottom,right}
   Object.values(ws._merges || {}).forEach((m) => { const mm = m && (m.model || m); if (mm && mm.top != null) merges[ws.getCell(mm.top, mm.left).address] = { top: mm.top, left: mm.left, bottom: mm.bottom, right: mm.right }; });
@@ -4349,9 +4350,10 @@ function fitRowHeights(ws) {
       let w = 0; for (let c = rg.left; c <= rg.right; c++) w += colW(c);
       const size = (cell.font && cell.font.size) || 11;
       // 列の幅1＝約7ピクセル（Excelの標準）、全角1文字＝文字の大きさ×4/3ピクセル。左右の余白の分を引く
-      const chars = Math.max(1, Math.floor((7 * w - 4) / (size * 4 / 3)));
+      // 行の終わりに「〜」「)」「、」などが来ると Excel は前の文字ごと次の行へ送るので、1行に入る字数は1字少なめに見る
+      const chars = Math.max(1, Math.floor((7 * w - 8) / (size * 4 / 3)) - 1);
       const lines = al.wrapText === false ? txt.split("\n").length : txt.split("\n").reduce((a, l) => a + Math.max(1, Math.ceil(dispW(l) / chars)), 0);
-      need.push([rg.bottom, rg.top, lines * size * 1.7 + 2]);   // 游ゴシックは1行に文字の大きさの約1.7倍の高さが要る（以前の見積りは約1.54倍で、下が切れていた）
+      need.push([rg.bottom, rg.top, lines * size * 1.75 + 4]);   // 游ゴシックは1行に文字の大きさの約1.7倍の高さが要る（以前の見積りは約1.54倍で、下が切れていた）
     });
   });
   let changed = 0;
@@ -11926,7 +11928,8 @@ function AppInner() {
           <Modal title={`出力前チェック ${modal.idx + 1}/${modal.groups.length}: ${g.icon} ${g.title}`} onClose={() => { setModal(null); notify("出力を中止しました", "warn"); }}>
             <div className="flex items-center gap-1 mb-2">
               {modal.groups.map((gg, i) => (
-                <span key={i} className={`text-xs px-1.5 py-0.5 rounded ${i === modal.idx ? "bg-sky-600 text-white font-bold" : i < modal.idx ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-400"}`}>
+                <span key={i} data-check-step={i} onClick={i < modal.idx ? () => setModal({ ...modal, idx: i }) : undefined} title={i < modal.idx ? "押すとこのチェックに戻ります" : undefined}
+                  className={`text-xs px-1.5 py-0.5 rounded ${i === modal.idx ? "bg-sky-600 text-white font-bold" : i < modal.idx ? "bg-emerald-100 text-emerald-700 cursor-pointer hover:bg-emerald-200" : "bg-stone-100 text-stone-400"}`}>
                   {gg.icon}{gg.items.length}
                 </span>
               ))}
@@ -11937,7 +11940,11 @@ function AppInner() {
             </div>
             {g.advice && <div className="text-xs text-stone-500 mb-3">💡 {g.advice}</div>}
             <div className="flex justify-between items-center">
-              <button className={btnSec} onClick={() => { setModal(null); notify("出力を中止しました。修正後にもう一度Excel出力を押してください", "warn"); }}>✋ 中止して直す</button>
+              <div className="flex gap-2">
+                {/* 前のチェックに戻る（2026-11-13 依頼者「エラー画面に戻るボタンも欲しい」） */}
+                {modal.idx > 0 && <button className={btnSec} data-check-back onClick={() => setModal({ ...modal, idx: modal.idx - 1 })}>← 前のチェックへ戻る</button>}
+                <button className={btnSec} onClick={() => { setModal(null); notify("出力を中止しました。修正後にもう一度Excel出力を押してください", "warn"); }}>✋ 中止して直す</button>
+              </div>
               {isLast ? (
                 <button className={btnPri} onClick={() => { setModal(null); doExportNow(); }}>⚠ 確認済み — Excelを出力する</button>
               ) : (

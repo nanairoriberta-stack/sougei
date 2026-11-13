@@ -173,7 +173,22 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(/基本部署：/.test(await P.pg.textContent("[data-base-dept]")), "基本部署は表示だけ");
     assert.strictEqual(await P.pg.locator('text=基本部署の変更').count(), 0, "基本部署の変更の選択はない");
     await P.pg.click('button:text-is("キャンセル")'); await P.pg.waitForTimeout(300);
-    console.log("職員の変更の画面：基本部署は表示だけ OK"); }
+    console.log("職員の変更の画面：基本部署は表示だけ OK");
+    // 出力前チェックの「戻る」（2026-11-13 依頼者「エクセル出力するときのエラー画面に戻るボタンも欲しい」）
+    await P.pg.click('button:text-is("📄 Excel出力")'); await P.pg.waitForTimeout(800);
+    const steps = await P.pg.locator("[data-check-step]").count();
+    assert.ok(steps >= 2, "出力前チェックが2種類以上ある " + steps);
+    assert.strictEqual(await P.pg.locator("[data-check-back]").count(), 0, "1つめには戻るボタンなし");
+    const title1 = await P.pg.textContent("text=/出力前チェック 1\\//");
+    await P.pg.click('button:has-text("確認した — 次のチェックへ")'); await P.pg.waitForTimeout(300);
+    assert.ok(await P.pg.locator("text=/出力前チェック 2\\//").count(), "2つめへ進む");
+    await P.pg.click("[data-check-back]"); await P.pg.waitForTimeout(300);
+    assert.strictEqual(await P.pg.textContent("text=/出力前チェック 1\\//"), title1, "戻るで1つめに戻る");
+    await P.pg.click('button:has-text("確認した — 次のチェックへ")'); await P.pg.waitForTimeout(300);
+    await P.pg.click('[data-check-step="0"]'); await P.pg.waitForTimeout(300);
+    assert.ok(await P.pg.locator("text=/出力前チェック 1\\//").count(), "上の済んだチェックを押しても戻る");
+    await P.pg.click('button:text-is("✋ 中止して直す")'); await P.pg.waitForTimeout(300);
+    console.log("出力前チェックの戻るボタン OK", steps); }
   { // 週間パターンを印刷（Excel）・ヘルプ表は週間パターンとは別（2026-11-06 依頼者）
     await P.pg.click('button:text-is("週間パターン")'); await P.pg.waitForTimeout(1200);
     await P.pg.click('button:text-is("月")'); await P.pg.waitForTimeout(1200);

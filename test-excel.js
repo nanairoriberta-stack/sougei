@@ -392,6 +392,13 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.ok(ws.getRow(1).height >= 4 * 11 * 1.5, "4行ぶん以上 " + ws.getRow(1).height);
   assert.ok(ws.getRow(2).height + ws.getRow(3).height >= 6 * 11 * 1.5, "結合したセルは合わせて6行ぶん以上");
   assert.strictEqual(E13.fitRowHeights(ws), 0, "2回目は何もしない");
+  // 2026-11-13 依頼者「エクセルで下がきれる文字がある」：半角の時刻・ｶﾅまじりの行がちょうど1行に収まる見積りだと、Excelでは折り返して下が切れた
+  //  → 1行に入る字数は少なめ・行の高さは文字の大きさの1.75倍で見る（11ptの全角で幅11の列に約4字。以前は5字で数えた）
+  const ws2 = new ExcelJS.Workbook().addWorksheet("t2");
+  ws2.getColumn(1).width = 11;
+  ws2.getCell(1, 1).value = "ﾄﾞﾗ 通院\n八壁 8:30〜9:30"; ws2.getCell(1, 1).font = { size: 11, bold: true }; ws2.getCell(1, 1).alignment = { wrapText: true }; ws2.getRow(1).height = 15;
+  E13.fitRowHeights(ws2);
+  assert.ok(ws2.getRow(1).height >= 4 * 11 * 1.75, "半角まじりの2行は折り返して4行ぶん以上 " + ws2.getRow(1).height);
   console.log("fit row heights OK", Math.round(ws.getRow(1).height), Math.round(ws.getRow(2).height + ws.getRow(3).height));
 })().catch((e) => { console.error(e); process.exit(1); });
 
