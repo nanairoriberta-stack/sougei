@@ -149,6 +149,7 @@
     const conf = X.conflicts(S.month, c, S.ym), confSet = new Set(conf.map((x) => `${x.date}|${x.name}`));
     const le = X.lateEarly(S.month, c, S.ym), leSet = new Set(le.map((x) => `${x.date}|e|${x.slot}`)), leFix = le.length ? X.fixLateEarly(S.month, c, S.ym) : { fixed: [], left: [] };
     const ri = X.ruleIssues(S.month, c, S.ym), riSet = new Set(ri.map((x) => `${x.date}|${x.kind}|${x.now}`));
+    const ngI = X.ngIssues(S.month, c, S.ym), ngSet = new Set(ngI.map((x) => `${x.date}|${x.kind}|${x.slot}`));   // NGの条件とちがう枠（2026-11-13）
     const days = X.daysOfMonth(S.ym), lead = (X.wdOf(days[0]) + 6) % 7;   // 月曜始まり（2026-11-07 依頼者）
     if (!hidden) html += `<div class="sh-legend" data-legend><span class="e">赤＝早番</span>・<span class="l">青＝遅番</span>（①②③は番号）</div>`;
     // 希望を入れるだけの画面（男性の表の職員）はマスの高さをそろえて押しやすく（2026-11-13 依頼者「スマホで日付が縦にすごく狭くて打ちづらい」。.wo）。スマホの見出しは「月」だけ
@@ -160,7 +161,7 @@
         if (!date) return `<td class="empty"></td>`;
         const d = X.daysOfMonth ? (S.month && S.month.days || {})[date] || {} : {}, need = X.needOf(c, date);
         const slot = (k, i) => { const s = (d[k] || {})[i], n = X.slotName(s), hole = holeSet.has(`${date}|${k}|${i}`), bad = n && confSet.has(`${date}|${n}`);
-          return `<button class="slot ${k}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i><b class="kk">${X.KIND[k]}</b>${X.MARK[i] || i}</i>${n ? esc(n) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
+          return `<button class="slot ${k}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}${ngSet.has(`${date}|${k}|${i}`) ? " ng" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i><b class="kk">${X.KIND[k]}</b>${X.MARK[i] || i}</i>${n ? esc(n) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
         const maxE = Math.max(need.e, ...Object.keys(d.e || {}).map(Number), 0), maxL = Math.max(need.l, ...Object.keys(d.l || {}).map(Number), 0);
         const rows = Math.max(maxE, maxL);
         let grid = "";   // スマホでは早番（赤）・遅番（青）を1列に並べ、名前が見えるようにする（2026-11-07 依頼者「スマホだと名前わからない」）
@@ -181,16 +182,17 @@
     const rowsOf = (k) => Math.max(1, ...WEEK.map((wd) => Math.max(needWd(wd, k), ((B[wd] || {})[k] || []).length)));
     const bCell = (wd, k, i) => { const n = ((B[wd] || {})[k] || [])[i - 1] || "", on = i <= needWd(wd, k) || n;
       return `<td class="${on ? "" : "na"}">${on ? (S.canEdit ? `<button data-bslot="${wd}|${k}|${i}">${esc(n) || "－"}</button>` : esc(n)) : ""}</td>`; };
-    if (!wishOnly) html += `<h2 class="sh-h2">基本シフト（曜日ごと）<small>下書きはこの番号どおりに入ります${c.rotate && c.rotateFrom ? `。①〜③は1週ごとに1つずつずれます（この表は ${Number(c.rotateFrom.slice(5, 7))}/${Number(c.rotateFrom.slice(8))} の週の並び）` : ""}${S.canEdit ? "。マスを押すと変えられます" : ""}${(c.rules || []).length ? `<br>職員ごとの決まり：${(c.rules || []).map((r) => esc(X.ruleText(r))).join("、")}（下書きはこの番号に入れます）` : ""}</small></h2>
+    if (!wishOnly) html += `<h2 class="sh-h2">基本シフト（曜日ごと）<small>下書きはこの番号どおりに入ります${c.rotate && c.rotateFrom ? `。①〜③は1週ごとに1つずつずれます（この表は ${Number(c.rotateFrom.slice(5, 7))}/${Number(c.rotateFrom.slice(8))} の週の並び）` : ""}${S.canEdit ? "。マスを押すと変えられます" : ""}${(c.ng || []).length ? `<br>NGの条件：${(c.ng || []).map((r) => esc(X.ngText(r))).join("、")}（自動で作る・下書きで入れません）` : ""}${(c.rules || []).length ? `<br>職員ごとの決まり：${(c.rules || []).map((r) => esc(X.ruleText(r))).join("、")}（下書きはこの番号に入れます）` : ""}</small></h2>
       <table class="sh-base"><thead><tr><th></th>${WEEK.map((wd) => `<th class="${wd === 0 ? "su" : wd === 6 ? "sa" : ""}">${X.WD[wd]}</th>`).join("")}</tr></thead><tbody>
       ${["e", "l"].map((k) => Array.from({ length: rowsOf(k) }, (_, j) => `<tr class="${j === 0 ? "top" : ""}"><th>${j === 0 ? X.KIND[k] + "番" : ""}<i>${X.MARK[j + 1]}</i></th>${WEEK.map((wd) => bCell(wd, k, j + 1)).join("")}</tr>`).join("")).join("")}
       <tr class="top"><th>日勤</th>${WEEK.map((wd) => `<td>${S.canEdit ? `<button data-bd="${wd}">${esc(((B[wd] || {}).d || []).join("、")) || "－"}</button>` : esc(((B[wd] || {}).d || []).join("、"))}</td>`).join("")}</tr>
       <tr class="top off"><th>休み</th>${WEEK.map((wd) => `<td>${esc(c.members.filter((x) => X.patOf(c, x, wd) === "休").map((x) => x.name).join("、"))}</td>`).join("")}</tr></tbody></table>`;
     // 下の表：職員ごとの曜日のパターン（基本シフトから。早番・遅番・日勤・休み）と今月の希望
     if (!wishOnly) html += `<table class="sh-pat"><thead><tr><th>職員</th>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th>${X.WD[i]}</th>`).join("")}<th>今月の希望休・希望勤務</th></tr></thead><tbody>${c.members.map((x, mi) => `<tr><th>${esc(x.name)}</th>${[1, 2, 3, 4, 5, 6, 0].map((wd) => { const v = X.patOf(c, x, wd); return `<td class="${/休/.test(v) ? "p-off" : ""}">${S.canEdit && !B[wd] ? `<button data-pat="${mi}|${wd}">${esc(v) || "－"}</button>` : esc(v)}</td>`; }).join("")}<td class="sum">${esc(X.wishSummary(S.month, x.name))}</td></tr>`).join("") || `<tr><td colspan="9" class="none">職員がまだいません。「設定」から入れてください。</td></tr>`}</tbody></table>`;
-    if (S.canEdit) html += `<section class="sh-holes" id="shHoles"><h2>空き ${hs.length}枠${conf.length ? `・希望とちがう ${conf.length}件` : ""}${ri.length ? `・決まりとちがう ${ri.length}件` : ""}${le.length ? `・遅番の次の日に早番 ${le.length}件` : ""}</h2>
+    if (S.canEdit) html += `<section class="sh-holes" id="shHoles"><h2>空き ${hs.length}枠${conf.length ? `・希望とちがう ${conf.length}件` : ""}${ri.length ? `・決まりとちがう ${ri.length}件` : ""}${ngI.length ? `・NGの条件とちがう ${ngI.length}件` : ""}${le.length ? `・遅番の次の日に早番 ${le.length}件` : ""}</h2>
       ${le.length ? `<ul class="conf turnx" data-turn-list>${le.map((x) => `<li>${X.label(x.date)} 早${X.MARK[x.slot]} ${esc(x.name)}さんは前の日が遅番です</li>`).join("")}</ul>${leFix.fixed.length ? `<div class="acts"><button data-act="fixturn">替われる人に替える（${leFix.fixed.length}件）</button><span class="note">その日の日勤の人や早番の人に替えます。だめなら前の日の遅番を替えます${leFix.left.length ? `。残りの${leFix.left.length}件は替われる人がいないので、LINE文に入れています` : ""}</span></div>` : `<p class="note">替われる人が見つからないので、LINE文に入れています</p>`}` : ""}
       ${ri.length ? `<ul class="conf rulex" data-rule-list>${ri.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは${X.KIND[x.kind]}${X.MARK[x.slot]}の決まりですが${X.KIND[x.kind]}${X.MARK[x.now]}に入っています</li>`).join("")}</ul><div class="acts"><button data-act="fixrules">決まりどおりに並べ替える</button><span class="note">決まりの番号の人と入れ替えます</span></div>` : ""}
+      ${ngI.length ? `<ul class="conf ngx" data-ng-list>${ngI.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは${X.WD[X.wdOf(x.date)]}曜日の${X.NG_K[x.kind]}はNGですが${x.kind === "d" ? "日勤" : X.KIND[x.kind] + X.MARK[x.slot]}に入っています</li>`).join("")}</ul>` : ""}
       ${conf.length ? `<ul class="conf" data-conf-list>${conf.map((x) => `<li>${X.label(x.date)} ${esc(x.name)}さんは「${esc(x.wish)}」の希望ですが入っています</li>`).join("")}</ul>` : ""}
       <label class="chk"><input type="checkbox" id="shNames" ${S.withNames ? "checked" : ""}>入れそうな人の名前も書く</label>
       <textarea id="shLine" readonly rows="${Math.min(16, 7 + hs.length)}">${esc(X.lineText(S.month, c, S.ym, { groupName: X.GROUPS[S.group], withNames: S.withNames }))}</textarea>
@@ -254,6 +256,10 @@
         <select data-rc="${i}"><option value="0">何人でも</option>${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${Number(r.cnt) === n ? "selected" : ""}>${n}人の日</option>`).join("")}</select>は
         <select data-rs="${i}">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${Number(r.slot) === n ? "selected" : ""}>${X.MARK[n]}</option>`).join("")}</select><button data-rdel="${i}">外す</button></div>`).join("")}</div>
       <button data-radd>＋ 決まりを足す</button>
+      <h4>NGの条件（例：横田さんは土曜日の早番はNG。🤖自動で作る・下書きで入れません）</h4><div class="mem">${(st.ng || []).map((r, i) => `<div class="mrow rrow" data-ng-row="${i}"><select data-gn="${i}">${st.members.map((x) => `<option ${x.name === r.n ? "selected" : ""}>${esc(x.name)}</option>`).join("")}${st.members.some((x) => x.name === r.n) ? "" : `<option selected>${esc(r.n)}</option>`}</select>は
+        <select data-gw="${i}"><option value="-1">毎日</option>${[1, 2, 3, 4, 5, 6, 0].map((wd) => `<option value="${wd}" ${Number(r.wd) === wd ? "selected" : ""}>${X.WD[wd]}曜日</option>`).join("")}</select>の
+        <select data-gk="${i}">${Object.keys(X.NG_K).map((k) => `<option value="${k}" ${r.k === k ? "selected" : ""}>${X.NG_K[k]}</option>`).join("")}</select>はNG<button data-gdel="${i}">外す</button></div>`).join("")}</div>
+      <button data-gadd>＋ NGの条件を足す</button>
       <h4>職員（上から順に下書きで入ります）</h4><div class="mem">${st.members.map((x, i) => `<div class="mrow"><input data-mname="${i}" value="${esc(x.name)}" maxlength="20"><button data-mup="${i}" aria-label="上へ">↑</button><button data-mdel="${i}" aria-label="外す">外す</button></div>`).join("")}</div>
       <button data-madd>＋ 職員を足す</button>
       <div class="acts"><button data-set-close>やめる</button><button class="primary" data-set-save>保存</button></div></div></div>`;
@@ -299,7 +305,7 @@
       if (!confirm("確定を取り消します。表の職員には勤務が見えなくなり、職場カレンダーからも消えます。よろしいですか？")) return;
       S.month = S.month || {}; S.month.fixed = false; changed("month"); toast("確定を取り消しました"); return; }
     if (act === "auto") {
-      if (!confirm(`${S.ym.replace("-", "年")}月のシフトを自動で作ります。\n希望・基本パターン・決まり・「遅番の次の日は早番にしない」を見て、空いている枠を埋めます。\n手で入れた枠はそのままです。よろしいですか？`)) return;
+      if (!confirm(`${S.ym.replace("-", "年")}月のシフトを自動で作ります。\n希望・基本パターン・決まり・NGの条件・「遅番の次の日は早番にしない」を見て、空いている枠を埋めます。\n手で入れた枠はそのままです。よろしいですか？`)) return;
       const before = X.holes(S.month, cfg(), S.ym).length, r = X.autoShift(S.month, cfg(), S.ym); S.month = r.month; changed("month");
       const cnt = (h) => r.filled.filter((x) => x.how === h).length, hw = r.filled.filter((x) => x.how === "休日出勤");
       const msg = [`自動で作りました：空き ${before} → ${r.holes.length}`, cnt("日勤から") ? `日勤から ${cnt("日勤から")}枠` : "", cnt("早遅") ? `早遅 ${cnt("早遅")}枠` : "",
@@ -311,7 +317,9 @@
     if (act === "calendar") { const u = H.url("?page=calendar"); if (u) { const l = document.createElement("a"); l.href = u; l.target = "_top"; document.body.appendChild(l); l.click(); l.remove(); } return; }
     if (act === "line") { const h = $("shHoles"); if (h) h.scrollIntoView({ behavior: "smooth" }); return; }
     if (act === "copy") { const ta = $("shLine"); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (x) {} if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => toast("コピーしました。LINEに貼り付けてください"), () => toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください")); else toast(ok ? "コピーしました" : "文を選んだので、長押しでコピーしてください"); return; }
-    if (act === "settings") { const c = cfg(); S.settings = { title: c.title, need: clone(c.need), members: clone(c.members), rotate: !!c.rotate, rotateFrom: c.rotateFrom || "", rules: clone(c.rules || []) }; drawSettings(); return; }
+    if (act === "settings") { const c = cfg(); S.settings = { title: c.title, need: clone(c.need), members: clone(c.members), rotate: !!c.rotate, rotateFrom: c.rotateFrom || "", rules: clone(c.rules || []), ng: clone(c.ng || []) }; drawSettings(); return; }
+    if (at("[data-gadd]")) { readSettings(); S.settings.ng.push({ n: (S.settings.members[0] || {}).name || "", wd: 6, k: "e" }); drawSettings(); return; }
+    if (at("[data-gdel]")) { readSettings(); S.settings.ng.splice(Number(at("[data-gdel]").dataset.gdel), 1); drawSettings(); return; }
     if (at("[data-radd]")) { readSettings(); S.settings.rules.push({ n: (S.settings.members[0] || {}).name || "", k: "l", cnt: 0, slot: 2 }); drawSettings(); return; }
     if (at("[data-rdel]")) { readSettings(); S.settings.rules.splice(Number(at("[data-rdel]").dataset.rdel), 1); drawSettings(); return; }
     if (at("[data-set-close]")) { S.settings = null; drawSettings(); return; }
@@ -319,7 +327,7 @@
     if (at("[data-mdel]")) { readSettings(); S.settings.members.splice(Number(at("[data-mdel]").dataset.mdel), 1); drawSettings(); return; }
     if (at("[data-mup]")) { readSettings(); const i = Number(at("[data-mup]").dataset.mup); if (i > 0) { const a = S.settings.members; [a[i - 1], a[i]] = [a[i], a[i - 1]]; } drawSettings(); return; }
     if (at("[data-set-save]")) { readSettings(); const st = S.settings; st.members = st.members.filter((x) => x.name.trim()).map((x) => Object.assign(x, { name: x.name.trim() }));
-      S.cfg = Object.assign(clone(cfg()), { title: st.title.trim() || cfg().title, need: st.need, members: st.members, rotate: !!st.rotate && !!st.rotateFrom, rotateFrom: st.rotateFrom, rules: (st.rules || []).filter((r) => r.n) }); S.settings = null; changed("cfg"); drawSettings(); toast("設定を保存しました"); return; }
+      S.cfg = Object.assign(clone(cfg()), { title: st.title.trim() || cfg().title, need: st.need, members: st.members, rotate: !!st.rotate && !!st.rotateFrom, rotateFrom: st.rotateFrom, rules: (st.rules || []).filter((r) => r.n), ng: (st.ng || []).filter((r) => r.n) }); S.settings = null; changed("cfg"); drawSettings(); toast("設定を保存しました"); return; }
   });
   function readSettings() {
     const st = S.settings; if (!st) return;
@@ -327,6 +335,7 @@
     if ($("stRot")) st.rotate = $("stRot").checked; if ($("stRotFrom")) st.rotateFrom = $("stRotFrom").value;
     const rv = (a, i) => { const x = document.querySelector(`[data-${a}="${i}"]`); return x ? x.value : ""; };
     (st.rules || []).forEach((r, i) => { if (!document.querySelector(`[data-rn="${i}"]`)) return; r.n = rv("rn", i); r.k = rv("rk", i); r.cnt = Number(rv("rc", i)); r.slot = Number(rv("rs", i)); });
+    (st.ng || []).forEach((r, i) => { if (!document.querySelector(`[data-gn="${i}"]`)) return; r.n = rv("gn", i); r.wd = Number(rv("gw", i)); r.k = rv("gk", i); });
     document.querySelectorAll("[data-mname]").forEach((x) => { st.members[Number(x.dataset.mname)].name = x.value; });
     document.querySelectorAll("[data-need]").forEach((x) => { const [k, wd] = x.dataset.need.split("|"); st.need[wd] = Object.assign({}, st.need[wd], { [k]: Number(x.value) }); });
   }

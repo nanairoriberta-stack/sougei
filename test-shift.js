@@ -234,3 +234,21 @@ console.log("shift extra ok");
   const h = JSON.parse(JSON.stringify(g)); delete h.wish["秋山"][D];
   assert.ok(!S.fitPending(h).wishFit, "希望を消すと覚えも消える");
   console.log("fit wish OK"); }
+// NGの条件（2026-11-13 依頼者「横田は土曜早番基本NGなどの条件を入れたり出したり」）
+{ const S = require("./shiftcore.js"), ym = "2026-12";
+  const c = Object.assign(S.cfgOf("m", null), { ng: [{ n: "秋山", wd: 6, k: "e" }, { n: "近藤", wd: -1, k: "a" }] });
+  const sats = S.daysOfMonth(ym).filter((d) => S.wdOf(d) === 6), all = S.daysOfMonth(ym);
+  const r = S.autoShift({ wish: { "秋山": { [sats[1]]: "早" } } }, c, ym);
+  for (const d of sats) { const e = Object.values(r.month.days[d].e).map(S.slotName);
+    if (d === sats[1]) assert.ok(e.includes("秋山"), "本人の希望（早番）は希望が先 " + d);
+    else assert.ok(!e.includes("秋山"), "土曜の早番に秋山を入れない " + d + " " + e); }
+  assert.ok(all.every((d) => !S.workers(r.month, d).has("近藤")), "毎日の出勤NGの近藤は入れない");
+  assert.ok(sats.filter((d) => d !== sats[1]).every((d) => Object.values(r.month.days[d].e).filter(S.slotName).length >= 2), "空いた土曜の早番はほかの人で埋まる");
+  assert.ok(!S.candidates({}, c, sats[0], "e").some((n) => /^秋山/.test(n)), "入れそうな人にも出さない");
+  const man = { days: { [sats[0]]: { e: { 1: { n: "秋山" } }, l: {}, d: [] } } };
+  const iss = S.ngIssues(man, c, ym);
+  assert.deepStrictEqual(iss, [{ date: sats[0], name: "秋山", kind: "e", slot: 1 }], "手で入れた枠は動かさず、NGの条件とちがうに出す");
+  assert.strictEqual(S.ngText(c.ng[0]), "秋山さんは土曜日の早番はNG");
+  assert.strictEqual(S.ngText(c.ng[1]), "近藤さんは毎日の出勤はNG");
+  assert.deepStrictEqual(S.ngIssues(man, S.cfgOf("m", null), ym), [], "条件が無ければ何も出ない");
+  console.log("ng conditions OK"); }

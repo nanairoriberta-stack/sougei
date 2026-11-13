@@ -447,6 +447,17 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("女性A"), "女性の職員");
     assert.ok((await T.pg.locator(".sh-title").innerText()).includes("女性職員"));
     assert.strictEqual(api(t, "shift.get", [{ group: "f", ym: "2026-11" }]).data.cfg.value.members.length, 10, "8人＋足した2人");
+    // NGの条件を足す・外す（2026-11-13 依頼者「横田は土曜早番基本NGなどの条件を入れたり出したり」）
+    await T.pg.click('[data-act="settings"]'); await T.pg.waitForTimeout(200);
+    await T.pg.click("[data-gadd]"); await T.pg.click("[data-gadd]"); await T.pg.waitForTimeout(100);
+    await T.pg.selectOption('[data-gn="0"]', "女性A"); await T.pg.selectOption('[data-gw="0"]', "6"); await T.pg.selectOption('[data-gk="0"]', "e");
+    await T.pg.selectOption('[data-gn="1"]', "女性B"); await T.pg.selectOption('[data-gw="1"]', "-1"); await T.pg.selectOption('[data-gk="1"]', "l");
+    await T.pg.locator("[data-ng-row]").first().screenshot({ path: "g_shift_ng.png" });
+    await T.pg.click('[data-gdel="1"]'); await T.pg.waitForTimeout(100);
+    assert.strictEqual(await T.pg.locator("[data-ng-row]").count(), 1, "外すと消える");
+    await T.pg.click("[data-set-save]"); await T.pg.waitForTimeout(2500);
+    assert.deepStrictEqual(api(t, "shift.get", [{ group: "f", ym: "2026-11" }]).data.cfg.value.ng, [{ n: "女性A", wd: 6, k: "e" }], "NGの条件が保存される");
+    assert.ok((await T.pg.locator(".sh-h2").first().innerText()).includes("女性Aさんは土曜日の早番はNG"), "基本シフトの見出しにNGの条件");
     assert.deepStrictEqual(real(T.errs), [], "画面エラーなし"); await T.pg.context().close();
     // 表の職員（横田・一般）：スマホで開くと自分の希望だけ入れられる
     const yk = rows().find((r) => r[1] === "横田");

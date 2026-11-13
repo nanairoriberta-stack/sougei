@@ -63,3 +63,4 @@ label.opt{flex-direction:row;align-items:center;gap:6px;padding:6px;border:1px s
 .sh-fix{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;padding:8px 10px;border-radius:8px;background:#fff7ed;border:1px solid #fdba74;font-size:13px}.sh-fix.on{background:#ecfdf5;border-color:#6ee7b7}.sh-fix small{color:var(--sub)}.sh-fix button{margin-left:auto}
 .sh-grid.wo td.day{height:84px}.sh-grid.wo .dnum{font-size:16px;padding:2px 0}.sh-grid.wo .line.wish{font-size:12px;line-height:1.3}.sh-grid.wo td.day.wishmode:active{background:#ffedd5}
 @media (max-width:760px){.wdx{display:none}.sh-grid.wo td.day{height:68px}.sh-grid.wo .dnum{font-size:17px}.sh-grid.wo .line.wish{font-size:10px;word-break:break-all}.sh-grid.wo th{font-size:13px;padding:4px 0}}
+.slot.ng{background:#fee2e2;outline:2px dashed #dc2626}.conf.ngx li{color:#b91c1c}
