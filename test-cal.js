@@ -542,3 +542,50 @@ console.log('extra OK');
  assert.ok(!C.reconcile(m,xo,[],D).blocks.some(b=>b.id==='cal_ev_oth00001_hold'),'予定を消すとコマも消える');
  console.log('other koma OK');
 }
+// 職員・利用者を日付で切り替える（2026-11-14 依頼者「職員の時間帯・休み、利用者の利用日・時間などもこの日以降変更。ルールと同じように」）
+{ const m0 = E.mergeSeedMaster(null, E.seedMaster()), st = m0.staff.find((s) => s.name === "八壁"), us = m0.users.find((u) => u.name === "中村");
+  const edit = (m, fn) => ({ ...m, staff: m.staff.map((s) => (s.id === st.id ? fn(s) : s)) });
+  // 12/1から八壁の勤務時間を 9:00〜18:00 に
+  const m1 = E.schedulePeople(m0, edit(m0, (s) => ({ ...s, start: "9:00", end: "18:00" })), "2026-12-01");
+  assert.strictEqual(m1.peopleUntil.length, 1); assert.strictEqual(m1.peopleUntil[0].until, "2026-11-30");
+  const at = (m, d) => E.peopleAtDate(m, d).staff.find((s) => s.id === st.id);
+  assert.strictEqual(at(m1, "2026-11-30").start, st.start, "11/30まではこれまで");
+  assert.strictEqual(at(m1, "2026-12-01").start, "9:00", "12/1から新しい時間");
+  assert.strictEqual(m1.staff.find((s) => s.id === st.id).start, "9:00", "一覧はいちばん新しい内容");
+  // 日付なしで固定休を変えると、どの期間にも効き、12/1からの勤務時間はそのまま
+  const m2 = E.schedulePeople(m1, edit(m1, (s) => ({ ...s, offDays: [3] })), "");
+  assert.deepStrictEqual(at(m2, "2026-11-30").offDays, [3]); assert.strictEqual(at(m2, "2026-11-30").start, st.start, "前の期間の勤務時間はそのまま");
+  assert.deepStrictEqual(at(m2, "2026-12-01").offDays, [3]); assert.strictEqual(at(m2, "2026-12-01").start, "9:00");
+  // 利用者：1/5から利用曜日を月水だけに
+  const m3 = E.schedulePeople(m2, { ...m2, users: m2.users.map((u) => (u.id === us.id ? { ...u, days: [1, 3] } : u)) }, "2027-01-05");
+  const uat = (m, d) => E.peopleAtDate(m, d).users.find((u) => u.id === us.id);
+  assert.deepStrictEqual(uat(m3, "2027-01-04").days, us.days); assert.deepStrictEqual(uat(m3, "2027-01-05").days, [1, 3]);
+  assert.strictEqual(m3.peopleUntil.length, 2, "区切りは2つ");
+  // 足した人は前の日まではいない、消した人は前の日まではいる
+  const nw = { ...st, id: "s_new", name: "新人" };
+  const m4 = E.schedulePeople(m3, { ...m3, staff: [...m3.staff, nw] }, "2026-12-15");
+  assert.ok(!E.peopleAtDate(m4, "2026-12-14").staff.some((s) => s.id === "s_new") && E.peopleAtDate(m4, "2026-12-15").staff.some((s) => s.id === "s_new"), "新人は12/15から");
+  const gone = m0.staff.find((s) => s.name === "白戸");
+  const m5 = E.schedulePeople(m4, { ...m4, staff: m4.staff.filter((s) => s.id !== gone.id) }, "2026-12-20");
+  assert.ok(E.peopleAtDate(m5, "2026-12-19").staff.some((s) => s.id === gone.id) && !E.peopleAtDate(m5, "2026-12-20").staff.some((s) => s.id === gone.id), "白戸は12/19まで");
+  assert.ok(C.peopleWithPast(m5).staff.some((s) => s.id === gone.id), "カレンダーの候補には残る");
+  // calsync の peopleAt と同じ結果
+  for (const d of ["2026-11-01", "2026-11-30", "2026-12-01", "2026-12-14", "2026-12-15", "2026-12-19", "2026-12-20", "2027-01-04", "2027-01-05", ""])
+    assert.deepStrictEqual(C.peopleAt(m5, d), E.peopleAtDate(m5, d), "同じ計算 " + d);
+  // その日の送迎表（applyDayDept）・カレンダーの反映でもその日の内容
+  assert.strictEqual(E.applyDayDept(m5, 1, null, null, null, "2026-11-30").staff.find((s) => s.id === st.id).start, st.start);
+  assert.strictEqual(E.applyDayDept(m5, 2, null, null, null, "2026-12-01").staff.find((s) => s.id === st.id).start, "9:00");
+  const ev = { id: "pp1", rev: 1, date: "2026-12-14", endDate: "2026-12-14", allDay: true, title: "白戸 休み", sg: { type: "staff_off", staff: ["白戸"] } };
+  const r = C.reconcile(m5, E.emptySheet(), [ev], "2026-12-14"); assert.ok(r.staffOv[gone.id] && r.staffOv[gone.id].off, "12/14は白戸がいるので休みが入る");
+  // 区切りの説明・区切りを消す
+  assert.ok(/八壁（勤務時間）/.test(E.peopleCutText(m5, m5.peopleUntil[0])), E.peopleCutText(m5, m5.peopleUntil[0]));
+  const m6 = E.dropPeopleCut(m5, "2026-11-30");
+  assert.strictEqual(at(m6, "2026-11-30").start, "9:00", "区切りを消すと前の日も新しい内容");
+  assert.ok(E.peopleAtDate(m6, "2026-12-14").staff.every((s) => s.id !== "s_new"), "ほかの区切りはそのまま");
+  // 同じ内容に戻したら区切りは消える
+  const m7 = E.schedulePeople(m1, edit(m1, (s) => ({ ...s, start: st.start, end: st.end })), "");
+  assert.ok(!m7.peopleUntil, "中身が同じになった区切りは消える");
+  // 区切りが無く日付も無い変更はこれまでどおり
+  const m8 = E.schedulePeople(m0, edit(m0, (s) => ({ ...s, memo: "x" })), "");
+  assert.ok(!m8.peopleUntil);
+  console.log("people by date OK"); }

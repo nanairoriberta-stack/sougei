@@ -84,6 +84,12 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - その日のルールは `applyDayDept(…, dateStr)` で入る（送迎表の日の画面 `sheetMaster`・チェック・Claudeの `get_day`）。週間パターン（日付なし）は新しいルール。`get_rules` は `date` を渡すとその日の分
 - ルールの画面・ヘルプ表の上の「このあとのルール変更を使い始める日」（`RuleFromBar`）。日付を入れて変えると `scheduleRules` が前日までの分を残す。空欄はすべての日（前の区切りにも同じ変更）。中身が同じになった区切りは消える。「区切りを消す」ボタンあり
 
+## 職員・利用者を日付で切り替える（2026-11-14 依頼者「職員の時間帯・休み、利用者の利用日・時間などもこの日以降変更。ルールと同じように」）
+- `master.peopleUntil=[{until, staff:{id:その期間の人|null}, users:{id:…}}]`（古い順）。区切りは「次の期間とちがう人」だけ（null＝その期間はいない）。その日の一覧＝いまの一覧に新しい区切りから順に当てる（`peopleAtDate`＝sougei.jsx、`SGCal.peopleAt`＝calsync.js。同じ計算・テストで比べている）
+- 職員・利用者のタブの上「このあとの職員（利用者）の変更を使い始める日」（`PeopleFromBar`・`data-peoplefrom`）。日付を入れて変えると `schedulePeople` が変えた項目だけをその日からに（ほかの項目の日付の変更はそのまま）。足した人はその前の日まではいない、消した人はいる（＝入職・退職・利用開始・終了もこれで）。空欄は全部の日。区切りの説明（`peopleCutText`「井川（勤務時間）」）と「区切りを消す」（`dropPeopleCut`）。中身が同じになった区切りは消える
+- 効くところ：送迎表の日の画面・チェック・Excel（`applyDayDept` の頭）、カレンダーの反映（`reconcile`・`summary`）、Claudeの `get_day`、期間の出欠（`attendance_`）。カレンダーの名前の候補は区切りにだけいる人も（`peopleWithPast`）。週間パターンはいまの一覧
+- 以前からある個別の欄（`retireDate` 退職日・`startDate` 利用開始日・`daysFrom`）はマスタExcelの取り込みでだけ入る（タブに欄は無い）。そのまま効く。テスト `test-cal.js`・`pw/gas_ui.js`
+
 ## ヘルプ名の統合（2026-10-29）
 「井上入浴」「黒田入浴（ヘルプ）」は同じ時刻の「井上ヘルプ」「黒田ヘルプ」と同じ（`HELP_LABEL_MERGE`・`canonHelpLabel`）。保存されている名前は書き換えず、
 表示（`dataForGrid`）・パターン読込・チェック（`sheetData`）・Excel（`buildWorkbook`）・ヘルプ表（`rulesOf` の helpBase をまとめる、`HelpBoardTab`）・`extraKeyOf`/`helpBaseFor` でそろえる。画面で開いて保存し直すとこの名前で残る。赤山・藤井などほかの「入浴」はそのまま（男性のみ・入浴のみのルールが名前の「入浴」を見ている）

@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.13d',
+  VERSION: '2026.11.14a',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -482,6 +482,7 @@ function namesList_() {
   var users = [], kids = [], seenK = {}, seen = {}, idx = docIndex_(), depts = [], seenD = {}, places = ['自宅', 'ﾘﾍﾞ'], seenP = { '自宅': 1, 'ﾘﾍﾞ': 1 };
   ['v1', 'v2', 'v3'].forEach(function (ed) {
     var d = docGet_(kvPath_(APP.EDITIONS[ed] + 'master'), idx); var m = d ? d.value.v : null; if (!m) return;
+    m = SGCal.peopleWithPast(m);   // 日付の区切りにだけいる人（このあといなくなる人など）も候補に（2026-11-14）
     var dn = function (id) { var x = (m.departments || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ''; };
     // 週間パターンでの迎え・送りの時刻（利用者タブに時刻が無い人のいつもの時刻。2026-11-12 依頼者「その利用者のデフォルトのその日の送り時間」）
     var patT = {};
@@ -1001,6 +1002,7 @@ function attendance_(me, a) {
   var dn = function (m, id) { var x = (m.departments || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ''; };
   var out = dates.map(function (date) {
     var ns = biz === 'houkago' ? 'v3:' : linkTargetNs_(date), m = mOf(ns); if (!m) return { date: date };
+    m = SGCal.peopleAt(m, date);   // その日の職員・利用者（日付で切り替わる変更。2026-11-14）
     var sd = docGet_(kvPath_(ns + 'sheet:' + date), idx);
     var v = sd && sd.value && sd.value.v ? sd.value.v : { runs: [], blocks: [], staffOv: {}, userAbsent: {}, userExtra: {}, noRide: {}, userTime: {} };
     v = SGCal.reconcile(m, v, events, date);

@@ -385,6 +385,7 @@ function healPlaces(get, work, id) {
 /* sheet を events に合わせる。変更がなければ同じ sheet を返す */
 function reconcile(master, sheet, events, date) {
   if (!master || !sheet) return sheet;
+  master = peopleAt(master, date);   // その日の職員・利用者（日付で切り替わる変更）
   const specs = specsFor(master, events, date);
   const applied = sheet.calApplied || {};
   const want = new Map(specs.map((s) => [s.id, s]));
@@ -425,6 +426,7 @@ function reconcile(master, sheet, events, date) {
 
 /* 画面表示用：その日に反映中のカレンダー予定 */
 function summary(master, sheet, events, date) {
+  master = peopleAt(master, date);
   return summary0(master, sheet, events, date).map((x) => {           // 保留へ移した数（まだ保留のままのもの）も見せる
     const rec = ((sheet && sheet.calApplied) || {})[x.id];
     const n = ((rec && rec.held) || []).filter((h) => ((sheet[h.t] || []).find((y) => y.id === h.id) || {}).staffId === HOLD_ID).length;
@@ -511,6 +513,36 @@ function exportChanges(sheet) {
   return out;
 }
 
-const API = { reconcile, specsFor, komaSg, summary, TYPE_LABEL, appTime, REQ_ID, linkReqs, linkApply, linkStatus, exportSnapOf, exportChanges };
+/* その日の職員・利用者（日付で切り替わる変更。2026-11-14）。sougei.jsx の peopleAtDate と同じ計算（直すときは両方）
+   master.peopleUntil=[{until, staff:{id:人|null}, users:{id:人|null}}]（古い順）。新しい区切りから順に当てる */
+function peopleAt(master, date) {
+  const cuts = (master && master.peopleUntil) || [];
+  if (!date || !cuts.length) return master;
+  let st = master;
+  for (let i = cuts.length - 1; i >= 0; i--) {
+    const c = cuts[i]; if (!c || String(date) > c.until) continue;
+    const o = Object.assign({}, st);
+    ["staff", "users"].forEach((k) => {
+      const d = c[k] || {}; if (!Object.keys(d).length) return;
+      const list = (o[k] || []).filter((x) => !(x && x.id in d && d[x.id] === null)).map((x) => (x && d[x.id] ? d[x.id] : x));
+      Object.keys(d).forEach((id) => { if (d[id] && !list.some((x) => x && x.id === id)) list.push(d[id]); });
+      o[k] = list;
+    });
+    st = o;
+  }
+  return st;
+}
+// いまの一覧に、日付の区切りにだけいる人（このあといなくなる人など）も足したもの（カレンダーの名前の候補用）
+function peopleWithPast(master) {
+  const cuts = (master && master.peopleUntil) || [];
+  if (!cuts.length) return master;
+  const o = Object.assign({}, master);
+  ["staff", "users"].forEach((k) => { const list = (o[k] || []).slice();
+    cuts.forEach((c) => Object.keys((c && c[k]) || {}).forEach((id) => { const v = c[k][id]; if (v && !list.some((x) => x && x.id === id)) list.push(v); }));
+    o[k] = list; });
+  return o;
+}
+
+const API = { peopleAt, peopleWithPast, reconcile, specsFor, komaSg, summary, TYPE_LABEL, appTime, REQ_ID, linkReqs, linkApply, linkStatus, exportSnapOf, exportChanges };
 if (typeof module !== "undefined" && module.exports) module.exports = API; else G.SGCal = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);

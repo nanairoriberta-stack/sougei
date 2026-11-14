@@ -161,6 +161,27 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.locator("[data-rulefrom]").screenshot({ path: "g_rulefrom.png" });
     await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(400);
     console.log("ルールの使い始める日:", txt.split("\n")[1]); }
+  // 職員・利用者も日付で切り替える（2026-11-14 依頼者「職員の時間帯・休み、利用者の利用日・時間などもこの日以降変更。ルールと同じように」）
+  { await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(400);
+    assert.ok(await P.pg.locator("[data-peoplefrom]").isVisible(), "職員のタブに「使い始める日」");
+    await P.pg.click("[data-peoplefrom] [data-datepop]"); const day = await P.pg.locator("[data-peoplefrom] [data-day]").nth(20).getAttribute("data-day");
+    await P.pg.click(`[data-peoplefrom] [data-day="${day}"]`); await P.pg.waitForTimeout(200);
+    const sid = await P.pg.locator("[data-staff-start]").first().getAttribute("data-staff-start");
+    const m0 = api(t, "kv.get", ["master"]).data.value, s0 = m0.staff.find((x) => x.id === sid);
+    await P.pg.fill(`[data-staff-start="${sid}"]`, "10:00"); await P.pg.locator(`[data-staff-start="${sid}"]`).blur(); await P.pg.waitForTimeout(3500);
+    const m1 = api(t, "kv.get", ["master"]).data.value, cut = (m1.peopleUntil || [])[0];
+    assert.ok(cut && cut.staff && cut.staff[sid] && cut.staff[sid].start === s0.start, "前の日までの勤務時間が区切りに残る " + JSON.stringify(m1.peopleUntil));
+    assert.strictEqual(m1.staff.find((x) => x.id === sid).start, "10:00", "一覧は新しい時間");
+    const txt = await P.pg.locator("[data-peoplefrom]").innerText();
+    assert.ok(txt.includes(`${s0.name}（勤務時間）`), "区切りの説明 " + txt);
+    await P.pg.locator("[data-peoplefrom]").screenshot({ path: "g_peoplefrom.png" });
+    await P.pg.click("[data-peoplefrom-clear]"); await P.pg.waitForTimeout(100);
+    await P.pg.click(`[data-peoplecut-del="${cut.until}"]`); await P.pg.click('button:text-is("はい")'); await P.pg.waitForTimeout(3500);
+    assert.ok(!api(t, "kv.get", ["master"]).data.value.peopleUntil, "区切りを消すと無くなる");
+    await P.pg.fill(`[data-staff-start="${sid}"]`, s0.start); await P.pg.locator(`[data-staff-start="${sid}"]`).blur(); await P.pg.waitForTimeout(3000);
+    assert.strictEqual(api(t, "kv.get", ["master"]).data.value.staff.find((x) => x.id === sid).start, s0.start, "元に戻す");
+    await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(400);
+    console.log("職員の使い始める日:", txt.split("\n").slice(-2).join(" / ")); }
   { // 職員・車両・利用者のタブは基本の部署の順（職員はパートが各部署の下）
     for (const tb of ["職員", "車両", "利用者"]) { await P.pg.click(`button:text-is("${tb}")`); await P.pg.waitForTimeout(400); }
     await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(300); await P.pg.screenshot({ path: "g_staff_tab.png" });

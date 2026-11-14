@@ -311,6 +311,112 @@ function scheduleRules(oldM, newM, from) {
   if (!out.length && !(oldM.rulesUntil || []).length) return { ...newM, rules: newR };
   return { ...newM, rules: newR, rulesUntil: out };
 }
+// ---------- 日付で切り替わる職員・利用者（2026-11-14 依頼者「職員の時間帯・休み、利用者の利用日・時間などもこの日以降変更」） ----------
+// master.peopleUntil = [{ until:"YYYY-MM-DD", staff:{id: その期間の職員|null}, users:{id: その期間の利用者|null} }]（古い順）。
+// 区切り i は「次の期間とちがう人」だけを持つ（null＝その期間はいない）。その日の職員・利用者は、いまの一覧から新しい区切りの順に当てていく。
+// ※ calsync.js の peopleAt と同じ計算（サーバーの反映・出欠一覧で使う）。直すときは両方
+const PEOPLE_KINDS = ["staff", "users"];
+function peopleApply(state, cut) {
+  const out = { ...state };
+  PEOPLE_KINDS.forEach((k) => {
+    const d = (cut && cut[k]) || {}; if (!Object.keys(d).length) return;
+    const list = (out[k] || []).filter((x) => !(x && x.id in d && d[x.id] === null)).map((x) => (x && d[x.id] ? d[x.id] : x));
+    Object.entries(d).forEach(([id, v]) => { if (v && !list.some((x) => x && x.id === id)) list.push(v); });
+    out[k] = list;
+  });
+  return out;
+}
+function peopleAtDate(master, dateStr) {
+  const cuts = (master && master.peopleUntil) || [];
+  if (!dateStr || !cuts.length) return master;
+  let st = master;
+  for (let i = cuts.length - 1; i >= 0; i--) if (cuts[i] && String(dateStr) <= cuts[i].until) st = peopleApply(st, cuts[i]);
+  return st;
+}
+// 期間ごとの職員・利用者 [{until, staff, users}]（最後は until:null＝いま）
+function peoplePeriods(m) {
+  const cuts = ((m && m.peopleUntil) || []).filter((v) => v && v.until).slice().sort((a, b) => (a.until < b.until ? -1 : 1));
+  const per = [{ until: null, staff: (m && m.staff) || [], users: (m && m.users) || [] }];
+  for (let i = cuts.length - 1; i >= 0; i--) { const s = peopleApply(per[0], cuts[i]); per.unshift({ until: cuts[i].until, staff: s.staff, users: s.users }); }
+  return per;
+}
+function peopleCutsOf(per) {
+  const cuts = [];
+  for (let i = 0; i < per.length - 1; i++) {
+    const c = { until: per[i].until }; let any = false;
+    PEOPLE_KINDS.forEach((k) => {
+      const a = new Map((per[i][k] || []).filter(Boolean).map((x) => [x.id, x])), b = new Map((per[i + 1][k] || []).filter(Boolean).map((x) => [x.id, x])), d = {};
+      a.forEach((x, id) => { if (JSON.stringify(x) !== JSON.stringify(b.get(id))) d[id] = x; });
+      b.forEach((x, id) => { if (!a.has(id)) d[id] = null; });
+      if (Object.keys(d).length) { c[k] = d; any = true; }
+    });
+    if (any) cuts.push(c);
+  }
+  return cuts;
+}
+// 職員・利用者の変更(oldM → newM)を「from の日から」効くように並べ直す。from が空ならすべての日（前の区切りの分にも同じ変更）。
+// 変えた項目だけを当てる（ほかの項目の、日付で決めた変更はそのまま）。足した人は from より前にはいない、消した人は from より前にはいる
+function schedulePeople(oldM, newM, from) {
+  if (!oldM || !newM) return newM;
+  const ch = {}; let any = false;
+  PEOPLE_KINDS.forEach((k) => {
+    const a = new Map((oldM[k] || []).filter(Boolean).map((x) => [x.id, x])), b = new Map((newM[k] || []).filter(Boolean).map((x) => [x.id, x])), d = {};
+    b.forEach((x, id) => { const o = a.get(id); if (!o) d[id] = { add: x }; else if (JSON.stringify(o) !== JSON.stringify(x)) {
+      const f = {}; new Set([...Object.keys(o), ...Object.keys(x)]).forEach((key) => { if (JSON.stringify(o[key]) !== JSON.stringify(x[key])) f[key] = x[key]; }); d[id] = { fields: f }; } });
+    a.forEach((x, id) => { if (!b.has(id)) d[id] = { del: true }; });
+    if (Object.keys(d).length) { ch[k] = d; any = true; }
+  });
+  if (!any) return newM;
+  if (!(oldM.peopleUntil || []).length && !from) return newM;    // 区切りが無く、日付も無い＝これまでどおり
+  let per = peoplePeriods(oldM);
+  if (from) {
+    const pd = dayBeforeStr(from), i = per.findIndex((v) => v.until == null || v.until >= pd);
+    if (per[i].until !== pd) per.splice(i, 0, { until: pd, staff: per[i].staff, users: per[i].users });
+  }
+  const startOf = (i) => (i === 0 ? "" : (() => { const [y, mo, d] = per[i - 1].until.split("-").map(Number); const t = new Date(y, mo - 1, d + 1); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; })());
+  per = per.map((p, i) => {
+    if (p.until == null || (from && !(startOf(i) >= from))) return p;
+    const q = { ...p };
+    PEOPLE_KINDS.forEach((k) => {
+      const d = ch[k]; if (!d) return;
+      let list = (q[k] || []).slice();
+      Object.entries(d).forEach(([id, c]) => {
+        if (c.del) list = list.filter((x) => !(x && x.id === id));
+        else if (c.add) { if (!list.some((x) => x && x.id === id)) list.push(c.add); }
+        else list = list.map((x) => { if (!x || x.id !== id) return x; const y = { ...x }; Object.entries(c.fields).forEach(([key, v]) => { if (v === undefined) delete y[key]; else y[key] = v; }); return y; });
+      });
+      q[k] = list;
+    });
+    return q;
+  });
+  per[per.length - 1] = { until: null, staff: newM.staff || [], users: newM.users || [] };
+  const cuts = peopleCutsOf(per);
+  const out = { ...newM };
+  if (cuts.length) out.peopleUntil = cuts; else delete out.peopleUntil;
+  return out;
+}
+// 区切りを消す：その区切りまでの日にも、次の期間の職員・利用者を使う
+function dropPeopleCut(m, until) {
+  const per = peoplePeriods(m).filter((p) => p.until !== until);
+  const cuts = peopleCutsOf(per), out = { ...m };
+  if (cuts.length) out.peopleUntil = cuts; else delete out.peopleUntil;
+  return out;
+}
+// 区切りの中身を文に（例：田中（勤務時間・固定休）、佐藤（まだいない））
+const PEOPLE_FIELD_JA = { start: "勤務時間", end: "勤務時間", shiftByDay: "曜日ごとの勤務時間", offDays: "固定休", deptId: "部署", deptByDay: "曜日別の部署", days: "利用曜日", meetTime: "迎えの時刻", sendTime: "送りの時刻",
+  timeByDay: "曜日ごとの時刻", meetPlace: "迎え先", sendPlace: "送り先", name: "名前", emp: "形態", awayFrom: "中抜け", awayTo: "中抜け", noRideDefault: "基本の送迎なし" };
+function peopleCutText(m, cut) {
+  const per = peoplePeriods(m), i = per.findIndex((p) => p.until === cut.until), next = per[i + 1] || per[per.length - 1];
+  const parts = [];
+  PEOPLE_KINDS.forEach((k) => Object.entries(cut[k] || {}).forEach(([id, v]) => {
+    const n = (next[k] || []).find((x) => x && x.id === id);
+    if (!v) { parts.push(`${n ? n.name : "?"}（まだいない）`); return; }
+    if (!n) { parts.push(`${v.name}（このあといない）`); return; }
+    const f = [...new Set(Object.keys({ ...v, ...n }).filter((key) => JSON.stringify(v[key]) !== JSON.stringify(n[key])).map((key) => PEOPLE_FIELD_JA[key] || "そのほか"))];
+    parts.push(`${n.name}（${f.join("・")}）`);
+  }));
+  return parts.join("、");
+}
 // ルールの対象時間かどうか(time=その時刻だけ / from=この時刻以降だけ)
 const ruleTimeHit = (row, t) => {
   if (row.time) return t != null && t === toMin(row.time);
@@ -1273,6 +1379,7 @@ function helpBaseWarn(master, sheetData, wd) {
 }
 
 function applyDayDept(master, wd, staffOv, userDept, userExtra, dateStr) {
+  master = peopleAtDate(master, dateStr);   // その日の職員・利用者（日付で切り替わる変更。2026-11-14）
   const sd = staffOv || {}, ud = userDept || {}, ux = userExtra || {};
   const staff = master.staff.map((s) => {
     const d = (sd[s.id] && sd[s.id].deptId) || (s.deptByDay || {})[wd] || s.deptId;
@@ -8580,7 +8687,7 @@ function StaffTab({ master, update }) {
               <td className="p-1 w-28"><input className={inputCls} value={s.position} onChange={(e) => upd(s.id, { position: e.target.value })} /></td>
               <td className="p-1 w-px whitespace-nowrap">
                 <div className="flex items-center gap-1">
-                  <input className="w-16 border border-stone-300 rounded-md px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400" value={s.start} onChange={(e) => setBaseTime(s, "start", e.target.value)} title="基本の出勤" />
+                  <input className="w-16 border border-stone-300 rounded-md px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400" data-staff-start={s.id} value={s.start} onChange={(e) => setBaseTime(s, "start", e.target.value)} title="基本の出勤" />
                   <span className="text-stone-400 text-xs">〜</span>
                   <input className="w-16 border border-stone-300 rounded-md px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400" value={s.end} onChange={(e) => setBaseTime(s, "end", e.target.value)} title="基本の退勤" />
                   <button
@@ -9258,6 +9365,38 @@ function RuleFromBar({ master, from, setFrom, rawUpdate }) {
     </div>
   );
 }
+// 職員・利用者のタブの上の「このあとの変更を使い始める日」（ルールと同じ。2026-11-14 依頼者）
+function PeopleFromBar({ master, from, setFrom, rawUpdate, kind }) {
+  const list = (master.peopleUntil || []).filter((v) => v && v.until);
+  const what = kind === "users" ? "利用者" : "職員";
+  return (
+    <div className="mb-3 p-2 rounded-lg border border-amber-300 bg-amber-50" data-peoplefrom>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-bold text-stone-700">このあとの{what}の変更を使い始める日</span>
+        <DatePop date={from} setDate={setFrom} empty="日付を選ぶ（空欄＝すべての日）" />
+        {from && <button type="button" className="text-xs px-2 py-1 rounded border border-stone-300 bg-white hover:bg-stone-50" data-peoplefrom-clear onClick={() => setFrom("")}>日付の指定をやめる</button>}
+      </div>
+      <div className="text-xs text-stone-600 mt-1">
+        {from
+          ? <>これから行う変更（勤務時間・固定休・部署・利用曜日・時刻・迎え先・送り先・{what}を足す・消す など）は <b>{mdStr(from)}からの送迎表</b> にだけ効きます。<b>{mdStr(dayBeforeStr(from))}までの送迎表</b> は、これまでのままです。足した人は{mdStr(dayBeforeStr(from))}まではいない、消した人は{mdStr(dayBeforeStr(from))}まではいます。</>
+          : "日付を入れないと、変更はすべての日の送迎表に効きます（これまでどおり）。変わる日が決まっているときは、先に日付を入れてから変更してください。"}
+      </div>
+      {list.length > 0 && (
+        <div className="text-xs text-stone-700 mt-1.5 border-t border-amber-200 pt-1.5">
+          <div className="font-bold">日付で切り替わる職員・利用者（下の一覧は、いちばん新しい内容です）</div>
+          {list.map((v, i) => (
+            <div key={v.until} className="flex items-center gap-2 mt-0.5 flex-wrap" data-peoplecut={v.until}>
+              <span>{i === 0 ? "" : mdStr(list[i - 1].until) + "の翌日"}〜{mdStr(v.until)}：{peopleCutText(master, v)} はその時の内容</span>
+              <button type="button" className="text-[11px] px-1.5 py-0.5 rounded border border-stone-300 bg-white hover:bg-rose-50" data-peoplecut-del={v.until}
+                onClick={async () => { if (await ask(`${mdStr(v.until)}までの区切りを消しますか?\n消すと、その日までの送迎表にも新しいほうの内容が効きます。`)) rawUpdate((m) => dropPeopleCut(m, v.until)); }}>区切りを消す</button>
+            </div>
+          ))}
+          <div className="mt-0.5">{mdStr(list[list.length - 1].until)}の翌日から：いま下に出ている内容</div>
+        </div>
+      )}
+    </div>
+  );
+}
 function RulesTab({ master, update }) {
   const r = rulesOf(master);
   const setKey = (key, rows) => update((m) => ({ ...m, rules: { ...rulesOf(m), [key]: rows } }));
@@ -9655,6 +9794,9 @@ function AppInner() {
   // ルールの変更：「使い始める日」が入っていれば、その前の日までの送迎表は前のルールのまま(scheduleRules)
   const [ruleFrom, setRuleFrom] = useState("");
   const updateRules = (fn) => updateMaster((m) => scheduleRules(m, fn(m), ruleFrom));
+  // 職員・利用者の変更：「使い始める日」が入っていれば、その前の日までの送迎表はこれまでのまま(schedulePeople。2026-11-14)
+  const [peopleFrom, setPeopleFrom] = useState("");
+  const updatePeople = (fn) => updateMaster((m) => schedulePeople(m, fn(m), peopleFrom));
 
   useEffect(() => {
     if (!master) return;
@@ -11386,9 +11528,10 @@ function AppInner() {
             </div>
           </div>
         )}
-        {tab === "staff" && <StaffTab master={master} update={updateMaster} />}
+        {(tab === "staff" || tab === "users") && <PeopleFromBar master={master} from={peopleFrom} setFrom={setPeopleFrom} rawUpdate={updateMaster} kind={tab} />}
+        {tab === "staff" && <StaffTab master={master} update={updatePeople} />}
         {tab === "vehicles" && <VehicleTab master={master} update={updateMaster} />}
-        {tab === "users" && <UserTab master={master} update={updateMaster} />}
+        {tab === "users" && <UserTab master={master} update={updatePeople} />}
         {(tab === "helpboard" || tab === "rules") && <RuleFromBar master={master} from={ruleFrom} setFrom={setRuleFrom} rawUpdate={updateMaster} />}
         {tab === "helpboard" && <HelpBoardTab master={master} update={updateRules} patterns={{}} loading={false} onDeletePattern={deleteHelpFromPatterns} onAddPattern={addHelpToPatterns} />}
         {tab === "rules" && <RulesTab master={master} update={updateRules} />}
