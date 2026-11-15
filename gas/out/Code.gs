@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.14a',
+  VERSION: '2026.11.15a',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -770,18 +770,15 @@ function calApply_(me, op) {
   op = sanitizeOp_(op);
   op.by = me.no;                                   // 誰の操作かはサーバーが決める（端末の申告は使わない）
   if (op.comment) op.comment.by = me.no;
-  // 職員の休み・予定・休日出勤・勤務時間変更も、ほかの職員の分を入れられる（2026-10-31 依頼者。以前は本人の分だけ）。変更・削除は作った人か管理者だけ（下）
+  // 職員の休み・予定・休日出勤・勤務時間変更も、ほかの職員の分を入れられる（2026-10-31 依頼者。以前は本人の分だけ）。変更・削除もだれでも（2026-11-15）
   // 利用者が関わるもの（利用者休み・送迎の変更・利用日外利用・ヘルプ）も、すべての職員が入力できる
   var sg = op.kind === 'upsert' ? op.ev.sg : null;
   return withLock_(function () {
     var idx = docIndex_();
     var paths = TCCore.targetsOf(op);
     var raws = paths.map(function (p) { var d = docGet_(p, idx); return d ? d.value : null; });
-    if (op.kind !== 'comment' && me.role !== '管理者') {
-      // 送迎表に反映する予定の変更・削除は、作った本人か管理者だけ
-      var ex = null; raws.forEach(function (r) { var ev = r && r.events && r.events[op.id]; if (ev) ex = ev; });
-      if (ex && ex.sg && ex.createdBy && ex.createdBy !== me.no) throw { code: 'invalid_argument', message: '送迎表に反映する予定は、作った人か管理者だけが変更できます' };
-    }
+    // 入れた予定は、だれでも変更・削除できる（2026-11-15 依頼者「入れたカレンダーの内容は誰でも編集できるように。変更に対応できるよう」。以前は送迎表に反映する予定は作った人か管理者だけ）。
+    // だれが変えたかは変更履歴に残る（作った人 createdBy はそのまま）
     var res = TCCore.applyOp(op, paths, raws);
     if (res.status === 'outdated') return { status: 'failed' };
     if (res.status !== 'ok') return { status: res.status, reason: res.reason || null, theirs: res.theirs || null };

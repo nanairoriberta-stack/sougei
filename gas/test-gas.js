@@ -103,12 +103,16 @@ async function bootstrap() {
     return `余村慎（${st.start}〜${st.end}）→ ${s1.staffOv[st.id].start} から出勤。変更履歴：「${log.find((l) => l.includes("AM休")).split(" | ").slice(1, 6).join(" / ")}」`;
   });
 
-  await test("権限：一般職員もほかの職員の休みを入れられる（作った人として記録・ほかの人は変えられない）・送迎表を直接変更できない・端末の名乗りは使わず本人として記録", async () => {
+  await test("権限：一般職員もほかの職員の休みを入れられる（作った人として記録・ほかの人も直せる）・送迎表を直接変更できない・端末の名乗りは使わず本人として記録", async () => {
     const { g } = await bootstrap();
     const d = device(g); const me = await d.login(noOf(g, "八壁"), pinOf(g, "八壁"));
     assert.strictEqual((await d.call("cal.apply", { kind: "upsert", opId: "op_aaaaaaa1", id: "ev_aaaaaaa1", baseRev: null, ev: evOff("2026-11-03", "日野") })).status, "ok", "ほかの職員の休みも入れられる（2026-10-31〜）");
     { const o = device(g); await o.login(noOf(g, "白戸"), pinOf(g, "白戸")); const ex = Object.values(TC.mergeDays(await o.call("docs.query", { col: "days", from: "2026-11-03", to: "2026-11-03" }))).find((e) => e.id === "ev_aaaaaaa1");
-      await o.call("cal.apply", { kind: "delete", opId: "op_aaaaaaa9", id: "ev_aaaaaaa1", date: "2026-11-03", baseRev: ex.rev }).then(() => assert.fail("作った人でも管理者でもない"), (e) => assert.strictEqual(e.code, "invalid_argument")); }
+      // 作った人でなくても変えられる（2026-11-15 依頼者「入れたカレンダーの内容は誰でも編集できるように」）。作った人はそのまま
+      const up = await o.call("cal.apply", { kind: "upsert", opId: "op_aaaaaaa9", id: "ev_aaaaaaa1", baseRev: ex.rev, ev: Object.assign({}, ex, { title: "日野 休み（直した）" }) });
+      assert.strictEqual(up.status, "ok", "ほかの職員が入れた予定も直せる");
+      const ex2 = Object.values(TC.mergeDays(await o.call("docs.query", { col: "days", from: "2026-11-03", to: "2026-11-03" }))).find((e) => e.id === "ev_aaaaaaa1");
+      assert.strictEqual(ex2.title, "日野 休み（直した）"); assert.strictEqual(ex2.createdBy, me.no, "作った人は八壁のまま"); }
     await d.call("kv.merge", { key: "master", base: null, mine: { staff: [] }, baseKnown: false }).then(() => assert.fail("送迎表の変更"), (e) => assert.strictEqual(e.code, "invalid_argument"));
     const ar = await d.call("cal.apply", { kind: "upsert", opId: "op_aaaaaaa2", id: "ev_aaaaaaa2", baseRev: null, by: "999", ev: { title: "研修", date: "2026-11-03", endDate: "2026-11-03", allDay: true, label: "event" } });
     const day = Object.values(TC.mergeDays(await d.call("docs.query", { col: "days", from: "2026-11-03", to: "2026-11-03" })));
@@ -176,7 +180,7 @@ async function bootstrap() {
     return "3人分すべて保存、変更履歴に3人の名前";
   });
 
-  await test("予定を消すと送迎表からも外れる（作った本人か管理者だけ消せる）", async () => {
+  await test("予定を消すと送迎表からも外れる（だれでも消せる）", async () => {
     const { g, admin } = await bootstrap();
     const date = "2026-11-11"; const E = engFor("v1"); const m = await admin.kv().get("master"); admin.kv().put("sheet:" + date, E.emptySheet()); await settleKV([admin]);
     const a = device(g); const me = await a.login(noOf(g, "白戸"), pinOf(g, "白戸")); a.cal(me.no).save(evOff(date, "白戸"), null); await settleCal([a]);
@@ -184,10 +188,12 @@ async function bootstrap() {
     assert.ok((await admin.call("kv.get", "sheet:" + date)).value.staffOv[sid].off);
     const ev = Object.values(TC.mergeDays(await a.call("docs.query", { col: "days", from: date, to: date })))[0];
     const other = device(g); await other.login(noOf(g, "日野"), pinOf(g, "日野"));
-    await other.call("cal.apply", { kind: "delete", opId: "op_bbbbbbb1", id: ev.id, date, baseRev: ev.rev }).then(() => assert.fail(), (e) => assert.strictEqual(e.code, "invalid_argument"));
-    a._cal.remove(ev); await settleCal([a]);
+    // ほかの職員も消せる（2026-11-15 依頼者「誰でも編集できるように」）→ 送迎表から外れる・変更履歴に消した人
+    assert.strictEqual((await other.call("cal.apply", { kind: "delete", opId: "op_bbbbbbb1", id: ev.id, date, baseRev: ev.rev })).status, "ok", "ほかの職員も消せる");
+    await settleCal([a]);
     assert.ok(!((await admin.call("kv.get", "sheet:" + date)).value.staffOv || {})[sid], "休みが外れた");
-    return "他の職員は消せない、本人が消すと送迎表から外れる";
+    assert.ok(g.sheets.get("変更履歴").data.slice(1).some((r) => r.join(" ").includes("日野")), "変更履歴に消した人");
+    return "ほかの職員も消せる、消すと送迎表から外れる";
   });
 
   await test("ラベルごとの項目：ヘルプ・送迎（迎え・送りの変更）・休日出勤・勤務時間変更・担当が送迎表に反映される（権限つき・消すと外れる）", async () => {
