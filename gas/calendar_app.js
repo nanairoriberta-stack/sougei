@@ -1,6 +1,7 @@
 
 "use strict";
-const APP_VERSION="2026.11.16c";
+const APP_VERSION="2026.11.16c";   // 予備（ログインするとサーバーの版 SGHost.me.version を出す。2026-11-16〜 版を上げるのは Code.gs だけ＝依頼者の差し替えを少なく）
+const appVer=()=>{try{return(window.SGHost&&SGHost.me&&SGHost.me.version)||APP_VERSION}catch{return APP_VERSION}};
 const C=window.TCCore;
 const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"nintei",n:"認定調査"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"}];
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
@@ -773,7 +774,7 @@ function openSync(){
     <dt>通信</dt><dd>${S.online?"オンライン":"オフライン"}</dd>
     <dt>未送信</dt><dd>${st?st.queued:0}件${st&&st.queued?(st.lastError?`（${Math.round(st.retryDelay/1000)}秒ごとに自動で再送）`:"（送信中）"):""}</dd>
     <dt>端末への一時保存</dt><dd>${store.persistent?"有効（画面を閉じても未送信は消えません）":"使えません（画面を閉じると未送信が消えます）"}</dd>
-    <dt>アプリの版</dt><dd><span class="time">${APP_VERSION}</span>（データ形式 ${C.SCHEMA}）</dd></dl>
+    <dt>アプリの版</dt><dd><span class="time">${appVer()}</span>（データ形式 ${C.SCHEMA}）</dd></dl>
     <div class="row"><button class="ghost sm" data-resend ${st&&st.queued?"":"disabled"}>今すぐ再送</button><button class="ghost sm" data-reload>最新版を読み込み直す</button></div>
     ${issues.length?`<h3 style="margin:6px 0 0;font-size:14px">確認が必要な操作 ${issues.length}件</h3>${issues.map(opHtml).join("")}`:`<p class="by" style="font-size:13px;margin:0">確認が必要な操作はありません。</p>`}
     ${S.isAdmin?`<div class="op"><h4>バックアップ（編集者のみ）</h4><p class="by" style="font-size:12px;margin:0">全期間の予定とコメントを端末に保存します。月末に1回保存しておくと、万一のときに戻せます。復元は「サーバーにない予定」と「削除された予定」だけを戻し、今ある予定は上書きしません。</p><div class="acts"><button class="primary sm" data-export="json">バックアップを保存（JSON）</button><button class="ghost sm" data-export="csv">一覧をCSVで保存</button><button class="ghost sm" data-restore-file>バックアップから復元</button><button class="ghost sm" data-ttfix>TimeTreeの「○○休み」を職員休みにする</button></div><div id="bkSlot"></div></div>`:""}
@@ -799,7 +800,7 @@ async function doExport(kind){
     const{days,cms}=await fetchAll();const events=Object.values(C.mergeDays(days));
     const stamp=ymd(new Date());let data,filename;
     if(kind==="json"){const comments={};for(const c of cms){const m=C.normCm(c);for(const k in m)comments[k]=(comments[k]||[]).concat(m[k])}
-      data=JSON.stringify({app:"team-calendar",schema:C.SCHEMA,version:APP_VERSION,exportedAt:new Date().toISOString(),events,comments},null,1);filename=`チームカレンダー_バックアップ_${stamp}.json`}
+      data=JSON.stringify({app:"team-calendar",schema:C.SCHEMA,version:appVer(),exportedAt:new Date().toISOString(),events,comments},null,1);filename=`チームカレンダー_バックアップ_${stamp}.json`}
     else{const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;const ps=await profiles(events.flatMap(e=>e.members));
       const rows=[["開始日","終了日","終日","開始","終了","タイトル","事業","ラベル","場所","担当","参加者","メモ","状態","更新日時"]].concat(events.sort((a,b)=>a.date.localeCompare(b.date)||cmp(a,b)).map(e=>[e.date,e.endDate,e.allDay?"終日":"",e.start,e.end,e.title,BIZN[bizOf(e)],LMAP[e.label].n,e.place,(e.tanto||[]).join("、"),e.members.map(id=>ps[id]?.name||"メンバー").join("、"),e.memo,e.deleted?"削除済み":"",fmtAt(e.updatedAt)]));
       data="﻿"+rows.map(r=>r.map(q).join(",")).join("\r\n");filename=`チームカレンダー_一覧_${stamp}.csv`}
@@ -947,7 +948,7 @@ window.addEventListener("focus",wake);
 window.addEventListener("beforeunload",e=>{if(core&&core.status().queued&&!store.persistent){e.preventDefault();e.returnValue=""}});
 
 /* ---------- 起動 ---------- */
-$("ver").textContent="v"+APP_VERSION;
+$("ver").textContent="v"+appVer();try{window.SGHost&&SGHost.onLogin&&SGHost.onLogin(()=>{$("ver").textContent="v"+appVer()})}catch{}
 render();
 (async()=>{
   await window.SGHost.ready;

@@ -62,6 +62,11 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - `mcp/devserver.js`＋`mcp/call.js`：擬似Google＋中継を常駐させ、Claudeと同じ経路で道具を手で呼べる（`node mcp/call.js get_day '{"edition":"v1","date":"2026-11-02"}'`）
 - `sougei.jsx` の関数をテスト/サーバーで使うときは `build.sh` の `EXP` と `mcp/engine_entry.js` に名前を足す
 
+## 差し替えるファイルだけ伝える（2026-11-16 依頼者「毎回差し替え必要な部分だけ教えて。全部差し替える必要ないんでしょ」）
+- 出すたびに、前に渡した版のコミットと比べて `gas/out/` で変わったファイルだけを返事に書く：`git diff --stat <前に渡した版のコミット> HEAD -- gas/out`。Apps Script のエディタでの名前（Code.gs → 「Code」、calendar.html → 「calendar」など）も添える
+- zip は今までどおり全部入り（初めての人・まとめて貼りたいとき用）。appsscript.json が変わったときは必ず言う。Lib4_engine.gs・sougei.html は sougei.jsx を直すと変わる
+- 版の番号は Code.gs だけに持つ（上の「Excel出力に入る版」）
+
 ## 本番への出し方（依頼者がやる）
 スプレッドシート → 拡張機能 → Apps Script に `gas/out/` の `.gs` と `.html`、`appsscript.json` を貼る →
 初回はエディタで `setup` を実行 → デプロイ（ウェブアプリ）。更新は「デプロイを管理 → 編集 → 新バージョン」（URLは変わらない）。
@@ -71,7 +76,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 
 ## 送迎表のExcel出力に入る版
 `appVerLabel()`（sougei.jsx）＝ `Ver293(2026.10.27f)`：Ver＋`SEED_VERSION`、括弧内はGoogle版の `APP.VERSION`（ログイン時に `SGHost.me.version` で届く）。
-ファイル名 `送迎表_11月2日(月)_Ver293(2026.10.27f).xlsx`、表の一番下の行、印刷の右上に入る。**ファイルを直して出すたびに `gas/Code.gs` の `APP.VERSION`（と `calendar_app.js` の `APP_VERSION`）を上げる**（`SEED_VERSION` は上げるとマスタの初期データが入り直るので、版の区別のために上げない）。
+ファイル名 `送迎表_11月2日(月)_Ver293(2026.10.27f).xlsx`、表の一番下の行、印刷の右上に入る。**ファイルを直して出すたびに `gas/Code.gs` の `APP.VERSION` を上げる**（2026-11-16〜 カレンダーの画面もログイン後はサーバーの版 `SGHost.me.version` を出す＝`calendar_app.js` の `APP_VERSION` は予備で、もう上げない。上げると calendar.html も差し替えが要るため）（`SEED_VERSION` は上げるとマスタの初期データが入り直るので、版の区別のために上げない）。
 
 ## 送迎表の訓練の便（2026-10-28 すっきりさせた）
 - 種別「訓練迎」「訓練送」（`mode:"train"`）の便は、1人ずつ「通常の迎え/送りと同じにする」チェックだけ（`data-trainsame`）。
