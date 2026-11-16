@@ -66,7 +66,7 @@ function makeGas(files) {
     Session: { getScriptTimeZone: () => "Asia/Tokyo" },
     Logger: { log() {} },
     ScriptApp: { getService: () => ({ getUrl: () => "https://script.google.com/macros/s/TEST/exec" }) },
-    HtmlService: (() => { const out = (html) => { const o = { html, title: "", setTitle(t) { o.title = t; return o; }, addMetaTag(n, v) { (o.meta = o.meta || {})[n] = v; return o; }, setFaviconUrl(u) { o.favicon = u; return o; }, setXFrameOptionsMode(m) { o.xfo = m; return o; }, getContent: () => html }; return o; };
+    HtmlService: (() => { const out = (html) => { const o = { html, title: "", setTitle(t) { o.title = t; return o; }, addMetaTag(n, v) { if (!["viewport", "apple-mobile-web-app-capable", "apple-mobile-web-app-status-bar-style", "mobile-web-app-capable", "google-site-verification"].includes(n)) throw new Error("指定したメタタグはこのコンテキストでは使用できません。（本物のGoogleと同じ）" + n); (o.meta = o.meta || {})[n] = v; return o; }, setFaviconUrl(u) { o.favicon = u; return o; }, setXFrameOptionsMode(m) { o.xfo = m; return o; }, getContent: () => html }; return o; };
       return { XFrameOptionsMode: { DEFAULT: 1, ALLOWALL: 2 }, createHtmlOutputFromFile: (n) => out(fs.readFileSync(require("path").join(__dirname, "out", n + ".html"), "utf8")), createHtmlOutput: out }; })(),
   };
   ctx.globalThis = ctx;

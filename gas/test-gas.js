@@ -310,7 +310,7 @@ async function bootstrap() {
   await test("アイコン・題名：「設定」シートB6のGoogleドライブの画像をアイコンに、題名は「なないろ…」（2026-11-16 依頼者のアイコン）", async () => {
     const { g } = await bootstrap();
     const conf = g.sheets.get("設定"); assert.ok(String(conf.data[5][0]).includes("アイコンの画像"), "setup で6行目に「アイコンの画像」");
-    let o = g.ctx.doGet({ parameter: {} }); assert.strictEqual(o.title, "なないろカレンダー"); assert.strictEqual(o.meta["apple-mobile-web-app-title"], "なないろカレンダー"); assert.ok(!o.favicon, "空ならアイコンなし");
+    let o = g.ctx.doGet({ parameter: {} }); assert.strictEqual(o.title, "なないろカレンダー"); assert.ok(!("apple-mobile-web-app-title" in (o.meta || {})), "Googleが受け付けないメタタグは使わない（2026-11-16 実機で画面が開かなくなった）"); assert.ok(!o.favicon, "空ならアイコンなし");
     conf.data[5][1] = "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view?usp=sharing";
     g.ctx.CacheService.getScriptCache().remove("icon1");
     o = g.ctx.doGet({ parameter: { page: "sougei", e: "v2" } });

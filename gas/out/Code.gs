@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.16b',
+  VERSION: '2026.11.16c',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -37,8 +37,8 @@ function doGet(e) {
   var title = page === 'sougei' ? 'なないろ送迎表（' + APP.EDITION_LABEL[ed] + '）' : page === 'shift' ? 'なないろシフト表' : 'なないろカレンダー';
   var out = HtmlService.createHtmlOutput(html)
     .setTitle(title)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
-    .addMetaTag('apple-mobile-web-app-title', page === 'sougei' ? 'なないろ送迎表' : page === 'shift' ? 'なないろシフト表' : 'なないろカレンダー');
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
+  // ※ apple-mobile-web-app-title は Google が受け付けない（2026-11-16 実機「指定したメタタグはこのコンテキストでは使用できません」で画面が開かなくなった）。ホーム画面の名前は題名から
   // アイコン：「設定」シートB6の画像（Googleドライブで「リンクを知っている全員」にした画像のリンク）。iPhoneはこの小さな画像をホーム画面に使うことがある（必ずではない）
   var icon = iconUrl_();
   if (icon) { try { out = out.setFaviconUrl(icon); } catch (e) {} }

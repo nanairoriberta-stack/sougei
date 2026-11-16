@@ -427,7 +427,7 @@ Excel出力の前の確認（`exportCheck`）の2つめ以降に「← 前のチ
 参加者（members）の入力欄は出さない（既存のデータは残す）。「自分の予定」は参加者・担当・送迎表の対象職員に自分が入っているもの。
 
 ## アイコン・題名（2026-11-16 依頼者がアイコンの画像「なないろ Calendar」を送った）
-- 題名：なないろカレンダー／なないろ送迎表（版）／なないろシフト表、`apple-mobile-web-app-title` も（iPhoneのホーム画面の名前）。`doGet`
+- 題名：なないろカレンダー／なないろ送迎表（版）／なないろシフト表（iPhoneのホーム画面の名前もこれ）。`doGet`。**`addMetaTag` は viewport・apple-mobile-web-app-capable・apple-mobile-web-app-status-bar-style・mobile-web-app-capable・google-site-verification だけ**（2026-11-16 実機：`apple-mobile-web-app-title` を入れたら「指定したメタタグはこのコンテキストでは使用できません」で全部の画面が開かなくなった。fakegas もほかの名前は例外にした）
 - アイコン：「設定」シートB6（`confSheet_` が6行目に「アイコンの画像…」）に、Googleドライブで「リンクを知っている全員」にした画像の共有リンク → `iconUrl_`（`lh3.googleusercontent.com/d/<ID>=s180` に直す、10分覚える `icon1`）→ `setFaviconUrl`。
   Googleの画面のいちばん外側は Google が作るので apple-touch-icon は入れられない＝iPhoneがこの小さな画像をホーム画面に使うかは端末しだい（使わなければ題名の1文字目「な」）。確実にしたいときはショートカットアプリで好きな画像のアイコンを作る
 - 画像は `gas/icon/nanairo_icon_512.png`・`_180.png`（依頼者の画像の真ん中を正方形に切り出した。角は iPhone が丸める）。テスト `gas/test-gas.js`
