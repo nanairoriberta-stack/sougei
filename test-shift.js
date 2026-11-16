@@ -222,8 +222,15 @@ console.log("shift extra ok");
   assert.ok(m1.days[D].e[1], "元の月は変えない");
   const b = S.fitWishes(m0, { ...m0, wish: { "近藤": { [D]: "遅" } } });
   assert.ok(!b.days[D].e[2] && !Object.values(b.days[D].l).some((x) => x.n === "近藤"), "遅番の希望：早番から外す（遅番に入れるのは自動で作る・手で）");
-  const c = S.fitWishes(m0, { ...m0, wish: { "横田": { [D]: "休" } } });
-  assert.deepStrictEqual(c.days, m0.days, "休みの希望は変えない（今までどおり「希望とちがう」に出す）");
+  // 休みの希望は、早番・遅番・日勤のすべてから外す（2026-11-16 依頼者「休みの希望でも自動で空けるように」）
+  const c = S.fitWishes(m0, { ...m0, wish: { "横田": { [D]: "休" }, "秋山": { [D]: "休" } } });
+  assert.ok(!c.days[D].d.includes("横田") && c.days[D].d.includes("長島"), "休みの希望：日勤から外す " + JSON.stringify(c.days[D].d));
+  assert.ok(!c.days[D].e[1] && c.days[D].e[2].n === "近藤", "休みの希望：早番の枠を空ける");
+  assert.ok(!S.conflicts(c, S.cfgOf("m", null), "2026-12").some((x) => x.date === D), "空けたので「希望とちがう」に出ない");
+  const c3 = S.fitWishes(null, { days: { [D]: { e: { 3: { n: "横田", t: "6~9" } }, d: ["横田(~13)"] } }, wish: { "横田": { [D]: "休" } } });
+  assert.ok(c3.days[D].e[3] && c3.days[D].d.includes("横田(~13)"), "時間の補足つきで入れた枠は残す");
+  const c2 = { days: { "2026-11-04": { e: { 2: { n: "橋本" } }, l: { 1: { n: "橋本" } } } }, wish: { "橋本": { "2026-11-04": "休" } } };
+  assert.strictEqual(S.fitPending(c2, "2026-11"), c2, "確定した月（11月の紙の表）は動かさない");
   const e = S.fitWishes(m0, { ...m0, wish: { "秋山": { [D]: "PM休" } } });
   assert.deepStrictEqual(e.days, m0.days, "AM休・PM休は変えない");
   // 前から入っていた希望（新しい版の前）にも当てる。当てたら覚えて、そのあと手で戻した枠は動かさない（2026-11-11 依頼者「きえてないよ」）

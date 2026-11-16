@@ -223,15 +223,18 @@
   // 希望休なのに入っている人（希望とちがう）
   /* 希望に合わせて、その日のほかの番の枠を空ける（2026-11-11 依頼者「秋山は基本早番だが、日勤希望となった場合、早の秋山の欄を空ける」）。
      早番（早ﾏﾝｼｮﾝのみ）＝遅番・日勤から外す／遅番（遅ﾏﾝｼｮﾝのみ）＝早番・日勤から外す／日勤＝早番・遅番から外して日勤に入れる。
-     休み・AM休・PM休・時刻の希望は変えない（休みは今までどおり「希望とちがう」に出して組む人が決める。半休・時刻は時間の補足で入っているかもしれない）。空いた枠は「空き」（黄色）になり、自動で作る・下書きで埋まる。月の写しを返す */
-  const WISH_KIND = { "早": "e", "早ﾏﾝのみ": "e", "遅": "l", "遅ﾏﾝのみ": "l", "日": "d" };
+     休み＝早番・遅番・日勤のすべてから外す（2026-11-16 依頼者「休みの希望でも自動で空けるように」。以前は「希望とちがう」に出すだけ。時間の補足つきの枠「余村慎(6~9)」は残す）。
+     AM休・PM休・時刻の希望は変えない（時間の補足で入っているかもしれない）。空いた枠は「空き」（黄色）になり、自動で作る・下書きで埋まる。確定した月は動かさない（fitPending）。月の写しを返す */
+  const WISH_KIND = { "早": "e", "早ﾏﾝのみ": "e", "遅": "l", "遅ﾏﾝのみ": "l", "日": "d", "休": "o" };
   function fitWish(month, name, date) {
     const w = wishOf(month, name, date), kind = WISH_KIND[w];
     if (!kind || !name) return month;
     const out = JSON.parse(JSON.stringify(month || {})); out.days = out.days || {};
     const d = out.days[date] = Object.assign({}, out.days[date]);
-    for (const k of ["e", "l"]) if (k !== kind && d[k]) { const o = Object.assign({}, d[k]); for (const i of Object.keys(o)) if (slotName(o[i]) === name) delete o[i]; d[k] = o; }
-    const dl = (d.d || []).filter((x) => splitName(x).n !== name || kind === "d");
+    // 休み（"o"）は早番・遅番・日勤のすべてから外れる。ただし時間の補足つきで入れた枠（「余村慎(6~9)」＝本人と話して決めた分）はそのまま
+    const keepT = (x) => kind === "o" && !!(x && typeof x === "object" ? x.t : splitName(x).t);
+    for (const k of ["e", "l"]) if (k !== kind && d[k]) { const o = Object.assign({}, d[k]); for (const i of Object.keys(o)) if (slotName(o[i]) === name && !keepT(o[i])) delete o[i]; d[k] = o; }
+    const dl = (d.d || []).filter((x) => splitName(x).n !== name || kind === "d" || keepT(x));
     if (kind === "d" && !dl.some((x) => splitName(x).n === name)) dl.push(name);
     d.d = dl;
     return out;

@@ -430,6 +430,12 @@ const D = path.join(__dirname, "../gas/out");
       assert.ok(!(await inE()), "早番の枠から秋山が外れる");
       assert.ok((await T.pg.locator(`td[data-day="${D3}"]`).innerText()).includes("秋山"), "日勤に入る");
       await wp(D3, "");
+      // 休みの希望でも枠を空ける（2026-11-16 依頼者）：日勤からも外れ、「希望とちがう」に出ない
+      await wp(D3, "休");
+      { const tx = await T.pg.locator(`td[data-day="${D3}"]`).innerText(), dl = tx.split("\n").find((l) => l.startsWith("日勤")) || "";
+        assert.ok(!(await inE()) && !dl.includes("秋山"), "休みの希望：早番・日勤から外れる " + JSON.stringify(tx));
+        assert.ok(!(await T.pg.locator("[data-conf-list]").innerText().catch(() => "")).includes("11/17(火) 秋山"), "希望とちがうに出ない"); }
+      await wp(D3, "");
       await T.pg.click('[data-mode="shift"]'); await T.pg.waitForTimeout(200);   // 元に戻す（シフトを組む画面で早①に秋山）
       await T.pg.click(`[data-slot="${D3}|e|1"]`); await T.pg.waitForTimeout(200);
       if (await T.pg.locator('[data-pick="秋山"]').count()) { await T.pg.click('[data-pick="秋山"]'); await T.pg.waitForTimeout(300); }
