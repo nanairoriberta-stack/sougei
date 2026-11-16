@@ -3659,6 +3659,13 @@ function offTimeBlockWarn(master, sheetData, wd) {
     else if ((() => { const [a0, a1] = awayMin(s, ov); return a0 != null && t < a1 && t + (Number(b.durMin) || SLOT) > a0; })()) { const a = awayOf(s, ov); out.push(pre + `中抜けの時間(${a.from}〜${a.to}は不在)`); }
     else if ((ov.start || ov.end) && outOfShiftSlot(staffTimeOf(s, wd, {}), ov, Math.floor(t / SLOT) * SLOT)) /* 出力前の確認は今までどおり、その日に時間を変えた人だけ */ out.push(pre + `勤務時間外(この日は${ov.start ? ov.start + "から出勤" : ""}${ov.start && ov.end ? "・" : ""}${ov.end ? ov.end + "で退勤" : ""})`);
   });
+  // 出勤時刻未定（用事が済み次第出勤。2026-11-16 依頼者）：その人の担当の便・予定を知らせる（見込みの時刻より後のものも、来られるか分からないので）
+  (master.staff || []).forEach((s) => {
+    const ov = ovAll[s.id] || {}; if (!ov.lateTbd || ov.off) return;
+    const items = [...(sheetData.runs || []).filter((r) => r && r.staffId === s.id).map((r) => `${r.time}【${RUN_KINDS[r.kind] || "便"}】`),
+      ...(sheetData.blocks || []).filter((b) => b && b.staffId === s.id && !b.noteOnly && !/^不在/.test(String(b.label || ""))).map((b) => `${b.time}【${b.label || "予定"}】`)];
+    if (items.length) out.push(`${s.name}: 出勤時刻未定（${ov.lateTbd}後${ov.start ? "・見込み" + ov.start : ""}）の職員に入っています ${items.join("・")}`);
+  });
   return out;
 }
 function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
@@ -7234,6 +7241,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                     </div>
                     {!ov.off && awayMin(s, ov)[0] != null && <div className={`text-[9px] leading-tight ${ov.awayFrom ? "text-amber-700 font-bold" : "text-stone-500"}`} data-away={s.id}>中抜け{awayOf(s, ov).from}-{awayOf(s, ov).to}</div>}
                     {ov.noRide && !ov.off && <div className="text-[10px] font-bold text-violet-700" data-noride={s.id}>送迎なし(ﾏﾝｼｮﾝ)</div>}
+                    {ov.lateTbd && !ov.off && <div className="text-[10px] font-bold text-orange-700" data-late-tbd={s.id} title={`${ov.lateTbd}が済み次第出勤（時刻未定）`}>出勤時刻未定{ov.start ? `(${ov.start}頃)` : ""}</div>}
                     {ov.note && <div className="text-[10px] text-amber-700">{ov.note}</div>}
                   </div>
                   {sheetMode && (

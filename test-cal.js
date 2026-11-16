@@ -589,3 +589,21 @@ console.log('extra OK');
   const m8 = E.schedulePeople(m0, edit(m0, (s) => ({ ...s, memo: "x" })), "");
   assert.ok(!m8.peopleUntil);
   console.log("people by date OK"); }
+// 遅刻の「時刻未定（用事が済み次第出勤）」（2026-11-16 依頼者「病院受診後終わり次第出社で正確な時間がわからない」）
+{ const D = '2026-11-02', T = require('./calcore.js'), ks = S('春日');
+  const sg = T.normSg({ type: 'shift', staff: ['春日'], reason: '遅刻', tbd: true, note: '病院受診' });
+  assert.ok(sg.tbd && sg.note === '病院受診' && !sg.wstart, '時刻なしで残る');
+  assert.ok(!T.normSg({ type: 'staff_off', staff: ['春日'], tbd: true }).tbd, '遅刻（職員時間変更）だけ');
+  const ev = { id: 'evtbd1', rev: 1, date: D, endDate: D, allDay: true, title: '春日 病院受診後出勤（時刻未定）', label: 'late', sg };
+  const myRun = sheet.runs.find((r) => r.staffId === ks.id);
+  const x = C.reconcile(m, sheet, [ev], D);
+  assert.deepStrictEqual(x.staffOv[ks.id], { lateTbd: '病院受診' }, '送迎表に「出勤時刻未定」');
+  if (myRun) assert.strictEqual(x.runs.find((r) => r.id === myRun.id).staffId, ks.id, '時刻が分からないので便は動かさない');
+  assert.ok(/病院受診後出勤（時刻未定）/.test(C.summary(m, x, [ev], D).find((s) => s.id === 'evtbd1').time), '反映中の欄');
+  const w = E.offTimeBlockWarn(m, Object.assign({}, x, { runs: [{ id: 'r9', kind: 'meet', time: '9:00', staffId: ks.id, userIds: [] }] }), 1);
+  assert.ok(w.some((l) => /春日: 出勤時刻未定（病院受診後）の職員に入っています 9:00【迎】/.test(l)), '出力前の確認で知らせる ' + JSON.stringify(w));
+  // 見込みの時刻を入れると遅刻と同じく出勤の時刻も変わる
+  const y = C.reconcile(m, sheet, [{ ...ev, sg: T.normSg({ ...sg, wstart: '11:00' }) }], D);
+  assert.deepStrictEqual(y.staffOv[ks.id], { start: '11:00', lateTbd: '病院受診' });
+  assert.ok(!(ks.id in (C.reconcile(m, x, [], D).staffOv || {})), '予定を消すと元に戻る');
+  console.log('late tbd OK'); }
