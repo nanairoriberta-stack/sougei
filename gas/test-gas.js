@@ -307,6 +307,18 @@ async function bootstrap() {
     return out.join("・");
   });
 
+  await test("アイコン・題名：「設定」シートB6のGoogleドライブの画像をアイコンに、題名は「なないろ…」（2026-11-16 依頼者のアイコン）", async () => {
+    const { g } = await bootstrap();
+    const conf = g.sheets.get("設定"); assert.ok(String(conf.data[5][0]).includes("アイコンの画像"), "setup で6行目に「アイコンの画像」");
+    let o = g.ctx.doGet({ parameter: {} }); assert.strictEqual(o.title, "なないろカレンダー"); assert.strictEqual(o.meta["apple-mobile-web-app-title"], "なないろカレンダー"); assert.ok(!o.favicon, "空ならアイコンなし");
+    conf.data[5][1] = "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view?usp=sharing";
+    g.ctx.CacheService.getScriptCache().remove("icon1");
+    o = g.ctx.doGet({ parameter: { page: "sougei", e: "v2" } });
+    assert.strictEqual(o.favicon, "https://lh3.googleusercontent.com/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345=s180", "ドライブの共有リンクを画像のアドレスに");
+    assert.ok(/^なないろ送迎表（/.test(o.title), o.title);
+    assert.strictEqual(g.ctx.doGet({ parameter: { page: "shift" } }).title, "なないろシフト表");
+    return o.favicon;
+  });
   await test("公開URL：Googleがテスト用の …/dev を返しても、「設定」シートB2の公開URLでメニューのリンク・Claude接続URLを作る", async () => {
     const { g } = await bootstrap();
     const real = g.ctx.ScriptApp; g.ctx.ScriptApp = { getService: () => ({ getUrl: () => "https://script.google.com/macros/s/HEADID/dev" }) };

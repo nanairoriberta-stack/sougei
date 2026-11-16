@@ -70,6 +70,11 @@
   "info": "calendar 7個・sougei 14個・check 1個"
  },
  {
+  "name": "アイコン・題名：「設定」シートB6のGoogleドライブの画像をアイコンに、題名は「なないろ…」（2026-11-16 依頼者のアイコン）",
+  "ok": true,
+  "info": "https://lh3.googleusercontent.com/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345=s180"
+ },
+ {
   "name": "公開URL：Googleがテスト用の …/dev を返しても、「設定」シートB2の公開URLでメニューのリンク・Claude接続URLを作る",
   "ok": true,
   "info": "…/dev → 設定の …/exec を使う（それ以外のURLは無視）"
@@ -172,7 +177,7 @@
  {
   "name": "シフト表作成システムとの連携（?page=export）：キーで読むだけ・シフト表と予定がv1の形で出る（2026-11-10 依頼）",
   "ok": true,
-  "info": "連携のアドレス: …88a6d6f38441fdb1837635a4a25af1"
+  "info": "連携のアドレス: …9f1dd62a63400f8b4c33bb14b9dbef"
  },
  {
   "name": "サーバー処理の重さ（シートの読み書き回数）",

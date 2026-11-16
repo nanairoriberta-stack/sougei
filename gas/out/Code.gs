@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.16a',
+  VERSION: '2026.11.16b',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -33,13 +33,30 @@ function doGet(e) {
   var js = function (v) { return JSON.stringify(v).replace(/</g, '\\u003c'); };
   var html = HtmlService.createHtmlOutputFromFile(page).getContent()
     .replace('/*__BOOT__*/', 'window.__SG_EDITION=' + js(ed) + ';window.__SG_BASE=' + js(base) + ';window.__SG_DATE=' + js(d) + ';');
-  return HtmlService.createHtmlOutput(html)
-    .setTitle(page === 'sougei' ? '送迎表（' + APP.EDITION_LABEL[ed] + '）' : page === 'shift' ? 'シフト表' : 'カレンダー')
+  // 題名は「なないろ…」（iPhoneのホーム画面に追加したときの名前。2026-11-16 依頼者のアイコン「なないろ Calendar」）
+  var title = page === 'sougei' ? 'なないろ送迎表（' + APP.EDITION_LABEL[ed] + '）' : page === 'shift' ? 'なないろシフト表' : 'なないろカレンダー';
+  var out = HtmlService.createHtmlOutput(html)
+    .setTitle(title)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
+    .addMetaTag('apple-mobile-web-app-title', page === 'sougei' ? 'なないろ送迎表' : page === 'shift' ? 'なないろシフト表' : 'なないろカレンダー');
+  // アイコン：「設定」シートB6の画像（Googleドライブで「リンクを知っている全員」にした画像のリンク）。iPhoneはこの小さな画像をホーム画面に使うことがある（必ずではない）
+  var icon = iconUrl_();
+  if (icon) { try { out = out.setFaviconUrl(icon); } catch (e) {} }
+  return out
     // 送迎表の画面の右側に出すカレンダー（?page=calendar&embed=1）だけは、ほかの画面の中に出せるようにする
     .setXFrameOptionsMode(page === 'calendar' && p.embed === '1' ? HtmlService.XFrameOptionsMode.ALLOWALL : HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
+/* アイコンの画像のアドレス（「設定」シートB6）。Googleドライブの共有リンク（…/file/d/ID/view や ?id=ID）は画像そのもののアドレスに直す。10分覚える */
+function iconUrl_() {
+  var c = null; try { c = CacheService.getScriptCache(); var hit = c.get('icon1'); if (hit != null) return hit; } catch (e) {}
+  var v = '';
+  try { var sh = sheet_(APP.SH.conf); v = sh ? String(sh.getRange(6, 2).getValue()).trim() : ''; } catch (e) {}
+  var m = /\/d\/([A-Za-z0-9_-]{20,})/.exec(v) || /[?&]id=([A-Za-z0-9_-]{20,})/.exec(v);
+  var url = m ? 'https://lh3.googleusercontent.com/d/' + m[1] + '=s180' : /^https:\/\/[^\s<>"']+$/.test(v) ? v : '';
+  try { if (c) c.put('icon1', url, 600); } catch (e) {}
+  return url;
+}
 /* 公開URL（…/exec）。Googleの getUrl() はテスト用の …/dev（作った人しか開けない）を返すことがあるので、
    「設定」シートB2に貼った公開URLを優先する（2026-10-28 実機：スマホでメニューの送迎表が開けなかった） */
 var APP_URL_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/;
@@ -103,6 +120,7 @@ function issueExportKey() {
 function confSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(APP.SH.conf);
   if (!sh) { sh = ss.insertSheet(APP.SH.conf); sh.getRange(1, 1, 2, 2).setValues([['項目', '値'], ['公開URL（デプロイの「ウェブアプリ」のURL。最後が /exec）', '']]); sh.setFrozenRows(1); }
+  if (!String(sh.getRange(6, 1).getValue())) sh.getRange(6, 1).setValue('アイコンの画像（Googleドライブで「リンクを知っている全員」にした画像のリンク）');
   return sh;
 }
 
