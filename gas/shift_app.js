@@ -143,7 +143,7 @@
     const wishOnly = !S.canEdit && S.group === "m";
     const fixed = X.isFixed(S.month, S.ym), hidden = wishOnly || (!S.canEdit && (!!(S.month && S.month.hidden) || !fixed)), fx = (S.month && S.month.fixed) || null;
     if (S.canEdit) html += fixed ? `<div class="sh-fix on" data-fix="on">✅ この月のシフトは<b>確定</b>しています（表の職員にも見え、職場カレンダーにも出ます）${fx && fx.at ? `<small>${esc(String(fx.at).slice(5, 10).replace("-", "/"))} ${esc(fx.by || "")}</small>` : ""}<button data-act="unfix">確定を取り消す</button></div>`
-      : `<div class="sh-fix" data-fix="off">この月のシフトは<b>まだ確定していません</b>。組む人（管理者など）だけに見えています。表の職員には希望だけが見え、職場カレンダーにも出ません。<button data-act="fix" class="primary" data-fix-btn>✅ このシフトで確定する</button></div>`;
+      : `<div class="sh-fix" data-fix="off">この月のシフトは<b>まだ確定していません</b>。組む人（管理者など）だけに見えています。表の職員には希望だけが見え、職場カレンダーにも出ません。<button data-act="fix" class="primary" data-fix-btn>✅ このシフトで確定する</button><button data-act="refit" data-refit title="今の希望（休み・早番・遅番・日勤など）に合わない枠を空けます。時間の補足つきで入れた枠はそのままです">🔄 希望の入った状態に戻す</button></div>`;
     else if (hidden && !wishOnly) html += `<div class="sh-fix" data-unfixed>この月のシフトはまだ確定していません。確定すると、ここに勤務が出ます（今は希望だけ入れられます）。</div>`;
     const hs = X.holes(S.month, c, S.ym), holeSet = new Set(hs.map((h) => `${h.date}|${h.kind}|${h.idx}`));
     const conf = X.conflicts(S.month, c, S.ym), confSet = new Set(conf.map((x) => `${x.date}|${x.name}`));
@@ -303,7 +303,17 @@
       S.month = S.month || {}; S.month.fixed = { at: new Date().toISOString(), by: me().name || "" }; changed("month"); toast("確定しました。職員にも見え、カレンダーにも出ます"); return; }
     if (act === "unfix") {
       if (!confirm("確定を取り消します。表の職員には勤務が見えなくなり、職場カレンダーからも消えます。よろしいですか？")) return;
-      S.month = S.month || {}; S.month.fixed = false; changed("month"); toast("確定を取り消しました"); return; }
+      S.month = S.month || {}; S.month.fixed = false; changed("month"); toast("確定を取り消しました。希望どおりに枠を空けるときは「🔄 希望の入った状態に戻す」を押してください", 8000); return; }
+    // 確定を取り消したあと、希望どおりに枠を空けた状態に戻す（2026-11-16 依頼者「確定を取り消すと、確定前の希望が入った状態に戻すボタン」）。
+    // 一度当てて手で戻した枠も当て直す（覚え wishFit を消してから当てる）。確定した月では出さない
+    if (act === "refit") {
+      if (!S.month || X.isFixed(S.month, S.ym)) return;
+      if (!confirm("今の希望（休み・早番・遅番・日勤など）に合わせて、合わない枠を空けます。\n手で入れ直した枠も空きます（時間の補足つきの枠はそのまま）。よろしいですか？")) return;
+      const sig = (m) => JSON.stringify(X.daysOfMonth(S.ym).map((d) => [...X.workers(m, d)].sort()));
+      const before = S.month, m0 = clone(S.month); delete m0.wishFit;
+      const after = X.fitPending(m0, S.ym), n = X.daysOfMonth(S.ym).reduce((a, d) => a + [...X.workers(before, d)].filter((x) => !X.workers(after, d).has(x) || X.entries(after, d).filter((e) => e.n === x).length !== X.entries(before, d).filter((e) => e.n === x).length).length, 0);
+      if (sig(after) === sig(before) && JSON.stringify(after.days) === JSON.stringify(before.days)) { if (after.wishFit) { S.month = after; changed("month"); } toast("もう希望の入った状態です（空ける枠はありません）"); return; }
+      S.month = after; changed("month"); toast(`希望の入った状態に戻しました（${n}人・日の枠を空けました。空いた枠は「🤖 シフトを自動で作る」で埋められます）`, 9000); return; }
     if (act === "auto") {
       if (!confirm(`${S.ym.replace("-", "年")}月のシフトを自動で作ります。\n希望・基本パターン・決まり・NGの条件・「遅番の次の日は早番にしない」を見て、空いている枠を埋めます。\n手で入れた枠はそのままです。よろしいですか？`)) return;
       const before = X.holes(S.month, cfg(), S.ym).length, r = X.autoShift(S.month, cfg(), S.ym); S.month = r.month; changed("month");

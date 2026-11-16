@@ -435,6 +435,15 @@ const D = path.join(__dirname, "../gas/out");
       { const tx = await T.pg.locator(`td[data-day="${D3}"]`).innerText(), dl = tx.split("\n").find((l) => l.startsWith("日勤")) || "";
         assert.ok(!(await inE()) && !dl.includes("秋山"), "休みの希望：早番・日勤から外れる " + JSON.stringify(tx));
         assert.ok(!(await T.pg.locator("[data-conf-list]").innerText().catch(() => "")).includes("11/17(火) 秋山"), "希望とちがうに出ない"); }
+      // 手で戻した枠は動かさない → 「🔄 希望の入った状態に戻す」でもう一度空ける（2026-11-16 依頼者）
+      await T.pg.click('[data-mode="shift"]'); await T.pg.waitForTimeout(200);
+      await T.pg.click(`[data-slot="${D3}|e|1"]`); await T.pg.waitForTimeout(200); await T.pg.click('[data-pick="秋山"]'); await T.pg.waitForTimeout(300);
+      if (await T.pg.locator("button[data-close-pick]").count()) { await T.pg.click("button[data-close-pick]").catch(() => {}); await T.pg.waitForTimeout(200); }
+      assert.ok(await inE(), "手で早番に戻した枠はそのまま");
+      T.pg.once("dialog", (d) => d.accept()); await T.pg.click("[data-refit]"); await T.pg.waitForTimeout(400);
+      assert.ok(!(await inE()), "希望の入った状態に戻すで空く");
+      assert.ok((await T.pg.locator("#shToast").innerText()).includes("希望の入った状態に戻しました"), "お知らせ");
+      await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", "秋山");
       await wp(D3, "");
       await T.pg.click('[data-mode="shift"]'); await T.pg.waitForTimeout(200);   // 元に戻す（シフトを組む画面で早①に秋山）
       await T.pg.click(`[data-slot="${D3}|e|1"]`); await T.pg.waitForTimeout(200);
