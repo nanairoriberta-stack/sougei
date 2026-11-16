@@ -52,6 +52,15 @@ const D = path.join(__dirname, "../gas/out");
     await K2.pg.waitForTimeout(2500);
     assert.ok(await K2.pg.locator("#sghNo").count() > 0, "ログアウトした鍵ではログイン画面");
     await K2.pg.context().close(); console.log("ログインしたままのアドレス OK"); }
+  { // 入口のページ（Cloudflare）の中で開いたとき：画面どうしのリンクも入口を通す。送迎表の右のカレンダーだけは Google を直接（2026-11-16）
+    const W = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_WRAP="https://nanairo.example.workers.dev";`, "calendar_wrap.html");
+    await W.pg.waitForTimeout(500);
+    const u = await W.pg.evaluate(() => [SGHost.url("?page=shift"), SGHost.url("?page=sougei&e=v2"), SGHost.url("?page=calendar&embed=1"), SGHost.wrap]);
+    assert.deepStrictEqual(u, ["https://nanairo.example.workers.dev/?page=shift", "https://nanairo.example.workers.dev/?page=sougei&e=v2", "https://script.google.com/macros/s/TEST/exec?page=calendar&embed=1", "https://nanairo.example.workers.dev"], JSON.stringify(u));
+    const W2 = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_WRAP="javascript:alert(1)";`, "calendar_wrap2.html");
+    await W2.pg.waitForTimeout(500);
+    assert.strictEqual(await W2.pg.evaluate(() => SGHost.url("?page=shift")), "https://script.google.com/macros/s/TEST/exec?page=shift", "おかしな入口は使わない");
+    await W.pg.context().close(); await W2.pg.context().close(); console.log("入口のページのリンク OK"); }
   // スマホ：余村慎がログインして AM休 を押す
   const boot = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${date}";`;
   const { pg, errs } = await open("calendar.html", { width: 390, height: 844 }, boot);

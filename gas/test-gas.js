@@ -564,7 +564,11 @@ async function bootstrap() {
     assert.strictEqual(xfo({ page: "calendar", embed: "1" }), 2, "右に出すカレンダーは中に出せる");
     assert.strictEqual(xfo({ page: "calendar" }), 1, "ふつうのカレンダーは今までどおり");
     assert.strictEqual(xfo({ page: "sougei", embed: "1" }), 1, "送迎表は中に出さない");
-    return "page=calendar&embed=1 だけ ALLOWALL";
+    // 入口のページ（Cloudflare）から開いたとき（wrap=https://入口）は、どの画面も中に出せる（2026-11-16）
+    assert.strictEqual(xfo({ page: "sougei", e: "v2", wrap: "https://nanairo.example.workers.dev" }), 2, "入口のページの中の送迎表");
+    assert.strictEqual(xfo({ wrap: "https://nanairo.example.workers.dev" }), 2, "入口のページの中のカレンダー");
+    for (const bad of ["http://x.example.com", "https://x.example.com/path", "javascript:alert(1)", "https://x.example.com\"><script>"]) assert.strictEqual(xfo({ wrap: bad }), 1, "おかしな入口は今までどおり " + bad);
+    return "page=calendar&embed=1・入口のページ（wrap）だけ ALLOWALL";
   });
 
   await test("TimeTreeから写した「○○休み」（その他予定）を職員休みに：名前が送迎表の職員のものだけ・送迎表に反映・管理者だけ", async () => {

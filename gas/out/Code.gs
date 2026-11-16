@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.16c',
+  VERSION: '2026.11.16d',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -44,9 +44,12 @@ function doGet(e) {
   if (icon) { try { out = out.setFaviconUrl(icon); } catch (e) {} }
   return out
     // 送迎表の画面の右側に出すカレンダー（?page=calendar&embed=1）だけは、ほかの画面の中に出せるようにする
-    .setXFrameOptionsMode(page === 'calendar' && p.embed === '1' ? HtmlService.XFrameOptionsMode.ALLOWALL : HtmlService.XFrameOptionsMode.DEFAULT);
+    // 入口のページ（Cloudflare、2026-11-16 依頼者「アイコンを画像に・上の帯を消したい」）から開いたとき（?wrap=https://入口）も中に出せるようにする
+    .setXFrameOptionsMode((page === 'calendar' && p.embed === '1') || WRAP_RE.test(String(p.wrap || '')) ? HtmlService.XFrameOptionsMode.ALLOWALL : HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
+/* 入口のページのアドレス（https://〜 だけ。後ろに / や ? は付かない） */
+var WRAP_RE = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/;
 /* アイコンの画像のアドレス（「設定」シートB6）。Googleドライブの共有リンク（…/file/d/ID/view や ?id=ID）は画像そのもののアドレスに直す。10分覚える */
 function iconUrl_() {
   var c = null; try { c = CacheService.getScriptCache(); var hit = c.get('icon1'); if (hit != null) return hit; } catch (e) {}

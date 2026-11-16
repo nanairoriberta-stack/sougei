@@ -435,6 +435,11 @@ Excel出力の前の確認（`exportCheck`）の2つめ以降に「← 前のチ
 - 題名：なないろカレンダー／なないろ送迎表（版）／なないろシフト表（iPhoneのホーム画面の名前もこれ）。`doGet`。**`addMetaTag` は viewport・apple-mobile-web-app-capable・apple-mobile-web-app-status-bar-style・mobile-web-app-capable・google-site-verification だけ**（2026-11-16 実機：`apple-mobile-web-app-title` を入れたら「指定したメタタグはこのコンテキストでは使用できません」で全部の画面が開かなくなった。fakegas もほかの名前は例外にした）
 - アイコン：「設定」シートB6（`confSheet_` が6行目に「アイコンの画像…」）に、Googleドライブで「リンクを知っている全員」にした画像の共有リンク → `iconUrl_`（`lh3.googleusercontent.com/d/<ID>=s180` に直す、10分覚える `icon1`）→ `setFaviconUrl`。
   Googleの画面のいちばん外側は Google が作るので apple-touch-icon は入れられない＝iPhoneがこの小さな画像をホーム画面に使うかは端末しだい（使わなければ題名の1文字目「な」）。確実にしたいときはショートカットアプリで好きな画像のアイコンを作る
+- **入口のページ（Cloudflare Worker、2026-11-16 依頼者「他のウェブアプリではできてる」「Googleの帯も消える？」→「お願いします」）**：iPhoneは外側のページの apple-touch-icon しか見ない・Googleの帯は外側がGoogleのときに出る → アプリを入口のページの中に iframe ではめこむ。
+  `mcp/entry-worker.mjs` → `gas/out/entry_cloudflare.js`（アイコンの画像 180/192 を base64 で中に入れる・APP_URL は依頼者の …/exec を入れて出す＝`SG_APP_URL` で変えられる。`env.GAS_URL` があればそちら）。手順 `gas/入口のページの手順.txt` → `Entry_setup.txt`。
+  入口 `https://<名前>.workers.dev/?page=…&e=…&d=…&k=…` → iframe `…/exec?…&wrap=<入口のorigin>`（決まった値だけ通す・CSP・x-frame-options DENY・no-referrer）。
+  Google側：`wrap`（`WRAP_RE`）があればどの画面も `ALLOWALL`。画面は START が `wrap` を読み `__SG_WRAP` → gashost の `url()` は入口を通す（`WRAP/?page=…`、`target=_top`）。送迎表の右のカレンダー（embed=1）だけは Google を直接。「ログインしたままにする」のアドレスも入口のもの。
+  iPhoneの Safari では入口の中のログインの記録は別扱い＝はじめに1回ログイン。実機は未確認（依頼者に1台で試してもらう）。テスト `mcp/test-entry.mjs`・`gas/test-gas.js`・`pw/gas_ui.js`
 - 画像は `gas/icon/nanairo_icon_512.png`・`_180.png`（依頼者の画像の真ん中を正方形に切り出した。角は iPhone が丸める）。テスト `gas/test-gas.js`
 
 ## 週は月曜始まり（2026-11-07 依頼者「カレンダーを日曜始まりではなく月曜始まりに」）

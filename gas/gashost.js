@@ -122,7 +122,12 @@ const isExec = (u) => /^https:\/\/script\.google\.com\/.*\/exec$/.test(String(u 
 // 開いたときに公開URLが届かなかったら（実機で起きた）、前に教わったURL → ログイン後にサーバーへ聞いたURL の順で使う
 if (!isExec(BASE)) { const b = store.get("sg:base"); if (isExec(b)) BASE = b; }
 function learnBase() { call("app.base").then((b) => { if (isExec(b)) { BASE = b; store.set("sg:base", b); } }).catch(() => {}); }
-function url(q) { return isExec(BASE) ? BASE + q + (KEY && token === KEY && q ? (q.includes("?") ? "&" : "?") + "k=" + KEY : "") : ""; }   // 鍵で開いた画面から移るときも鍵を付ける
+// 入口のページ（Cloudflare）の中で開いているときは、画面どうしのリンクも入口のページを通す（なないろのアイコン・Googleの上の帯を出さないまま）。
+// 送迎表の右に出すカレンダー（embed=1）だけは、今までどおり Google のアドレスを直接はめこむ
+const WRAP = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(G.__SG_WRAP || "") ? G.__SG_WRAP : "";
+function url(q) { const kq = KEY && token === KEY && q ? (q.includes("?") ? "&" : "?") + "k=" + KEY : "";
+  if (WRAP && q && !/[?&]embed=1/.test(q)) return WRAP + "/" + q + kq;
+  return isExec(BASE) ? BASE + q + kq : ""; }   // 鍵で開いた画面から移るときも鍵を付ける
 function renderChip() {
   if (!me) { if (chip) chip.remove(); chip = null; return; }
   if (!chip) {
@@ -170,7 +175,7 @@ function showKeepLink() {
     const out = document.getElementById("sghKeepOut"), b = document.getElementById("sghKeepGo"); b.disabled = true; out.textContent = "作っています…";
     try {
       const r = await call("auth.deviceLink"), link = url("?page=calendar").replace(/[?&]k=[0-9a-f]+/, "") + "&k=" + r.key;
-      if (!isExec(BASE)) throw { message: "公開URLが分かりません（設定シートのB2）" };
+      if (!isExec(BASE) && !WRAP) throw { message: "公開URLが分かりません（設定シートのB2）" };
       out.innerHTML = `<label>あなた専用のアドレス<textarea id="sghKeepUrl" readonly rows="3" style="width:100%;font-size:12px">${esc(link)}</textarea></label>
         <button class="go" id="sghKeepCopy">コピーする</button><a class="go" id="sghKeepOpen" href="${esc(link)}" target="_top">このアドレスで開く</a>
         <ol class="sgh-steps"><li>「このアドレスで開く」を押す（Safariで開きます）</li><li>画面の下の共有ボタン（□に↑）を押す</li><li>「ホーム画面に追加」を押す</li><li>次からは、ホーム画面のアイコンから開く</li></ol>`;
@@ -310,7 +315,7 @@ const sampleShim = Object.assign(async (input, opts) => {
 }, { limits: async () => ({ images: false }) });
 G.claude = { use: async (n) => { await ready; return { db: dbShim, user: userShim, downloads: downloadsShim, sample: sampleShim }[n] || null; } };
 
-G.SGHost = { ready, call, store, get me() { return me; }, edition: ED, get base() { return BASE; }, url, onLogin: (f) => listeners.add(f), startPolling, pollOnce, refreshCalendar: () => Promise.all([...calSubs].map((f) => f())), runOp: async (op) => { const r = await call("cal.apply", op); if (r && r.status === "ok") { let done = false; try { done = !!(r.docs && r.docs.length && G.__calPatch && G.__calPatch(r.docs)); } catch (e) {} if (!done) { try { await Promise.all([...calSubs].map((f) => f())); } catch (e) {} } } return r; }, toast: toastHost, directory: () => directory, loadDirectory };
+G.SGHost = { ready, call, store, get me() { return me; }, edition: ED, wrap: WRAP, get base() { return BASE; }, url, onLogin: (f) => listeners.add(f), startPolling, pollOnce, refreshCalendar: () => Promise.all([...calSubs].map((f) => f())), runOp: async (op) => { const r = await call("cal.apply", op); if (r && r.status === "ok") { let done = false; try { done = !!(r.docs && r.docs.length && G.__calPatch && G.__calPatch(r.docs)); } catch (e) {} if (!done) { try { await Promise.all([...calSubs].map((f) => f())); } catch (e) {} } } return r; }, toast: toastHost, directory: () => directory, loadDirectory };
 
 /* ---------- 起動：保存済みのログインがあれば、通信できなくてもそのまま使える（未送信は端末に保存） ---------- */
 function boot() {
