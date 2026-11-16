@@ -112,7 +112,31 @@ function askNewPin(first, oldPin) {
   };
 }
 function setMe(m) { me = m; store.set(MK, JSON.stringify(m)); renderChip(); }
-function done() { hideOverlay(); renderChip(); readyResolve(me); for (const f of listeners) { try { f(me); } catch (e) {} } loadDirectory(); learnBase(); }
+function done() { hideOverlay(); renderChip(); readyResolve(me); for (const f of listeners) { try { f(me); } catch (e) {} } loadDirectory(); learnBase(); pushAsk(false); }
+// ---- スマホの通知（入口のページの中で開いているときだけ。2026-11-16 依頼者「通知機能・全員・予定が入った時と今日の予定」） ----
+// 入口のページに「通知を受け取りますか」と頼み、登録できたら（push-sub）サーバーに覚えてもらう。止めたら（push-unsub）消してもらう
+let pushKey = "";
+const WRAP = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(G.__SG_WRAP || "") ? G.__SG_WRAP : "";
+async function pushAsk(force) {
+  if (!WRAP || !me || !token) return;
+  try { if (!pushKey) { const r = await call("push.key"); pushKey = (r && r.key) || ""; } } catch (e) { return; }
+  if (!pushKey) { if (force) toastHost("通知はまだ使えません（管理者が「設定」シートの B7 に入口のページのアドレスを入れると使えます）"); return; }
+  try { G.top.postMessage({ sg: "push-ask", key: pushKey, force: !!force }, WRAP); } catch (e) {}
+}
+if (WRAP) G.addEventListener("message", (e) => {
+  const d = e.data; if (e.origin !== WRAP || !d || typeof d !== "object") return;
+  if (d.sg === "push-sub" && d.sub && d.sub.endpoint) call("push.subscribe", d.sub).then(() => {}, () => {});
+  else if (d.sg === "push-unsub" && d.endpoint) call("push.unsubscribe", d.endpoint).then(() => toastHost("このスマホへの通知を止めました"), () => {});
+});
+function showPushMenu() {
+  showOverlay(`<div class="sgh-card" data-push><h1>🔔 通知</h1>
+    <p>カレンダーに予定が入った・変わった・消されたときと、毎朝の「今日の予定」を、このスマホにお知らせします。</p>
+    <p class="sgh-warn">iPhoneは、ホーム画面に追加した「なないろ」のアイコンから開いたときだけ通知を受け取れます（iOS 16.4 以上）。</p>
+    <button class="go" id="sghPushOn">通知を受け取る</button><button class="go" style="background:#eef3f1;color:#18201d" id="sghPushOff">このスマホへの通知を止める</button><button class="go" style="background:#eef3f1;color:#18201d" id="sghClose">閉じる</button></div>`);
+  document.getElementById("sghClose").onclick = hideOverlay;
+  document.getElementById("sghPushOn").onclick = () => { hideOverlay(); pushAsk(true); };
+  document.getElementById("sghPushOff").onclick = () => { hideOverlay(); try { G.top.postMessage({ sg: "push-off" }, WRAP); } catch (e) {} };
+}
 function logout() { const t = token; token = ""; store.del(TK); store.del(MK); me = null; rawCall("auth.logout", [t]).catch(() => {}); location.reload(); }
 
 /* ---------- 右下の「ログイン中」 ---------- */
@@ -124,7 +148,6 @@ if (!isExec(BASE)) { const b = store.get("sg:base"); if (isExec(b)) BASE = b; }
 function learnBase() { call("app.base").then((b) => { if (isExec(b)) { BASE = b; store.set("sg:base", b); } }).catch(() => {}); }
 // 入口のページ（Cloudflare）の中で開いているときは、画面どうしのリンクも入口のページを通す（なないろのアイコン・Googleの上の帯を出さないまま）。
 // 送迎表の右に出すカレンダー（embed=1）だけは、今までどおり Google のアドレスを直接はめこむ
-const WRAP = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(G.__SG_WRAP || "") ? G.__SG_WRAP : "";
 function url(q) { const kq = KEY && token === KEY && q ? (q.includes("?") ? "&" : "?") + "k=" + KEY : "";
   if (WRAP && q && !/[?&]embed=1/.test(q)) return WRAP + "/" + q + kq;
   return isExec(BASE) ? BASE + q + kq : ""; }   // 鍵で開いた画面から移るときも鍵を付ける
@@ -148,11 +171,11 @@ function toggleMenu() {
   else if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar" + dq))}" target="_top">📅 カレンダー</a>`);
   if (isExec(BASE) && page !== "shift") links.push(`<a href="${esc(url("?page=shift"))}" target="_top">🗓 シフト表（希望休）</a>`);   // マンション職員の早番・遅番（2026-11-02）
   if (isExec(BASE) && (me.canSougei || me.admin)) [["v1", "現体制版"], ["v2", "新体制版"], ["v3", "りんく・ぷれいす版"]].forEach(([e, l]) => { if (!(page === "sougei" && e === ED)) links.push(`<a href="${esc(url("?page=sougei&e=" + e + dq))}" target="_top">🚌 送迎表（${l}）</a>`); });
-  menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}<button data-a="keep">📱 ログインしたままにする（iPhone）</button>${me.canSougei || me.admin ? `<button data-a="att">📋 期間の出欠（Excel）</button>` : ""}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
+  menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}<button data-a="keep">📱 ログインしたままにする（iPhone）</button>${WRAP ? `<button data-a="push">🔔 通知</button>` : ""}${me.canSougei || me.admin ? `<button data-a="att">📋 期間の出欠（Excel）</button>` : ""}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
   menu.onclick = (e) => {
     const a = e.target.closest("[data-a]"); if (!a) return;
     menu.remove(); menu = null;
-    if (a.dataset.a === "out") logout(); else if (a.dataset.a === "pin") askNewPin(false); else if (a.dataset.a === "log") showLog(); else if (a.dataset.a === "att") showAttendance(); else if (a.dataset.a === "keep") showKeepLink();
+    if (a.dataset.a === "out") logout(); else if (a.dataset.a === "pin") askNewPin(false); else if (a.dataset.a === "log") showLog(); else if (a.dataset.a === "att") showAttendance(); else if (a.dataset.a === "keep") showKeepLink(); else if (a.dataset.a === "push") showPushMenu();
   };
   document.body.appendChild(menu);
 }

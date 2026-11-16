@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.16d',
+  VERSION: '2026.11.16e',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -48,6 +48,90 @@ function doGet(e) {
     .setXFrameOptionsMode((page === 'calendar' && p.embed === '1') || WRAP_RE.test(String(p.wrap || '')) ? HtmlService.XFrameOptionsMode.ALLOWALL : HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
+/* ================= スマホの通知（Web Push。2026-11-16 依頼者「通知機能」→ 方法1・全員・予定が入った時と今日の予定） =================
+   入口のページ（「設定」シート B7）が暗号化して Apple・Google などの通知のサービスへ送る（Googleの側では暗号の計算ができないため）。
+   鍵（VAPID）はスクリプト プロパティ PUSH_VAPID（はじめて使うときに入口のページで作ってもらう）。登録した端末は隠しシート _push（A=職員番号 B=宛先 C=鍵 D=鍵 E=登録日時） */
+var PUSH_EP_RE = /^https:\/\/([a-z0-9-]+\.)*(push\.apple\.com|fcm\.googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com|push\.api\.chrome\.google\.com)\//i;
+function entryUrl_() {
+  try { var sh = sheet_(APP.SH.conf); var v = sh ? String(sh.getRange(7, 2).getValue()).trim().replace(/\/+$/, '') : ''; return WRAP_RE.test(v) ? v : ''; } catch (e) { return ''; }
+}
+function pushVapid_() {
+  var entry = entryUrl_(); if (!entry) return null;
+  var p = PropertiesService.getScriptProperties(), raw = p.getProperty('PUSH_VAPID');
+  if (raw) { try { return JSON.parse(raw); } catch (e) {} }
+  var r = UrlFetchApp.fetch(entry + '/push/newkeys', { method: 'post', muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) return null;
+  var k = JSON.parse(r.getContentText()); if (!k || !k.publicKey || !k.privateJwk) return null;
+  p.setProperty('PUSH_VAPID', JSON.stringify(k));
+  return k;
+}
+function pushSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName('_push');
+  if (!sh) { sh = ss.insertSheet('_push'); sh.getRange(1, 1, 1, 5).setValues([['職員番号', '宛先', 'p256dh', 'auth', '登録日時']]); try { sh.hideSheet(); } catch (e) {} }
+  return sh;
+}
+function pushSubscribe_(me, sub) {
+  if (!sub || !PUSH_EP_RE.test(String(sub.endpoint || '')) || String(sub.endpoint).length > 1000 || !sub.keys || !/^[A-Za-z0-9_-]{60,120}$/.test(sub.keys.p256dh || '') || !/^[A-Za-z0-9_-]{16,40}$/.test(sub.keys.auth || ''))
+    throw { code: 'invalid_argument', message: '通知の登録の形がちがいます' };
+  return withLock_(function () {
+    var sh = pushSheet_(), n = sh.getLastRow(), rows = n > 1 ? sh.getRange(2, 1, n - 1, 5).getValues() : [];
+    for (var i = rows.length - 1; i >= 0; i--) if (String(rows[i][1]) === sub.endpoint) sh.deleteRow(i + 2);
+    sh.appendRow([txt_(me.no), txt_(sub.endpoint), txt_(sub.keys.p256dh), txt_(sub.keys.auth), txt_(new Date().toISOString())]);
+    return { ok: true };
+  });
+}
+function pushUnsubscribe_(me, endpoint) {
+  return withLock_(function () {
+    var sh = pushSheet_(), n = sh.getLastRow(), rows = n > 1 ? sh.getRange(2, 1, n - 1, 2).getValues() : [], c = 0;
+    for (var i = rows.length - 1; i >= 0; i--) if (String(rows[i][1]) === String(endpoint || '')) { sh.deleteRow(i + 2); c++; }
+    return { ok: true, removed: c };
+  });
+}
+// 登録した全員（except＝その職員番号の端末は除く）に送る。12件ずつ入口のページへ（いっしょに送る）。届かなくなった宛先（404・410）は消す
+function pushSend_(payload, except) {
+  var entry = entryUrl_(), v = entry ? pushVapid_() : null; if (!v) return { sent: 0 };
+  var sh = pushSheet_(), n = sh.getLastRow(); if (n < 2) return { sent: 0 };
+  var rows = sh.getRange(2, 1, n - 1, 4).getValues().filter(function (r) { return r[1] && String(r[0]) !== String(except || ''); });
+  var reqs = [];
+  for (var i = 0; i < rows.length; i += 12) reqs.push({ url: entry + '/push/send', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    payload: JSON.stringify({ vapid: v, subject: entry, payload: payload, items: rows.slice(i, i + 12).map(function (r) { return { endpoint: String(r[1]), keys: { p256dh: String(r[2]), auth: String(r[3]) } }; }) }) });
+  if (!reqs.length) return { sent: 0 };
+  var gone = {}, sent = 0;
+  UrlFetchApp.fetchAll(reqs).forEach(function (r) {
+    try { (JSON.parse(r.getContentText()).results || []).forEach(function (x) { if (x.status === 404 || x.status === 410) gone[x.endpoint] = 1; else if (x.status >= 200 && x.status < 300) sent++; }); } catch (e) {}
+  });
+  if (Object.keys(gone).length) withLock_(function () {
+    var n2 = sh.getLastRow(), all = n2 > 1 ? sh.getRange(2, 2, n2 - 1, 1).getValues() : [];
+    for (var j = all.length - 1; j >= 0; j--) if (gone[String(all[j][0])]) sh.deleteRow(j + 2);
+  });
+  return { sent: sent, gone: Object.keys(gone).length };
+}
+var PUSH_WD_ = ['日', '月', '火', '水', '木', '金', '土'];
+function pushMd_(ds) { var p = String(ds).split('-').map(Number); if (p.length < 3 || !p[0]) return ''; var w = new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay(); return p[1] + '/' + p[2] + '(' + PUSH_WD_[w] + ')'; }
+// カレンダーに予定が入った・変わった・消された（入れた本人の端末には送らない）
+function pushCal_(me, pu) {
+  var entry = entryUrl_(); if (!entry || !pu || !pu.title) return null;
+  var head = { 'new': '📅 予定が入りました', chg: '✏️ 予定が変わりました', del: '🗑 予定が消されました' }[pu.kind] || '📅 カレンダー';
+  return pushSend_({ title: head, body: (pu.date ? pushMd_(pu.date) + ' ' : '') + pu.title + '（' + me.name + 'さん）', tag: 'ev_' + pu.id,
+    url: '/?page=calendar' + (pu.date ? '&d=' + pu.date : '') }, me.no);
+}
+// 毎朝の「今日の予定」（時間で動くきっかけ。setup・installPushTrigger で毎日7時台に入れる）
+function pushDaily() {
+  if (!entryUrl_()) return null;
+  var today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+  var evMap = TCCore.mergeDays(docsQuery_({ col: 'days', from: today, to: today }));
+  var list = Object.keys(evMap).map(function (k) { return evMap[k]; }).filter(function (e) { return e && !e.deleted && e.date <= today && (e.endDate || e.date) >= today && e.title; })
+    .sort(function (a, b) { return (a.allDay ? 0 : 1) - (b.allDay ? 0 : 1) || String(a.start || '').localeCompare(String(b.start || '')) || String(a.title).localeCompare(String(b.title)); });
+  if (!list.length) return pushSend_({ title: '📅 今日の予定 ' + pushMd_(today), body: '今日の予定はありません', tag: 'daily', url: '/?page=calendar&d=' + today });
+  var lines = list.slice(0, 8).map(function (e) { return (e.allDay || !e.start ? '' : String(e.start).replace(/^0/, '') + ' ') + e.title; });
+  return pushSend_({ title: '📅 今日の予定 ' + pushMd_(today) + '（' + list.length + '件）', body: lines.join('\n') + (list.length > 8 ? '\nほか' + (list.length - 8) + '件' : ''), tag: 'daily', url: '/?page=calendar&d=' + today });
+}
+// 毎朝の通知のきっかけを入れ直す（エディタで実行してもよい。setup でも入る）
+function installPushTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'pushDaily') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('pushDaily').timeBased().atHour(7).everyDays(1).inTimezone('Asia/Tokyo').create();
+  return '毎朝7時台に「今日の予定」を通知します';
+}
 /* 入口のページのアドレス（https://〜 だけ。後ろに / や ? は付かない） */
 var WRAP_RE = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/;
 /* アイコンの画像のアドレス（「設定」シートB6）。Googleドライブの共有リンク（…/file/d/ID/view や ?id=ID）は画像そのもののアドレスに直す。10分覚える */
@@ -124,6 +208,7 @@ function confSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(APP.SH.conf);
   if (!sh) { sh = ss.insertSheet(APP.SH.conf); sh.getRange(1, 1, 2, 2).setValues([['項目', '値'], ['公開URL（デプロイの「ウェブアプリ」のURL。最後が /exec）', '']]); sh.setFrozenRows(1); }
   if (!String(sh.getRange(6, 1).getValue())) sh.getRange(6, 1).setValue('アイコンの画像（Googleドライブで「リンクを知っている全員」にした画像のリンク）');
+  if (!String(sh.getRange(7, 1).getValue())) sh.getRange(7, 1).setValue('入口のページのアドレス（https://nanairo.〇〇.workers.dev。スマホの通知に使う）');
   return sh;
 }
 
@@ -218,6 +303,7 @@ function setup() {
     ids.appendRow([txt_('000'), '管理者', '管理者', txt_(randomPin_()), '', '最初のログイン用。職員の登録が済んだら利用停止にしてください']);
   }
   syncStaffIds_();
+  try { installPushTrigger(); } catch (e) { Logger.log('毎朝の通知のきっかけを入れられませんでした：' + e); }   // 毎朝の「今日の予定」の通知（2026-11-16）
   Logger.log('初期設定が完了しました。「職員ID」シートの000の初期暗証番号でログインできます。');
 }
 
@@ -293,7 +379,11 @@ var HANDLERS = {
   'sg.linkReqs': function (me, a) { return linkReqsOf_(String(a[0] || '')); },   // 生活介護の画面に、りんく・ぷれいす版からの依頼を出す（表示だけ）
   'docs.query': function (me, a) { return docsQuery_(a[0] || {}); },
   'docs.get': function (me, a) { return docGetPublic_(String(a[0])); },
-  'cal.apply': function (me, a) { return calApply_(me, a[0]); },
+  'cal.apply': function (me, a) { var r = calApply_(me, a[0]); var pu = r && r._push; if (r) delete r._push; if (pu) { try { pushCal_(me, pu); } catch (e) {} } return r; },
+  // スマホの通知（入口のページの中で開いているとき。2026-11-16 依頼者）
+  'push.key': function (me) { var v = pushVapid_(); return { key: v ? v.publicKey : null }; },
+  'push.subscribe': function (me, a) { return pushSubscribe_(me, a[0]); },
+  'push.unsubscribe': function (me, a) { return pushUnsubscribe_(me, a[0]); },
   'log.list': function (me, a) { if (me.role !== '管理者') throw { code: 'denied', message: '管理者のみ' }; return logList_(a[0] || 200); },
   'ai.messages': function (me, a) { return aiMessages_(me, a[0]); },
   'prop.list': function (me) { if (me.role !== '管理者' && me.role !== '送迎表') return []; return propList_(); },
@@ -813,7 +903,11 @@ function calApply_(me, op) {
     if (op.kind !== 'comment') reconcileDates_(op, raws, idx);
     // 書いた日の文書を返す：画面はこれで表を直し、月の読み直しを待たずに「保存済み」にできる
     var docs = res.writes.filter(function (w) { return w.path.indexOf('days/') === 0; }).map(function (w) { return w.data; });
-    return { status: 'ok', docs: docs };
+    // スマホの通知に使う中身（cal.apply の返事からは外す）。シフト表・TimeTreeから写した予定は知らせない
+    var ex0 = null; raws.forEach(function (r) { var e = r && r.events && r.events[op.id]; if (e) ex0 = e; });
+    var push = op.kind === 'comment' || /^(sh|tt)/.test(op.id) ? null : { id: op.id, title: title, date: (op.ev && op.ev.date) || (ex0 && ex0.date) || '',
+      kind: op.kind === 'delete' ? 'del' : op.kind === 'restore' ? 'new' : (ex0 && !ex0.deleted ? 'chg' : 'new') };
+    return { status: 'ok', docs: docs, _push: push };
   });
 }
 function sgText_(sg) {

@@ -30,6 +30,7 @@ function makeGas(files) {
       getMaxColumns: () => maxCols,
       insertColumnsAfter: (_, n) => { maxCols += n; },
       setFrozenRows() {}, hideSheet() { hidden = true; },
+      deleteRow: (r) => { stats.writes++; if (r >= 1 && r <= data.length) data.splice(r - 1, 1); },   // 本物と同じく下の行が上に詰まる
       appendRow: (vals) => { stats.writes++; const r = self.getLastRow() + 1; if (vals.length > maxCols) maxCols = vals.length; vals.forEach((v, i) => set(r, i + 1, v)); },
       getRange: (r, c, nr, nc) => {
         nr = nr || 1; nc = nc || 1;
@@ -65,7 +66,9 @@ function makeGas(files) {
     ContentService: { MimeType: { JSON: "application/json", TEXT: "text/plain" }, createTextOutput: (t) => { const o = { text: String(t == null ? "" : t), mime: "text/plain", setMimeType(m) { o.mime = m; return o; }, getContent: () => o.text }; return o; } },
     Session: { getScriptTimeZone: () => "Asia/Tokyo" },
     Logger: { log() {} },
-    ScriptApp: { getService: () => ({ getUrl: () => "https://script.google.com/macros/s/TEST/exec" }) },
+    ScriptApp: (() => { const trig = []; return { getService: () => ({ getUrl: () => "https://script.google.com/macros/s/TEST/exec" }), _triggers: trig,
+      getProjectTriggers: () => trig.slice(), deleteTrigger: (t) => { const i = trig.indexOf(t); if (i >= 0) trig.splice(i, 1); },
+      newTrigger: (fn) => { const t = { fn, getHandlerFunction: () => fn }; const b = { timeBased: () => b, atHour: (h) => { t.hour = h; return b; }, everyDays: () => b, inTimezone: () => b, create: () => { trig.push(t); return t; } }; return b; } }; })(),
     HtmlService: (() => { const out = (html) => { const o = { html, title: "", setTitle(t) { o.title = t; return o; }, addMetaTag(n, v) { if (!["viewport", "apple-mobile-web-app-capable", "apple-mobile-web-app-status-bar-style", "mobile-web-app-capable", "google-site-verification"].includes(n)) throw new Error("指定したメタタグはこのコンテキストでは使用できません。（本物のGoogleと同じ）" + n); (o.meta = o.meta || {})[n] = v; return o; }, setFaviconUrl(u) { o.favicon = u; return o; }, setXFrameOptionsMode(m) { o.xfo = m; return o; }, getContent: () => html }; return o; };
       return { XFrameOptionsMode: { DEFAULT: 1, ALLOWALL: 2 }, createHtmlOutputFromFile: (n) => out(fs.readFileSync(require("path").join(__dirname, "out", n + ".html"), "utf8")), createHtmlOutput: out }; })(),
   };

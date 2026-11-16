@@ -307,6 +307,56 @@ async function bootstrap() {
     return out.join("・");
   });
 
+  await test("スマホの通知：設定B7に入口のページ → 端末を登録、予定が入ると入れた人以外に送る、届かない宛先は消す、毎朝の今日の予定（2026-11-16 依頼者）", async () => {
+    const { g } = await bootstrap();
+    assert.ok(g.ctx.ScriptApp._triggers.some((t) => t.fn === "pushDaily" && t.hour === 7), "setup で毎朝7時台のきっかけ");
+    const a = device(g); const ma = await a.login(noOf(g, "八壁"), pinOf(g, "八壁"));
+    const b = device(g); await b.login(noOf(g, "日野"), pinOf(g, "日野"));
+    assert.deepStrictEqual(await b.call("push.key"), { key: null }, "B7 が空なら通知は使わない");
+    const conf = g.sheets.get("設定"); assert.ok(String(conf.data[6][0]).includes("入口のページ"), "setup で7行目に見出し");
+    conf.data[6][1] = "https://nanairo.example.workers.dev/";
+    const calls = [], keys = { publicKey: "B" + "x".repeat(86), privateJwk: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" } };
+    let statusOf = () => 201;
+    g.ctx.UrlFetchApp = {
+      fetch: (u, o) => { calls.push({ u, o }); return { getResponseCode: () => 200, getContentText: () => JSON.stringify(keys) }; },
+      fetchAll: (reqs) => reqs.map((r) => { const body = JSON.parse(r.payload); calls.push({ u: r.url, body }); return { getContentText: () => JSON.stringify({ results: body.items.map((it) => ({ endpoint: it.endpoint, status: statusOf(it.endpoint) })) }) }; }),
+    };
+    assert.strictEqual((await b.call("push.key")).key, keys.publicKey, "はじめは入口のページで鍵を作ってもらう");
+    assert.strictEqual(calls[0].u, "https://nanairo.example.workers.dev/push/newkeys");
+    await b.call("push.key"); assert.strictEqual(calls.length, 1, "鍵は覚えておく（2回目は作らない）");
+    const sub = (ep) => ({ endpoint: ep, keys: { p256dh: "B" + "p".repeat(86), auth: "a".repeat(22) } });
+    await b.call("push.subscribe", sub("https://web.push.apple.com/HINO1"));
+    await a.call("push.subscribe", sub("https://web.push.apple.com/YAKABE1"));
+    await b.call("push.subscribe", sub("https://web.push.apple.com/HINO1"));   // 同じ宛先をもう一度 → 1行のまま
+    await b.call("push.subscribe", sub("https://evil.example.com/x")).then(() => assert.fail("通知のサービス以外"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+    assert.strictEqual(g.sheets.get("_push").data.length - 1, 2, "2台");
+    // 八壁が予定を入れる → 日野の端末にだけ
+    calls.length = 0;
+    await a.call("cal.apply", { kind: "upsert", opId: "op_push0001", id: "ev_push0001", baseRev: null, ev: evOff("2026-11-20", "日野") });
+    const sent = calls.filter((c) => c.u.endsWith("/push/send"));
+    assert.strictEqual(sent.length, 1);
+    assert.deepStrictEqual(sent[0].body.items.map((x) => x.endpoint), ["https://web.push.apple.com/HINO1"], "入れた本人には送らない");
+    assert.strictEqual(sent[0].body.payload.title, "📅 予定が入りました");
+    assert.ok(/11\/20\(金\) 日野 休み（八壁さん）/.test(sent[0].body.payload.body), sent[0].body.payload.body);
+    assert.strictEqual(sent[0].body.payload.url, "/?page=calendar&d=2026-11-20"); assert.strictEqual(sent[0].body.subject, "https://nanairo.example.workers.dev");
+    const r = await a.call("cal.apply", { kind: "upsert", opId: "op_push0002", id: "ev_push0001", baseRev: 1, ev: Object.assign(evOff("2026-11-20", "日野"), { title: "日野 休み（直した）" }) });
+    assert.ok(!("_push" in r), "画面への返事には入れない");
+    assert.strictEqual(calls.filter((c) => c.u.endsWith("/push/send")).pop().body.payload.title, "✏️ 予定が変わりました");
+    // 届かなくなった宛先（410）は消す
+    statusOf = () => 410; calls.length = 0;
+    await a.call("cal.apply", { kind: "upsert", opId: "op_push0003", id: "ev_push0003", baseRev: null, ev: evOff("2026-11-21", "日野") });
+    assert.strictEqual(g.sheets.get("_push").data.length - 1, 1, "日野の端末は消えた");
+    statusOf = () => 201;
+    // 毎朝の今日の予定
+    await b.call("push.subscribe", sub("https://web.push.apple.com/HINO2")); calls.length = 0;
+    const today = g.ctx.Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy-MM-dd");
+    await a.call("cal.apply", { kind: "upsert", opId: "op_push0004", id: "ev_push0004", baseRev: null, ev: evOff(today, "白戸") }); calls.length = 0;
+    g.ctx.pushDaily();
+    const d = calls.find((c) => c.u.endsWith("/push/send")).body;
+    assert.ok(/^📅 今日の予定 .+（1件）$/.test(d.payload.title) && d.payload.body.includes("白戸 休み"), JSON.stringify(d.payload));
+    assert.strictEqual(d.items.length, 2, "毎朝は全員（入れた人も）");
+    return d.payload.title + " / " + sent[0].body.payload.body;
+  });
   await test("アイコン・題名：「設定」シートB6のGoogleドライブの画像をアイコンに、題名は「なないろ…」（2026-11-16 依頼者のアイコン）", async () => {
     const { g } = await bootstrap();
     const conf = g.sheets.get("設定"); assert.ok(String(conf.data[5][0]).includes("アイコンの画像"), "setup で6行目に「アイコンの画像」");

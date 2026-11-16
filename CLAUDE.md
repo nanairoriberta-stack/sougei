@@ -442,6 +442,13 @@ Excel出力の前の確認（`exportCheck`）の2つめ以降に「← 前のチ
   iPhoneの Safari では入口の中のログインの記録は別扱い＝はじめに1回ログイン。実機は未確認（依頼者に1台で試してもらう）。テスト `mcp/test-entry.mjs`・`gas/test-gas.js`・`pw/gas_ui.js`
 - 画像は `gas/icon/nanairo_icon_512.png`・`_180.png`（依頼者の画像の真ん中を正方形に切り出した。角は iPhone が丸める）。テスト `gas/test-gas.js`
 
+## スマホへの通知（2026-11-16 依頼者「通知機能つけれる？」→ 方法1＝入口のページ経由のWeb Push、「カレンダーに予定が入った時と、TimeTreeのような今日の予定」「全員」）
+- 入口のページ（`mcp/entry-worker.mjs`）が通知の係：`/sw.js`（通知を出す・押すと `?page=calendar&d=` を開く）・`/entry.js`（案内の帯）・`POST /push/send`（暗号化 RFC 8291 aes128gcm＋VAPID RFC 8292、WebCrypto。1回12件まで・宛先は Apple/Google/Mozilla/Microsoft の通知サービスだけ `PUSH_HOST`）・`POST /push/newkeys`。入口は何も覚えない（鍵は毎回 Google から届く）
+- Google側（`gas/Code.gs`）：「設定」シートB7＝入口のページのアドレス（`entryUrl_`。空なら通知しない）。鍵はスクリプト プロパティ `PUSH_VAPID`（はじめに入口の newkeys で作る `pushVapid_`）。端末は隠しシート `_push`（職員番号・宛先・鍵2つ・日時。`push.subscribe`/`push.unsubscribe`、宛先の形は `PUSH_EP_RE`）。送る `pushSend_`（12件ずつ fetchAll、404/410 の端末は消す）
+- いつ：カレンダーで予定を入れた・変えた・消したとき（`cal.apply` → `calApply_` の `_push` → `pushCal_`。入れた本人には送らない。シフト表の `sh…`・TimeTreeの `tt…`・コメントは送らない）「📅 予定が入りました」「✏️ 予定が変わりました」「🗑 予定が消されました」＋「11/17(火) 題名（名前 さん）」。毎朝7時台の「📅 今日の予定 11/17(火)（N件）」（`pushDaily`、時間のきっかけは `installPushTrigger`＝`setup` でも入る）。全員へ
+- 画面：入口のページの中で開いたとき（`SGHost.wrap`）だけ、ログインのあと gashost の `pushAsk` が入口に `push-ask` → 入口の下に「🔔 … 受け取る／あとで」（あとで＝7日出さない）。受け取る＝許可→登録→`push-sub` → `push.subscribe`。メニュー「🔔 通知」（`showPushMenu`）で受け取る／止める。iPhoneは iOS 16.4以上でホーム画面のアイコンから開いたときだけ（Safariのままなら「ホーム画面に追加」の案内）
+- 実機は未確認。テスト `mcp/test-entry.mjs`（RFC 8291 の例と一致）・`gas/test-gas.js`・`pw/entry_ui.js`
+
 ## 週は月曜始まり（2026-11-07 依頼者「カレンダーを日曜始まりではなく月曜始まりに」）
 職場カレンダーの月の画面（`gridRange`・`rangeOf` の `MON0`、見出し `.dow` 月〜日）、送迎表の日付選び（`DatePop`。依頼者「すべてのカレンダー」）、シフト表の画面（`.sh-grid` の見出し・`lead`、下の職員の曜日のパターンの列）、シフト表のExcel（曜日の列 月〜日・`lead`）。データ（曜日の番号 0=日）はそのまま。テスト `pw/gas_ui.js`・`test-shift.js`
 
