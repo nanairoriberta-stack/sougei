@@ -81,9 +81,17 @@ const D = path.join(__dirname, "../gas/out");
     // 左右になぞっても移る（2026-11-17 依頼者「左右スワイプで日付が変わるように」）。左へ＝次の日
     const swipe = (x0, x1) => pg.evaluate(([a, b]) => { const el = document.querySelector(".daysheet .ds-list, .daysheet .empty, .daysheet .ds-head h2");
       const mk = (type, x) => { const t = new Touch({ identifier: 1, target: el, clientX: x, clientY: 300 }); el.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === "touchend" ? [] : [t], changedTouches: [t] })); };
-      mk("touchstart", a); mk("touchend", b); }, [x0, x1]);
-    await swipe(320, 80); await pg.waitForTimeout(300); assert.ok((await h()).startsWith("11月3日 火曜日"), "左へなぞると次の日 " + await h());
-    await swipe(80, 320); await pg.waitForTimeout(300); assert.ok((await h()).startsWith("11月2日 月曜日"), "右へなぞると前の日 " + await h());
+      mk("touchstart", a); for (let k = 1; k <= 6; k++) mk("touchmove", a + (b - a) * k / 6); mk("touchend", b); }, [x0, x1]);
+    // 紙を送るように：作り直すのは中身だけ（日の一覧の枠はそのまま＝下から出てくる動きをやり直さない＝ちかちかしない）。高さは日によって変わらない（2026-11-17 依頼者）
+    await pg.evaluate(() => { document.querySelector(".daysheet").dataset.keep = "1"; });
+    const hgt = () => pg.evaluate(() => Math.round(document.querySelector(".daysheet").getBoundingClientRect().height));
+    const h0 = await hgt();
+    await swipe(320, 80); await pg.waitForTimeout(700); assert.ok((await h()).startsWith("11月3日 火曜日"), "左へなぞると次の日 " + await h());
+    assert.strictEqual(await pg.evaluate(() => document.querySelector(".daysheet").dataset.keep), "1", "枠は作り直さない");
+    assert.strictEqual(await hgt(), h0, "高さは同じ");
+    await swipe(80, 320); await pg.waitForTimeout(700); assert.ok((await h()).startsWith("11月2日 月曜日"), "右へなぞると前の日 " + await h());
+    await swipe(200, 170); await pg.waitForTimeout(500); assert.ok((await h()).startsWith("11月2日 月曜日"), "少しだけなら移らない（元に戻る）");
+    assert.strictEqual(await pg.evaluate(() => document.querySelector(".ds-page").style.transform), "", "ページは元の位置");
     assert.ok(await pg.locator(".daysheet").isVisible(), "日の一覧は開いたまま");
     await pg.screenshot({ path: "g_cal_daystep.png" });
     console.log("日の一覧の前の日・次の日 OK"); }

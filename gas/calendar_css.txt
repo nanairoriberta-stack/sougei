@@ -370,9 +370,9 @@ html[data-biz] .daysheet{background:var(--bg);box-shadow:inset 0 4px 0 var(--bz)
 html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{background:color-mix(in srgb,var(--bz) 10%,transparent)}
 
 /* 左右になぞって月を変えたとき（2026-10-30） */
-@keyframes swl{from{transform:translateX(40px);opacity:.35}to{transform:none;opacity:1}}
-@keyframes swr{from{transform:translateX(-40px);opacity:.35}to{transform:none;opacity:1}}
-#app.sw-l{animation:swl .2s ease-out}#app.sw-r{animation:swr .2s ease-out}
+@keyframes swl{from{transform:translateX(56px);opacity:.85}to{transform:none;opacity:1}}   /* 月の画面のなぞり：ちかちかしないよう、すべるだけ（2026-11-17） */
+@keyframes swr{from{transform:translateX(-56px);opacity:.85}to{transform:none;opacity:1}}
+#app.sw-l{animation:swl .26s cubic-bezier(.2,.75,.3,1)}#app.sw-r{animation:swr .26s cubic-bezier(.2,.75,.3,1)}
 /* 押せないラベル（一般職員の ヘルプ・送迎・利用者休み・利用日外利用 など）は灰色に。押すと理由が出る（2026-10-31） */
 .labels input:disabled+span{opacity:.38;background:color-mix(in srgb,var(--ink) 6%,transparent);border-style:dashed;cursor:not-allowed}
 .labels input:disabled:checked+span{opacity:.7}
@@ -431,3 +431,10 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 .mf-img{max-width:100%}
 .mf-pdf{width:100%;height:70vh;border:0}
 .mf-txt{white-space:pre-wrap;font-size:13px}
+
+/* 日の一覧はいつも同じ高さ（予定が少ない日も余白を残す）・中身だけを紙のように左右へ送る（2026-11-17 依頼者） */
+.daysheet{display:flex;flex-direction:column;height:min(80%,calc(var(--vvh,100vh) - 64px));max-height:88%;overflow:hidden}
+.ds-page{flex:1;min-height:0;display:flex;flex-direction:column;will-change:transform;background:inherit}
+.ds-page .ds-list{flex:1;min-height:0;max-height:none}
+.ds-page .ds-mf{flex:none}
+#panel{will-change:transform}

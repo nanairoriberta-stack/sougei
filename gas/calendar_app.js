@@ -230,6 +230,7 @@ function renderPanel(vis,ps){
   else if(!evs.length)body=`<div class="empty">この日の予定はまだありません。${can?"<br>「この日に追加」から登録できます。":""}</div>`;
   else body=`<ul class="ev-list">${evs.map(e=>evRow(e,ps)).join("")}</ul>`;
   $("panel").innerHTML=`<div class="panel-head"><button class="ds-step" data-day-step="-1" aria-label="前の日">‹</button><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="ds-step" data-day-step="1" aria-label="次の日">›</button><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${body}${mfSection(S.sel)}`;
+  slideIn($("panel"),24);
 }
 /* スマホ：日付を押すと、その日の予定の一覧が下から出る（TimeTreeのように）。右上の＋でその日に予定を入れる */
 const isMob=()=>matchMedia("(max-width:560px)").matches;
@@ -249,32 +250,63 @@ function dsRow(e){
   const sub=[LMAP[e.label]?.n||"その他",e.place,(e.tanto||[]).length?"担当："+e.tanto.join("・"):"",(e.users||[]).length?"利用者："+e.users.join("・"):""].filter(Boolean).map(esc).join(" ・ ");
   return`<li><button class="ds-row g-${grpOf(e.label).k}" data-grp="${grpOf(e.label).k}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${misTag(e)}${bizTag(e)}${esc(ttl(e))}</b><small>${sub}</small></span></button></li>`;
 }
+/* 日の一覧。作り直すのは中身（.ds-page）だけ（2026-11-17 依頼者「左右のスワイプで目がちかちかする」＝毎回、下から出てくる動きをやり直していた）。
+   高さはいつも同じ（日によって予定の数が違っても画面の大きさを変えない。同じ日の依頼者「余白を作って、同じ画面サイズに」） */
 function renderDay(vis){
   const root=$("dayRoot");document.documentElement.classList.toggle("dayopen",!!S.dayOpen);   // 開いている間は裏の月の画面を動かさない
   if(!S.dayOpen){if(root.innerHTML)root.innerHTML="";return}
   const d=parse(S.sel),evs=on(vis,S.sel),hol=HOL[S.sel],can=db&&S.canWrite&&core&&canAddHere();
-  const keep=root.querySelector(".ds-list")?.scrollTop||0;
-  root.innerHTML=`<div class="overlay day-ov" id="dayOv"><div class="sheet daysheet" role="dialog" aria-modal="true" aria-label="${d.getMonth()+1}月${d.getDate()}日の予定"><div class="ds-grip"></div>
-    <div class="ds-head"><button class="ds-step" data-day-step="-1" aria-label="前の日">‹</button><h2>${d.getMonth()+1}月${d.getDate()}日 ${WD[d.getDay()]}曜日${hol?`<small>${esc(hol)}</small>`:""}</h2><button class="ds-step" data-day-step="1" aria-label="次の日">›</button>
+  let sheet=root.querySelector("#dayOv .daysheet");
+  if(!sheet){root.innerHTML=`<div class="overlay day-ov" id="dayOv"><div class="sheet daysheet" role="dialog" aria-modal="true"><div class="ds-grip"></div><div class="ds-page"></div></div></div>`;sheet=root.querySelector(".daysheet")}
+  sheet.setAttribute("aria-label",`${d.getMonth()+1}月${d.getDate()}日の予定`);
+  const pg=sheet.querySelector(".ds-page"),same=pg.dataset.pgDay===S.sel,keep=same?(pg.querySelector(".ds-list")?.scrollTop||0):0;
+  pg.dataset.pgDay=S.sel;   // data-day は日のマスの印なので使わない
+  pg.innerHTML=`<div class="ds-head"><button class="ds-step" data-day-step="-1" aria-label="前の日">‹</button><h2>${d.getMonth()+1}月${d.getDate()}日 ${WD[d.getDay()]}曜日${hol?`<small>${esc(hol)}</small>`:""}</h2><button class="ds-step" data-day-step="1" aria-label="次の日">›</button>
       <button class="ds-add" data-add-day aria-label="この日に予定を追加" ${can?"":"disabled"}>＋</button><button class="icon-btn" data-day-close aria-label="閉じる">×</button></div>
     ${evs.length?`<ul class="ds-list">${evs.map(dsRow).join("")}</ul>`:`<div class="empty">${S.loaded?"この日の予定はまだありません。":"予定を読み込んでいます…"}${can&&S.loaded?"<br>右上の＋から入れられます。":""}</div>`}
-    ${S.biz==="mansion"?`<div class="ds-mf">${mfSection(S.sel)}</div>`:""}
-  </div></div>`;
-  const l=root.querySelector(".ds-list");if(l)l.scrollTop=keep;
+    ${S.biz==="mansion"?`<div class="ds-mf">${mfSection(S.sel)}</div>`:""}`;
+  const l=pg.querySelector(".ds-list");if(l)l.scrollTop=keep;
+  slideIn(pg);
+}
+/* 紙をめくるように：前の日・次の日へ移ったときは、新しい日を横からすべりこませる（左へ送る＝次の日は右から） */
+let slT=0;
+function slideIn(el,pct=100){
+  const dir=S.slideIn;if(!dir||!el)return;clearTimeout(slT);slT=setTimeout(()=>{S.slideIn=0},0);   // 日の一覧（スマホ）と右の日の欄（パソコン）の両方で使う
+  if(el.offsetParent===null)return;   // 見えていない（スマホの右の欄など）
+  if(matchMedia("(prefers-reduced-motion:reduce)").matches)return;
+  el.style.transition="none";el.style.transform=`translateX(${dir>0?pct:-pct}%)`;el.style.opacity="0.6";void el.offsetWidth;
+  el.style.transition="transform .26s cubic-bezier(.2,.75,.3,1),opacity .26s";el.style.transform="";el.style.opacity="";
 }
 /* 日の一覧：上の部分（つまみ・日付）を下へ引くと閉じて月の画面に戻る。一覧がいちばん上のときは一覧を引いても閉じる。
    一覧の外をなぞっても裏の月の画面は動かない */
 let dsDrag=null;
-document.addEventListener("touchstart",e=>{const ov=e.target.closest&&e.target.closest("#dayOv");if(!ov){dsDrag=null;return}
+/* 日の一覧を左右になぞる：指についてページが動き、離すと紙を送るように次の日・前の日へ（2026-11-17 依頼者「紙を送るみたいな画面遷移に」） */
+let dsSwipe=null;
+document.addEventListener("touchstart",e=>{const ov=e.target.closest&&e.target.closest("#dayOv");if(!ov){dsDrag=null;dsSwipe=null;return}
   const head=e.target.closest(".ds-grip,.ds-head"),list=e.target.closest(".ds-list");
+  dsSwipe=e.touches.length===1&&!e.target.closest("input,textarea,select,.mf-tbl")?{x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now(),axis:"",dx:0,page:ov.querySelector(".ds-page")}:null;
   dsDrag=(head&&!e.target.closest("button"))||(list&&list.scrollTop<=0)?{y:e.touches[0].clientY,t:Date.now(),dy:0,sheet:ov.querySelector(".daysheet"),fromList:!head}:null},{passive:true});
 document.addEventListener("touchmove",e=>{const ov=e.target.closest&&e.target.closest("#dayOv");if(!ov)return;
+  if(dsSwipe){const dx=e.touches[0].clientX-dsSwipe.x,dy=e.touches[0].clientY-dsSwipe.y;
+    if(!dsSwipe.axis&&(Math.abs(dx)>10||Math.abs(dy)>10))dsSwipe.axis=Math.abs(dx)>Math.abs(dy)*1.2?"x":"y";
+    if(dsSwipe.axis==="x"){if(dsDrag){if(dsDrag.sheet)dsDrag.sheet.style.transform="";dsDrag=null}
+      dsSwipe.dx=dx;const p=dsSwipe.page;if(p){p.style.transition="none";p.style.transform=`translateX(${dx}px)`;p.style.opacity=String(1-Math.min(.4,Math.abs(dx)/900))}
+      e.preventDefault();return}
+    if(dsSwipe.axis==="y")dsSwipe=null}
   if(dsDrag){const dy=e.touches[0].clientY-dsDrag.y;
     if(dsDrag.fromList&&dy<0&&!dsDrag.dy){dsDrag=null;return}            // 一覧を上へ送るのはふつうのスクロール
     if(dsDrag){dsDrag.dy=Math.max(0,dy);if(dsDrag.sheet){dsDrag.sheet.style.transition="none";dsDrag.sheet.style.transform=`translateY(${dsDrag.dy}px)`}e.preventDefault();return}}
   const list=e.target.closest(".ds-list,.ds-mf");if(!list||list.scrollHeight<=list.clientHeight+1)e.preventDefault();
 },{passive:false});
-document.addEventListener("touchend",()=>{if(!dsDrag)return;const d=dsDrag;dsDrag=null;const sh=d.sheet;if(!sh)return;
+document.addEventListener("touchend",()=>{
+  if(dsSwipe&&dsSwipe.axis==="x"){const w=dsSwipe,p=w.page;dsSwipe=null;dsDrag=null;if(!p)return;
+    const fast=Math.abs(w.dx)>30&&Date.now()-w.t<250;
+    if(Math.abs(w.dx)>70||fast){const n=w.dx<0?1:-1;p.style.transition="transform .16s ease-in,opacity .16s";p.style.transform=`translateX(${n>0?-100:100}%)`;p.style.opacity="0.5";
+      setTimeout(()=>stepDay(n),150)}
+    else{p.style.transition="transform .2s ease-out,opacity .2s";p.style.transform="";p.style.opacity=""}
+    return}
+  dsSwipe=null;
+  if(!dsDrag)return;const d=dsDrag;dsDrag=null;const sh=d.sheet;if(!sh)return;
   sh.style.transition="transform .2s ease-out";
   if(d.dy>90||(d.dy>30&&Date.now()-d.t<250)){sh.style.transform="translateY(100%)";setTimeout(()=>{S.dayOpen=false;render()},180)}
   else sh.style.transform="";
@@ -383,13 +415,14 @@ function go(delta){S.cursor=new Date(S.cursor.getFullYear(),S.cursor.getMonth()+
 /* 月の画面・リストを左右になぞると月が変わる（左へ＝次の月、右へ＝前の月） */
 let sw=null;
 /* 日の一覧（スマホの日の一覧・パソコンの右の日の欄）を左右になぞると前の日・次の日（2026-11-17 依頼者「スマホのこの画面、左右スワイプで日付が変わるように」）。左へ＝次の日 */
-function stepDay(n){const nd=addDays(parse(S.sel),n);S.sel=ymd(nd);
+function stepDay(n){const nd=addDays(parse(S.sel),n);S.sel=ymd(nd);S.slideIn=n;
   if(nd.getFullYear()!==S.cursor.getFullYear()||nd.getMonth()!==S.cursor.getMonth()){S.cursor=new Date(nd.getFullYear(),nd.getMonth(),1);subscribe()}
   render()}
 document.addEventListener("touchstart",e=>{sw=null;
   if(e.touches.length!==1||ed||SR.open||$("ov")||$("mfOv")||!e.target.closest)return;
   if(e.target.closest("input,select,textarea,.mf-tbl"))return;
-  const day=e.target.closest("#dayOv .daysheet,#panel");
+  if(e.target.closest("#dayOv"))return;   // 日の一覧は指についてめくる（上の dsSwipe）
+  const day=e.target.closest("#panel");
   if(day){sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now(),day:true};return}
   if(S.dayOpen||!e.target.closest("#app")||e.target.closest(".panel"))return;
   sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()}},{passive:true});
