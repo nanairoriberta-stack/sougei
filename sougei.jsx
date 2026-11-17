@@ -2696,7 +2696,8 @@ function buildExcelHtml(master, sheet, date) {
   };
   sheet.runs.forEach((r) => putIt(r.staffId, r.time, itemText(r, true)));
   sheet.blocks.filter((b) => !b.noteOnly).forEach((b) => putIt(b.staffId, b.time, itemText(b, false)));
-  master.staff.forEach((s) => { const sl = earlyLeaveSlot(s, (sheet.staffOv || {})[s.id], sheet.blocks); if (sl != null) putIt(s.id, toStr(sl), "退勤"); });
+  master.staff.forEach((s) => { const ov = (sheet.staffOv || {})[s.id], sl = earlyLeaveSlot(s, ov, sheet.blocks); if (sl == null) return;
+    const k = `${colKey(s.id)}:${Math.max(GRID_START, Math.min(GRID_END - SLOT, sl))}`, a = (cellMap[k] = cellMap[k] || []); a.splice(leavePosOf(ov, a.length), 0, "退勤"); });   // 画面で動かした位置（無ければいちばん下）
 
   const usedSlots = [];
   for (let m = GRID_START; m < GRID_END; m += SLOT) {
@@ -3637,6 +3638,8 @@ function earlyLeaveSlot(s, ov, blocks) {
   if ((blocks || []).some((b) => b && b.staffId === s.id && !b.noteOnly && /退勤/.test(String(b.label || "")))) return null;
   return Math.floor((en - 1) / SLOT) * SLOT;
 }
+// 「退勤」をそのマスの何番目に出すか（上にあるコマの数）。staffOv.leaveAt が無ければいちばん下（2026-11-17 依頼者「同一マス内で上下動かせるように」）
+function leavePosOf(ov, n) { const v = ov && ov.leaveAt; return Number.isFinite(v) ? Math.max(0, Math.min(n, Math.round(v))) : n; }
 // AM休・PM休・遅刻・早退などで勤務時間を変えた職員の、勤務時間の外のコマ（休みと同じ灰色にする）
 function outOfShiftSlot(s, ov, m) {
   if (!s) return false;
@@ -3804,12 +3807,12 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     return `${bvName ? bvName + "\n" : ""}${it.label}`;
   };
   const cellMap = {};
-  const put = (sid, time, txt, rank, ord, ownRank = 1) => {
+  const put = (sid, time, txt, rank, ord, ownRank = 1, lvPos) => {
     const t = toMin(time);
     if (t == null) return;
     const slot = Math.max(GRID_START, Math.min(GRID_END - SLOT, Math.floor(t / SLOT) * SLOT));
     const k = `${colKey(sid)}:${slot}`;
-    (cellMap[k] = cellMap[k] || []).push({ t: txt, k: rank, o: ord, tm: time, slot, oc: ownRank });
+    (cellMap[k] = cellMap[k] || []).push({ t: txt, k: rank, o: ord, tm: time, slot, oc: ownRank, lv: lvPos });
   };
   // 同じセル内の表示順。アプリ画面(TimeGrid)と同じ規則にする:
   //  ①自車ランク(午前の自車→通常→午後の自車) ②ord(手動並べ替え) ③種類ランク(ordが無い場合の保険)
@@ -3827,7 +3830,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     put(rid, r.time, `${st2 ? st2.name : ""}便に同乗`, (RANK[r.kind] != null ? RANK[r.kind] : 1) + 0.05, r.ord != null ? r.ord + 0.05 : null, ownCarRankOf(r));
   }));
   sheet.blocks.filter((b) => !b.noteOnly && !(isAwayBlock(b) && workingSet.has(b.staffId))).forEach((b) => put(b.staffId, b.time, itemText(b, false), b.kind === "help" ? RANK.help : RANK.block, b.ord, ownCarRankOf(b)));   // 中抜け・時間休みの「不在」は灰色だけ
-  cols.forEach((s) => { const sl = earlyLeaveSlot(s, (sheet.staffOv || {})[s.id], sheet.blocks); if (sl != null) put(s.id, toStr(sl), "退勤", RANK.block + 0.9, 9999); });   // PM休・早退の「退勤」
+  cols.forEach((s) => { const sl = earlyLeaveSlot(s, (sheet.staffOv || {})[s.id], sheet.blocks); if (sl != null) put(s.id, toStr(sl), "退勤", RANK.block + 0.9, 9999, 1, (((sheet.staffOv || {})[s.id] || {}).leaveAt)); });   // PM休・早退の「退勤」（lv＝画面で動かした位置）
   // 予定がある時間の範囲を求め、その範囲を30分刻みで全て行にする(8:00と8:30は別の行)
   const HOUR = 60;
   let minT = null, maxT = null;
@@ -3844,6 +3847,8 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   for (let m = startHour; m < endHour; m += SLOT) usedSlots.push(m);
   // セルは30分スロットのまま使う(まとめない)
   const cellMapH = cellMap;
+  // 「退勤」を画面と同じ位置へ（無ければいちばん下）
+  const withLeaveAt = (arr) => { const i = arr.findIndex((x) => x.t === "退勤" && x.o === 9999); if (i < 0) return arr; const [lv] = arr.splice(i, 1); arr.splice(leavePosOf({ leaveAt: lv.lv }, arr.length), 0, lv); return arr; };
 
   const wb = opts.wb || new ExcelJS.Workbook();
   const ws = wb.addWorksheet(opts.sheetName || "送迎表", {
@@ -4024,7 +4029,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     const prevM = usedSlots[i - 1];
     cols.forEach((s, i2) => {
       if (prevM != null && spill[`${s.id}:${prevM}`]) return; // 上のセルの縦マージ範囲なので触らない
-      const items = (cellMapH[`${s.id}:${m}`] || []).slice().sort((a, b) => ((a.oc != null ? a.oc : 1) - (b.oc != null ? b.oc : 1)) || ((a.o != null ? a.o : 999) - (b.o != null ? b.o : 999)) || (a.k - b.k));
+      const items = withLeaveAt((cellMapH[`${s.id}:${m}`] || []).slice().sort((a, b) => ((a.oc != null ? a.oc : 1) - (b.oc != null ? b.oc : 1)) || ((a.o != null ? a.o : 999) - (b.o != null ? b.o : 999)) || (a.k - b.k)));
       if (spill[`${s.id}:${m}`]) { try { ws.mergeCells(r, 2 + i2, r + 1, 2 + i2); } catch (e) {} }
       setCell(r, 2 + i2, items.map((x) => x.t).join("\n"), { fill: isOff(s) || outOfShiftSlot({ ...s, ...staffTimeOf(s, wd, {}) }, (sheet.staffOv || {})[s.id], m) || awayBlockAt(sheet.blocks, s.id, m) ? "FFF5F5F4" : undefined, sideOnly: true, size: GF });
     });
@@ -6833,7 +6838,7 @@ function StaffOvModal({ master, staff, ov, itemCount, fixedOffToday, onSave, onH
 /* ============================================================
    タイムグリッド(時間 × 職員 + 保留列)
    ============================================================ */
-function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, searchQ, activeSearchId, searchSeq, onCell, onItem, onStaff, onToggleOff, onMoveItem, onDeleteItem, onSetOrder, onRemoveRider, onDropUserOnRun, onDropUserOnCell, onDropVehicleOnRun, onDropVehicleOnCell, onHoverTime }) {
+function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, searchQ, activeSearchId, searchSeq, onCell, onItem, onStaff, onToggleOff, onMoveItem, onDeleteItem, onSetOrder, onRemoveRider, onDropUserOnRun, onDropUserOnCell, onDropVehicleOnRun, onDropVehicleOnCell, onHoverTime, onLeavePos }) {
   const gridScrollRef = useRef(null);
   const topScrollRef = useRef(null);
   const [gridScrollW, setGridScrollW] = useState(2000);
@@ -7314,8 +7319,23 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                     onDragLeave={() => { if (overKey === cKey) setOverKey(null); }}
                     onDrop={cellDrop(s.id, m)}
                     className={`border border-stone-200 align-top p-0.5 ${emptyCell} ${offGrid ? "bg-stone-100/80" : "bg-white"} group ${overKey === cKey ? "outline outline-2 outline-sky-500 bg-sky-50" : ""}`}>
-                    {m === earlyLeaveSlot(s, ov, data.blocks) && <div className="text-[10px] font-bold text-stone-600 bg-stone-200 rounded px-1 mb-0.5" data-leave={s.id}>退勤 {ov.end}</div>}
-                    {renderItems(items, s.id, m)}
+                    {m === earlyLeaveSlot(s, ov, data.blocks) ? (() => {
+                      // 「退勤」は同じマスの中で上下に動かせる（2026-11-17 依頼者「そのコマに他にコマが入る場合もあるので、何時退勤を同一マス内で上下動かせるように」）。
+                      // 位置はその日の staffOv.leaveAt（上にあるコマの数。無ければいちばん下）。Excel も同じ位置
+                      const sorted = items.slice().sort(byOrd), n = sorted.length, pos = leavePosOf(ov, n);
+                      const mv = (d) => (e) => { e.stopPropagation(); if (onLeavePos) onLeavePos(s.id, Math.max(0, Math.min(n, pos + d))); };
+                      return (<>
+                        {renderItems(sorted.slice(0, pos), s.id, m)}
+                        <div className="flex items-center gap-0.5 text-[10px] font-bold text-stone-600 bg-stone-200 rounded px-1 mb-0.5" data-leave={s.id} data-leave-pos={pos}>
+                          <span className="flex-1">退勤 {ov.end}</span>
+                          {n > 0 && onLeavePos && <>
+                            <button type="button" data-leave-up={s.id} disabled={pos <= 0} onClick={mv(-1)} className="px-0.5 rounded hover:bg-stone-300 disabled:opacity-25" title="退勤を上へ">▲</button>
+                            <button type="button" data-leave-down={s.id} disabled={pos >= n} onClick={mv(1)} className="px-0.5 rounded hover:bg-stone-300 disabled:opacity-25" title="退勤を下へ">▼</button>
+                          </>}
+                        </div>
+                        {renderItems(sorted.slice(pos), s.id, m)}
+                      </>);
+                    })() : renderItems(items, s.id, m)}
                     <button className="w-full text-stone-300 text-xs opacity-0 group-hover:opacity-100 hover:text-sky-600 leading-none" onClick={() => onCell(s.id, toStr(m))}>+</button>
                   </td>
                 );
@@ -11002,6 +11022,7 @@ function AppInner() {
                   onItem={({ target, item }) => setModal({ type: "item", initial: { ...item }, editTarget: target })}
                   onStaff={(s) => setModal({ type: "staffOv", staffId: s.id })}
                   onToggleOff={toggleOff}
+                  onLeavePos={(sid, pos) => curUpdate((prev) => ({ ...prev, staffOv: { ...(prev.staffOv || {}), [sid]: { ...((prev.staffOv || {})[sid] || {}), leaveAt: pos } } }))}
                   onMoveItem={moveItem}
                   onRemoveRider={(runId, riderId) =>
                     curUpdate((prev) => ({

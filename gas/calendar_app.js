@@ -149,7 +149,7 @@ function renderPanel(vis,ps){
   if(!S.loaded&&S.dbState==="connecting")body=`<div class="empty">予定を読み込んでいます…</div>`;
   else if(!evs.length)body=`<div class="empty">この日の予定はまだありません。${can?"<br>「この日に追加」から登録できます。":""}</div>`;
   else body=`<ul class="ev-list">${evs.map(e=>evRow(e,ps)).join("")}</ul>`;
-  $("panel").innerHTML=`<div class="panel-head"><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${body}`;
+  $("panel").innerHTML=`<div class="panel-head"><button class="ds-step" data-day-step="-1" aria-label="前の日">‹</button><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="ds-step" data-day-step="1" aria-label="次の日">›</button><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${body}`;
 }
 /* スマホ：日付を押すと、その日の予定の一覧が下から出る（TimeTreeのように）。右上の＋でその日に予定を入れる */
 const isMob=()=>matchMedia("(max-width:560px)").matches;
@@ -175,7 +175,7 @@ function renderDay(vis){
   const d=parse(S.sel),evs=on(vis,S.sel),hol=HOL[S.sel],can=db&&S.canWrite&&core;
   const keep=root.querySelector(".ds-list")?.scrollTop||0;
   root.innerHTML=`<div class="overlay day-ov" id="dayOv"><div class="sheet daysheet" role="dialog" aria-modal="true" aria-label="${d.getMonth()+1}月${d.getDate()}日の予定"><div class="ds-grip"></div>
-    <div class="ds-head"><h2>${d.getMonth()+1}月${d.getDate()}日 ${WD[d.getDay()]}曜日${hol?`<small>${esc(hol)}</small>`:""}</h2>
+    <div class="ds-head"><button class="ds-step" data-day-step="-1" aria-label="前の日">‹</button><h2>${d.getMonth()+1}月${d.getDate()}日 ${WD[d.getDay()]}曜日${hol?`<small>${esc(hol)}</small>`:""}</h2><button class="ds-step" data-day-step="1" aria-label="次の日">›</button>
       <button class="ds-add" data-add-day aria-label="この日に予定を追加" ${can?"":"disabled"}>＋</button><button class="icon-btn" data-day-close aria-label="閉じる">×</button></div>
     ${evs.length?`<ul class="ds-list">${evs.map(dsRow).join("")}</ul>`:`<div class="empty">${S.loaded?"この日の予定はまだありません。":"予定を読み込んでいます…"}${can&&S.loaded?"<br>右上の＋から入れられます。":""}</div>`}
   </div></div>`;
@@ -858,6 +858,10 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-draft-open]")){const d=draftGet();if(d){const cur=d.id?allEvents().find(x=>x.id===d.id):null;openEditor(cur||d.base||null,null,d)}return}
   if(t.closest("[data-draft-drop]")){draftDrop();render();return}
   if((t.id==="dayOv"&&PDOWN===t)||t.closest("[data-day-close]")){S.dayOpen=false;render();return}
+  /* 日の一覧の前の日・次の日（2026-11-17 依頼者「日付を開いたところに前の日、次の日のボタン」）。月をまたいだらその月を読む */
+  {const st=t.closest("[data-day-step]");if(st){const nd=addDays(parse(S.sel),Number(st.dataset.dayStep)||0);S.sel=ymd(nd);
+    if(nd.getFullYear()!==S.cursor.getFullYear()||nd.getMonth()!==S.cursor.getMonth()){S.cursor=new Date(nd.getFullYear(),nd.getMonth(),1);subscribe()}
+    render();return}}
   const ac=t.closest("[data-add-cell]");   // パソコン：日付の右を押すとその日の予定を追加
   if(ac&&!isMob()){if(db&&S.canWrite&&core){S.sel=ac.dataset.addCell;openEditor(null,ac.dataset.addCell)}return}
   if(t.closest("[data-sr-close]")){closeSearch();return}

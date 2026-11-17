@@ -41,6 +41,12 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     const fillOf = (r, c) => ((ws.getRow(r).getCell(c).fill || {}).fgColor || {}).argb;
     assert.strictEqual(fillOf(row1230, col1), "FFF5F5F4", "PM休：12:30からは灰色"); assert.notStrictEqual(fillOf(row12, col1), "FFF5F5F4");
     assert.strictEqual(fillOf(row13, col2), "FFF5F5F4", "AM休：13:00は灰色"); assert.notStrictEqual(fillOf(row13 + 1, col2), "FFF5F5F4", "AM休：13:30から白");
+    // 退勤は同じマスのコマのいちばん下。画面で上へ動かした位置（leaveAt）なら上（2026-11-17 依頼者「何時退勤を同一マス内で上下動かせるように」）
+    { const sh3 = Object.assign({}, sh2, { blocks: [...(sheet.blocks || []), { id: "bL", kind: "block", time: "12:00", staffId: st1.id, label: "片付け", vehicleId: "" }] });
+      const cellOf = async (sh) => { const w = E.buildWorkbook(ExcelJS, dm, sh, date), b = new ExcelJS.Workbook(); await b.xlsx.load(await w.xlsx.writeBuffer()); const x = b.getWorksheet("送迎表"); let c = 0, r = 0; x.eachRow((row, rn) => row.eachCell((cc, cn) => { const v = String(cc.value || ""); if (v === st1.name) c = cn; if (cn === 1 && v === "12:00") r = rn; })); return String(x.getRow(r).getCell(c).value || ""); };
+      const c1 = await cellOf(sh3); assert.ok(c1.indexOf("片付け") >= 0 && c1.indexOf("片付け") < c1.indexOf("退勤"), "はじめは下: " + JSON.stringify(c1));
+      const c2 = await cellOf(Object.assign({}, sh3, { staffOv: { ...sh3.staffOv, [st1.id]: { end: "12:30", leaveAt: 0 } } })); assert.ok(c2.indexOf("退勤") < c2.indexOf("片付け"), "上へ動かした: " + JSON.stringify(c2));
+      const x1 = E.buildExcelHtml(dm, Object.assign({}, sh3, { staffOv: { ...sh3.staffOv, [st1.id]: { end: "12:30", leaveAt: 0 } } }), date); assert.ok(x1.indexOf("退勤") < x1.indexOf("片付け"), ".xls も同じ位置"); }
     console.log("PM休・AM休のExcel OK");
   }
   { // 中抜け（2026-11-05 依頼者）：カレンダーの中抜けの「不在」はコマを出さず灰色。職員のいつもの中抜け（新見 14:00〜16:00）も灰色

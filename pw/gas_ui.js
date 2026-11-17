@@ -72,6 +72,14 @@ const D = path.join(__dirname, "../gas/out");
   await pg.waitForTimeout(500); assert.ok(await pg.locator("#shiftBtn").isVisible(), "男性のシフト表に入っている余村慎さん（一般）にはシフト表のボタン");
   await pg.click(`.cell[data-day="${date}"]`); await pg.waitForTimeout(400);   // スマホは日を押すと一覧が出て、その中に「休みを入れる」
   assert.strictEqual(await pg.locator("#qKind, .ds-quick, .quick").count(), 0, "「予定を入れる（この日）」の欄は出さない");
+  { // 日の一覧の前の日・次の日（2026-11-17 依頼者）。月をまたいでも移る
+    const h = () => pg.locator(".ds-head h2").innerText(), step = async (d) => { await pg.click(`.daysheet [data-day-step="${d}"]`); await pg.waitForTimeout(300); };
+    await step(1); assert.ok((await h()).startsWith("11月3日 火曜日"), "次の日 " + await h());
+    await step(-1); await step(-1); assert.ok((await h()).startsWith("11月1日 日曜日"), "前の日 " + await h());
+    await step(-1); assert.ok((await h()).startsWith("10月31日 土曜日"), "前の月へ " + await h());
+    await step(1); await step(1); assert.ok((await h()).startsWith("11月2日 月曜日"), "戻る " + await h());
+    await pg.screenshot({ path: "g_cal_daystep.png" });
+    console.log("日の一覧の前の日・次の日 OK"); }
   await pg.click(".daysheet [data-add-day]"); await pg.waitForTimeout(400);   // ＋から職員休み（AM休）
   await pickLabel(pg, "leave"); await pg.waitForTimeout(300);
   await pg.locator('label:has(input[name="w-leave"][value="am"])').click(); await pg.waitForTimeout(300);
@@ -113,12 +121,28 @@ const D = path.join(__dirname, "../gas/out");
   assert.deepStrictEqual(real(errs), []);
   // 事務所PC：管理者が送迎表（現体制版）を開く
   api(t, "cal.apply", [{ kind: "upsert", opId: "op_pmleave1", id: "ev_pmleave1", baseRev: null, ev: { title: "高井 PM休", date, endDate: date, allDay: true, start: "", end: "", label: "leave", place: "", memo: "", members: [], sg: { type: "staff_off", staff: ["高井"], half: "pm" } } }]);   // PM休（退勤のコマ）
+  { // 退勤のマスにほかのコマも入れておく（退勤を上下に動かす試し。2026-11-17 依頼者）
+    const tk = api(t, "kv.get", ["master"]).data.value.staff.find((x) => x.name === "高井"), s0 = api(t, "kv.get", ["sheet:" + date]).data.value;
+    const en = s0.staffOv[tk.id].end, [h, mi] = en.split(":").map(Number), sl = Math.floor((h * 60 + mi - 1) / 30) * 30, tm = `${Math.floor(sl / 60)}:${String(sl % 60).padStart(2, "0")}`;
+    api(t, "kv.merge", [{ key: "sheet:" + date, base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, { id: "blkLeave1", kind: "block", time: tm, staffId: tk.id, label: "片付け", vehicleId: "" }] } }]); }
   const P = await open("sougei.html", { width: 1400, height: 900 }, boot);
   await P.pg.waitForTimeout(500); await P.pg.fill("#sghNo", "000"); await P.pg.fill("#sghPin", "5829"); await P.pg.click("#sghGo"); await P.pg.waitForTimeout(5000);
   await P.pg.screenshot({ path: "g_sougei.png" });
   { const tk = api(t, "kv.get", ["master"]).data.value.staff.find((x) => x.name === "高井");   // PM休：勤務の最後のコマに「退勤」
     const lv = P.pg.locator(`[data-leave="${tk.id}"]`); assert.strictEqual(await lv.count(), 1, "PM休の退勤のコマ"); assert.ok((await lv.innerText()).startsWith("退勤"));
-    console.log("PM休の退勤:", await lv.innerText()); }
+    console.log("PM休の退勤:", await lv.innerText());
+    // 同じマスのコマ（片付け）の下にある → ▲で上へ → 保存される → ▼で下へ
+    const order = () => P.pg.evaluate((id) => { const td = document.querySelector(`[data-leave="${id}"]`).closest("td"); return [...td.querySelectorAll("[data-leave], [data-item-id]")].map((x) => x.dataset.leave ? "退勤" : x.lastElementChild.innerText.trim()); }, tk.id);
+    const o0 = await order(); assert.ok(o0.length >= 2 && o0[o0.length - 1] === "退勤" && o0.includes("片付け"), "はじめはいちばん下 " + JSON.stringify(o0));
+    await P.pg.click(`[data-leave-up="${tk.id}"]`); await P.pg.waitForTimeout(300);
+    const o1 = await order(); assert.deepStrictEqual(o1, [...o0.slice(0, -2), "退勤", o0[o0.length - 2]], "▲で1つ上へ " + JSON.stringify(o1));
+    for (let i = 0; i < o0.length; i++) if (!(await P.pg.locator(`[data-leave-up="${tk.id}"]`).isDisabled())) { await P.pg.click(`[data-leave-up="${tk.id}"]`); await P.pg.waitForTimeout(250); }
+    assert.strictEqual((await order())[0], "退勤", "いちばん上まで（▲は押せなくなる）");
+    await P.pg.waitForTimeout(3500);
+    assert.strictEqual(api(t, "kv.get", ["sheet:" + date]).data.value.staffOv[tk.id].leaveAt, 0, "位置が保存される");
+    await P.pg.click(`[data-leave-down="${tk.id}"]`); await P.pg.waitForTimeout(300);
+    assert.strictEqual((await order())[1], "退勤", "▼で1つ下へ");
+    console.log("退勤を同じマスで上下に動かす OK"); }
   { const body0 = await P.pg.locator("#root").innerText();   // 見ていない箱（送迎の抜け・使える車）は出さない
     assert.ok(!body0.includes("送迎の抜けがあります") && !body0.includes("🚗 使える車") && !body0.includes("全員に迎え・送りが入っています"), "右の箱を出さない"); }
   // 日付ボタンの📅：カレンダーはボタンのすぐ下・左そろえに出る。日を押すとその日に
