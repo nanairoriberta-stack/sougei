@@ -16,6 +16,13 @@ assert.strictEqual(src, APP + "?page=calendar&wrap=" + encodeURIComponent("https
 assert.ok(h.includes("<title>なないろカレンダー</title>"));
 assert.strictEqual(r.headers.get("x-frame-options"), "DENY"); assert.strictEqual(r.headers.get("referrer-policy"), "no-referrer");
 assert.ok(/frame-src https:\/\/script\.google\.com/.test(r.headers.get("content-security-policy")));
+assert.ok(/frame-ancestors 'none'/.test(r.headers.get("content-security-policy")), "ふつうはどこにもはめこませない");
+{ // 送迎表の右のカレンダー（embed=1）：なないろの送迎表（Googleの画面）の中にだけはめこめる（2026-11-17 依頼者「開かなくなってる？」）
+  const re = await go("/?page=calendar&embed=1"), he = await re.text(), csp = re.headers.get("content-security-policy");
+  assert.strictEqual(re.headers.get("x-frame-options"), null, "embed は x-frame-options を付けない");
+  assert.ok(/frame-ancestors 'self' https:\/\/script\.google\.com https:\/\/\*\.googleusercontent\.com;/.test(csp), csp);
+  assert.ok(/[?&]embed=1(&|")/.test(he.replace(/&amp;/g, "&")), "中の Google の画面にも embed=1 を渡す");
+  const rx = await go("/?page=calendar&embed=2"); assert.strictEqual(rx.headers.get("x-frame-options"), "DENY", "embed=1 以外はふつう"); }
 const key = "a".repeat(64);
 h = await (await go(`/?page=sougei&e=v2&d=2026-11-20&k=${key}&evil=%3Cscript%3E`)).text();
 const s2 = /<iframe src="([^"]+)"/.exec(h)[1].replace(/&amp;/g, "&");

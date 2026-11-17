@@ -118,7 +118,7 @@ function done() { hideOverlay(); renderChip(); readyResolve(me); for (const f of
 let pushKey = "";
 const WRAP = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(G.__SG_WRAP || "") ? G.__SG_WRAP : "";
 async function pushAsk(force) {
-  if (!WRAP || !me || !token) return;
+  if (!WRAP || !me || !token || G.__SG_EMBED) return;   // 送迎表の右のカレンダーでは聞かない
   try { if (!pushKey) { const r = await call("push.key"); pushKey = (r && r.key) || ""; } } catch (e) { return; }
   if (!pushKey) { if (force) toastHost("通知はまだ使えません（管理者が「設定」シートの B7 に入口のページのアドレスを入れると使えます）"); return; }
   try { G.top.postMessage({ sg: "push-ask", key: pushKey, force: !!force }, WRAP); } catch (e) {}
@@ -147,9 +147,10 @@ const isExec = (u) => /^https:\/\/script\.google\.com\/.*\/exec$/.test(String(u 
 if (!isExec(BASE)) { const b = store.get("sg:base"); if (isExec(b)) BASE = b; }
 function learnBase() { call("app.base").then((b) => { if (isExec(b)) { BASE = b; store.set("sg:base", b); } }).catch(() => {}); }
 // 入口のページ（Cloudflare）の中で開いているときは、画面どうしのリンクも入口のページを通す（なないろのアイコン・Googleの上の帯を出さないまま）。
-// 送迎表の右に出すカレンダー（embed=1）だけは、今までどおり Google のアドレスを直接はめこむ
+// 送迎表の右に出すカレンダー（embed=1）も入口のページを通す（2026-11-17 依頼者「開かなくなってる？」＝入口のページの中の送迎表から Google を直接はめこむと右が真っ白だった）。
+// 入口のページは embed=1 のときだけ Google の画面の中にはめこめる（mcp/entry-worker.mjs）
 function url(q) { const kq = KEY && token === KEY && q ? (q.includes("?") ? "&" : "?") + "k=" + KEY : "";
-  if (WRAP && q && !/[?&]embed=1/.test(q)) return WRAP + "/" + q + kq;
+  if (WRAP && q) return WRAP + "/" + q + kq;
   return isExec(BASE) ? BASE + q + kq : ""; }   // 鍵で開いた画面から移るときも鍵を付ける
 function renderChip() {
   if (!me) { if (chip) chip.remove(); chip = null; return; }

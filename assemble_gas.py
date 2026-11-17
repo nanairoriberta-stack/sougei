@@ -20,7 +20,7 @@ def ev(code):
 def runjs(p): return 'window.__sgRun.push(function(){' + js(p) + '});'
 START = ev('''(function(){var done=false;function go(){if(done)return;done=true;var r=window.__sgRun;for(var i=0;i<r.length;i++){try{r[i]()}catch(e){(function(x){setTimeout(function(){throw x})})(e)}}}
 try{var u=window.google&&google.script&&google.script.url;if(u&&u.getLocation){var t=setTimeout(go,2500);u.getLocation(function(l){clearTimeout(t);var p=(l&&l.parameter)||{};
-if(/^v[123]$/.test(p.e||""))window.__SG_EDITION=p.e;if(/^[0-9a-f]{40,80}$/.test(p.k||""))window.__SG_KEY=p.k;if(/^\\d{4}-\\d{2}-\\d{2}$/.test(p.d||""))window.__SG_DATE=p.d;if(/^https:\\/\\/[A-Za-z0-9.-]+(:\\d+)?$/.test(p.wrap||""))window.__SG_WRAP=p.wrap;go()});return}}catch(e){}go()})();''')
+if(/^v[123]$/.test(p.e||""))window.__SG_EDITION=p.e;if(/^[0-9a-f]{40,80}$/.test(p.k||""))window.__SG_KEY=p.k;if(/^\\d{4}-\\d{2}-\\d{2}$/.test(p.d||""))window.__SG_DATE=p.d;if(/^https:\\/\\/[A-Za-z0-9.-]+(:\\d+)?$/.test(p.wrap||""))window.__SG_WRAP=p.wrap;if(p.embed==="1")window.__SG_EMBED=1;go()});return}}catch(e){}go()})();''')
 cal_html = f'''<!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">

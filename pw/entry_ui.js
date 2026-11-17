@@ -33,6 +33,7 @@ const path = require("path"), fs = require("fs"), os = require("os");
   assert.strictEqual(await pg.locator("#pushbar").count(), 0, "Google以外から頼まれても出さない");
   await b.close(); console.log("入口のページの通知の案内 OK");
   await offlineTest(W);
+  await embedTest(W);
 })().catch((e) => { console.error(e); process.exit(1); });
 
 /* 電波がないときに最後に見た予定（2026-11-17 依頼者「オフラインでも最終みたカレンダーみれるように」）：
@@ -95,4 +96,29 @@ async function offlineTest(W) {
   await pg.goto(ORIGIN + "/offline.html"); assert.ok((await pg.textContent("#info")).includes("まだ予定が残っていません"));
   assert.deepStrictEqual(errs.filter((e) => !/fonts|ERR_/.test(e)), [], "画面エラーなし");
   await b.close(); console.log("電波がないときの最後に見た予定 OK");
+}
+
+/* 送迎表の右のカレンダー（2026-11-17 依頼者「開かなくなってる？」）：入口のページ → 送迎表（Google）→ 入口のページ（embed=1）→ カレンダー（Google）。
+   入口のページは embed=1 のときだけ Google の画面の中にはめこめる。カレンダーの「保存した」は送迎表まで届く */
+async function embedTest(W) {
+  const ORIGIN = "https://nanairo.example.workers.dev";
+  const b = await chromium.launch(), ctx = await b.newContext({ viewport: { width: 1200, height: 800 } }), pg = await ctx.newPage();
+  await ctx.route(ORIGIN + "/**", async (route) => { const q = await W.fetch(new Request(route.request().url()), {});
+    route.fulfill({ status: q.status, headers: Object.fromEntries(q.headers), body: Buffer.from(await q.arrayBuffer()) }); });
+  await ctx.route("https://script.google.com/**", (route) => { const u = new URL(route.request().url());
+    if (u.searchParams.get("page") === "calendar") return route.fulfill({ status: 200, contentType: "text/html",   // 中のカレンダー（保存したら親に知らせる）
+      body: `<!DOCTYPE html><body><p id="cal">calendar ${u.searchParams.get("embed")} ${u.searchParams.get("wrap")}</p><script>setTimeout(()=>window.parent.postMessage({sg:"cal-saved"},"*"),300)</script></body>` });
+    return route.fulfill({ status: 200, contentType: "text/html",   // 送迎表（右にカレンダーをはめこむ）
+      body: `<!DOCTYPE html><body><p>sougei</p><iframe id="side" src="${ORIGIN}/?page=calendar&embed=1"></iframe><script>window.got=[];addEventListener("message",e=>{window.got.push(e.data&&e.data.sg)})</script></body>` }); });
+  await pg.goto(ORIGIN + "/?page=sougei&e=v2"); await pg.waitForTimeout(2500);
+  const sougei = pg.frames().find((f) => f.url().startsWith("https://script.google.com") && /page=sougei/.test(f.url()));
+  const cal = pg.frames().find((f) => /page=calendar/.test(f.url()) && f.url().startsWith("https://script.google.com"));
+  assert.ok(cal, "右のカレンダーが開く（はめこみを断られない） " + pg.frames().map((f) => f.url()).join(" | "));
+  assert.strictEqual((await cal.textContent("#cal")).trim(), "calendar 1 " + ORIGIN, "中のカレンダーに embed=1 と入口が渡る");
+  assert.ok((await sougei.evaluate(() => window.got)).includes("cal-saved"), "保存したら送迎表に知らせる（入口のページが中継）");
+  // ほかのサイトの中には、embed でもはめこめない
+  await ctx.route("https://evil.example.com/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: `<!DOCTYPE html><iframe src="${ORIGIN}/?page=calendar&embed=1"></iframe>` }));
+  const pg2 = await ctx.newPage(); await pg2.goto("https://evil.example.com/x"); await pg2.waitForTimeout(1500);
+  assert.ok(!pg2.frames().some((f) => /page=calendar/.test(f.url()) && f.url().startsWith("https://script.google.com")), "ほかのサイトでは開かない");
+  await b.close(); console.log("送迎表の右のカレンダー（入口のページ経由）OK");
 }

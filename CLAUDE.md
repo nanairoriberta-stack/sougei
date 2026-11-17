@@ -430,7 +430,7 @@ Excel出力の前の確認（`exportCheck`）の2つめ以降に「← 前のチ
 タブごとの背景（2026-10-29。日の一覧 `.daysheet` も同じ色＝2026-10-30）：`html[data-biz]` で全体＝薄い青・生活介護＝薄緑・放課後デイ＝薄ピンク（`--bg`）。上の帯（`--bar`＋上端の色の線）・選んでいるタブの文字と線も同じ系統の濃い色（`--bz`）、色はなめらかに変わる。
 スマホの月表示は1画面に収める（2026-10-29）：上の帯を2段（‹ 年月 › 名前／月・リスト・ゴミ箱 保存済み 今日 🔍）、＋は右下の丸いボタン（`#addBtn`）。マスの高さは画面の残りから（`fitGrid`・`--cellh`・`CELLH`、向きや大きさが変わると合わせ直す）、入るだけの予定（`MAXC`）＋「他N件」。バーは色で塗って白い文字。
 右側の日の欄（`#panel`）はスマホでは出さない。
-日の一覧（スマホの `#dayOv`・パソコンの `#panel`）の日付の左右に「‹」「›」で前の日・次の日（`data-day-step`。2026-11-17 依頼者。月をまたいだらその月を読む）。テスト `pw/gas_ui.js`
+日の一覧（スマホの `#dayOv`・パソコンの `#panel`）の日付の左右に「‹」「›」で前の日・次の日（`data-day-step`。2026-11-17 依頼者。月をまたいだらその月を読む）。日の一覧・日の欄を左右になぞっても移る（左へ＝次の日。`stepDay`、月の画面のなぞりと同じ決まり：横60px以上・0.8秒以内。2026-11-17 依頼者「左右スワイプで日付が変わるように」）。テスト `pw/gas_ui.js`
 パソコンのカレンダー：マスの日付の右（マスに入ると＋が見える `.cell-add`・`data-add-cell`）を押すと、その日の予定を追加（2026-10-29）。
 事業の取り違え（2026-10-30 依頼者）：`names.list` の `staffBiz`（職員名→その人がいる送迎表の版の事業）。ログインした職員が片方の事業だけなら、カレンダーはその事業のタブから開く（`homeBiz`、タブを押したら `S.bizTouched`）。全体のタブで入れる新しい予定もその人の事業。
 予定の事業と違う事業の職員・利用者（`bizMismatch`）が入っていると、保存のときに「この予定は『生活介護』の予定ですが、○○さんは放課後デイの人です」→もう一度「保存」で入れる（`ed.bizWarned`）。カレンダーの一覧に「⚠別の事業」、月のバーに⚠、編集画面の事業の下に注意（`data-bizmis`）。
@@ -444,7 +444,8 @@ Excel出力の前の確認（`exportCheck`）の2つめ以降に「← 前のチ
 - **入口のページ（Cloudflare Worker、2026-11-16 依頼者「他のウェブアプリではできてる」「Googleの帯も消える？」→「お願いします」）**：iPhoneは外側のページの apple-touch-icon しか見ない・Googleの帯は外側がGoogleのときに出る → アプリを入口のページの中に iframe ではめこむ。
   `mcp/entry-worker.mjs` → `gas/out/entry_cloudflare.js`（アイコンの画像 180/192 を base64 で中に入れる・APP_URL は依頼者の …/exec を入れて出す＝`SG_APP_URL` で変えられる。`env.GAS_URL` があればそちら）。手順 `gas/入口のページの手順.txt` → `Entry_setup.txt`。
   入口 `https://<名前>.workers.dev/?page=…&e=…&d=…&k=…` → iframe `…/exec?…&wrap=<入口のorigin>`（決まった値だけ通す・CSP・x-frame-options DENY・no-referrer）。
-  Google側：`wrap`（`WRAP_RE`）があればどの画面も `ALLOWALL`。画面は START が `wrap` を読み `__SG_WRAP` → gashost の `url()` は入口を通す（`WRAP/?page=…`、`target=_top`）。送迎表の右のカレンダー（embed=1）だけは Google を直接。「ログインしたままにする」のアドレスも入口のもの。
+  Google側：`wrap`（`WRAP_RE`）があればどの画面も `ALLOWALL`。画面は START が `wrap` を読み `__SG_WRAP` → gashost の `url()` は入口を通す（`WRAP/?page=…`、`target=_top`）。「ログインしたままにする」のアドレスも入口のもの。
+  送迎表の右のカレンダー（embed=1）も入口を通す（2026-11-17 依頼者「開かなくなってる？」＝入口の中の送迎表から Google を直接はめこむと右が真っ白だった。原因の確かめは実機で）：入口は `embed=1` を通し、そのときだけ x-frame-options を付けず `frame-ancestors 'self' https://script.google.com https://*.googleusercontent.com`（ほかのサイトの中には出ない）。中のカレンダーの「保存した」`cal-saved` は入口の `entry.js` が親（送迎表）へ中継。START が `embed=1` を `__SG_EMBED` に、gashost は embed では通知を聞かない。テスト `mcp/test-entry.mjs`・`pw/entry_ui.js`（`embedTest`）
   iPhoneの Safari では入口の中のログインの記録は別扱い＝はじめに1回ログイン。実機は未確認（依頼者に1台で試してもらう）。テスト `mcp/test-entry.mjs`・`gas/test-gas.js`・`pw/gas_ui.js`
 - 画像は `gas/icon/nanairo_icon_512.png`・`_180.png`（依頼者の画像の真ん中を正方形に切り出した。角は iPhone が丸める）。テスト `gas/test-gas.js`
 

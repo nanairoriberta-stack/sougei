@@ -56,7 +56,7 @@ const D = path.join(__dirname, "../gas/out");
     const W = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_WRAP="https://nanairo.example.workers.dev";`, "calendar_wrap.html");
     await W.pg.waitForTimeout(500);
     const u = await W.pg.evaluate(() => [SGHost.url("?page=shift"), SGHost.url("?page=sougei&e=v2"), SGHost.url("?page=calendar&embed=1"), SGHost.wrap]);
-    assert.deepStrictEqual(u, ["https://nanairo.example.workers.dev/?page=shift", "https://nanairo.example.workers.dev/?page=sougei&e=v2", "https://script.google.com/macros/s/TEST/exec?page=calendar&embed=1", "https://nanairo.example.workers.dev"], JSON.stringify(u));
+    assert.deepStrictEqual(u, ["https://nanairo.example.workers.dev/?page=shift", "https://nanairo.example.workers.dev/?page=sougei&e=v2", "https://nanairo.example.workers.dev/?page=calendar&embed=1", "https://nanairo.example.workers.dev"], JSON.stringify(u));
     const W2 = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_WRAP="javascript:alert(1)";`, "calendar_wrap2.html");
     await W2.pg.waitForTimeout(500);
     assert.strictEqual(await W2.pg.evaluate(() => SGHost.url("?page=shift")), "https://script.google.com/macros/s/TEST/exec?page=shift", "おかしな入口は使わない");
@@ -78,6 +78,13 @@ const D = path.join(__dirname, "../gas/out");
     await step(-1); await step(-1); assert.ok((await h()).startsWith("11月1日 日曜日"), "前の日 " + await h());
     await step(-1); assert.ok((await h()).startsWith("10月31日 土曜日"), "前の月へ " + await h());
     await step(1); await step(1); assert.ok((await h()).startsWith("11月2日 月曜日"), "戻る " + await h());
+    // 左右になぞっても移る（2026-11-17 依頼者「左右スワイプで日付が変わるように」）。左へ＝次の日
+    const swipe = (x0, x1) => pg.evaluate(([a, b]) => { const el = document.querySelector(".daysheet .ds-list, .daysheet .empty, .daysheet .ds-head h2");
+      const mk = (type, x) => { const t = new Touch({ identifier: 1, target: el, clientX: x, clientY: 300 }); el.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === "touchend" ? [] : [t], changedTouches: [t] })); };
+      mk("touchstart", a); mk("touchend", b); }, [x0, x1]);
+    await swipe(320, 80); await pg.waitForTimeout(300); assert.ok((await h()).startsWith("11月3日 火曜日"), "左へなぞると次の日 " + await h());
+    await swipe(80, 320); await pg.waitForTimeout(300); assert.ok((await h()).startsWith("11月2日 月曜日"), "右へなぞると前の日 " + await h());
+    assert.ok(await pg.locator(".daysheet").isVisible(), "日の一覧は開いたまま");
     await pg.screenshot({ path: "g_cal_daystep.png" });
     console.log("日の一覧の前の日・次の日 OK"); }
   await pg.click(".daysheet [data-add-day]"); await pg.waitForTimeout(400);   // ＋から職員休み（AM休）

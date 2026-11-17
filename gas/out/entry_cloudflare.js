@@ -111,7 +111,7 @@ function chip(){if(navigator.onLine!==false||document.getElementById("offchip"))
 window.addEventListener("offline",chip);window.addEventListener("online",function(){var c=document.getElementById("offchip");if(c)c.remove()});setTimeout(chip,3000);
 try{if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js").catch(function(){})}catch(e){}
 window.addEventListener("message",function(e){var d=e.data;if(!d||typeof d!=="object"||!/^https:\\/\\/([a-z0-9-]+\\.)*(google\\.com|googleusercontent\\.com)$/.test(e.origin))return;app=e.source;
-if(d.sg==="push-ask"&&typeof d.key==="string"&&d.key.length>60){ask=d;check()}else if(d.sg==="push-off")off();else if(d.sg==="cal-snap")snap(d);else if(d.sg==="cal-snap-clear"){try{localStorage.removeItem("calSnap")}catch(x){}}});})();`;
+if(d.sg==="push-ask"&&typeof d.key==="string"&&d.key.length>60){ask=d;check()}else if(d.sg==="push-off")off();else if(d.sg==="cal-saved"){if(window.parent!==window)try{window.parent.postMessage({sg:"cal-saved"},"*")}catch(x){}}else if(d.sg==="cal-snap")snap(d);else if(d.sg==="cal-snap-clear"){try{localStorage.removeItem("calSnap")}catch(x){}}});})();`;
 
 // 電波がないときの画面（最後に見た予定・見るだけ）
 const OFFLINE_HTML = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>なないろカレンダー（電波なし）</title>
@@ -141,7 +141,7 @@ h+='<div class="ev g-'+esc(e.g)+'"><div class="tm">'+esc(tm)+'</div><div><div cl
 L.innerHTML=h;var f=document.getElementById("d"+(first||days[days.length-1]));if(f)setTimeout(function(){f.scrollIntoView({block:"start"});window.scrollBy(0,-90)},30)})();`;
 
 // アプリに渡してよい値だけを通す（ほかの値は捨てる）
-const PASS = { page: /^(calendar|sougei|shift)$/, e: /^v[123]$/, d: /^\d{4}-\d{2}-\d{2}$/, k: /^[0-9a-f]{40,80}$/ };
+const PASS = { page: /^(calendar|sougei|shift)$/, e: /^v[123]$/, d: /^\d{4}-\d{2}-\d{2}$/, k: /^[0-9a-f]{40,80}$/, embed: /^1$/ };   // embed=1＝送迎表の右に出すカレンダー
 
 export function entryPage(reqUrl, appUrl) {
   const u = new URL(reqUrl);
@@ -199,13 +199,17 @@ export default {
         { headers: { "content-type": "application/manifest+json" } });
     if (url.pathname !== "/") return new Response("Not found", { status: 404 });
     if (!EXEC_RE.test(appUrl)) return new Response("APP_URL（Googleのウェブアプリのアドレス …/exec）が入っていません", { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } });
-    return new Response(entryPage(request.url, appUrl), { headers: {
+    // 送迎表の右に出すカレンダー（embed=1）だけは、なないろの送迎表（Googleの画面）の中にはめこめる。ほかはどこにもはめこませない
+    const embed = url.searchParams.get("embed") === "1";
+    const h = {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
       "referrer-policy": "no-referrer",                       // 「ログインしたまま」の鍵がほかへ漏れないように
-      "x-frame-options": "DENY",                              // この入口のページを、ほかのサイトの中にはめこませない
-      "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; img-src 'self'; style-src 'unsafe-inline'; manifest-src 'self'; frame-src https://script.google.com https://*.googleusercontent.com; frame-ancestors 'none'; base-uri 'none'",
+      "content-security-policy": "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; img-src 'self'; style-src 'unsafe-inline'; manifest-src 'self'; frame-src https://script.google.com https://*.googleusercontent.com; frame-ancestors "
+        + (embed ? "'self' https://script.google.com https://*.googleusercontent.com" : "'none'") + "; base-uri 'none'",
       "x-content-type-options": "nosniff",
-    } });
+    };
+    if (!embed) h["x-frame-options"] = "DENY";                // この入口のページを、ほかのサイトの中にはめこませない
+    return new Response(entryPage(request.url, appUrl), { headers: h });
   },
 };

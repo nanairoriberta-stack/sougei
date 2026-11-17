@@ -382,13 +382,21 @@ function offlineSnap(){const H=window.SGHost;if(!H||!H.wrap||!window.top||window
 function go(delta){S.cursor=new Date(S.cursor.getFullYear(),S.cursor.getMonth()+delta,1);subscribe();render()}
 /* 月の画面・リストを左右になぞると月が変わる（左へ＝次の月、右へ＝前の月） */
 let sw=null;
+/* 日の一覧（スマホの日の一覧・パソコンの右の日の欄）を左右になぞると前の日・次の日（2026-11-17 依頼者「スマホのこの画面、左右スワイプで日付が変わるように」）。左へ＝次の日 */
+function stepDay(n){const nd=addDays(parse(S.sel),n);S.sel=ymd(nd);
+  if(nd.getFullYear()!==S.cursor.getFullYear()||nd.getMonth()!==S.cursor.getMonth()){S.cursor=new Date(nd.getFullYear(),nd.getMonth(),1);subscribe()}
+  render()}
 document.addEventListener("touchstart",e=>{sw=null;
-  if(e.touches.length!==1||S.dayOpen||ed||SR.open||$("ov")||!(e.target.closest&&e.target.closest("#app")))return;
-  if(e.target.closest("input,select,textarea,.panel"))return;
+  if(e.touches.length!==1||ed||SR.open||$("ov")||$("mfOv")||!e.target.closest)return;
+  if(e.target.closest("input,select,textarea,.mf-tbl"))return;
+  const day=e.target.closest("#dayOv .daysheet,#panel");
+  if(day){sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now(),day:true};return}
+  if(S.dayOpen||!e.target.closest("#app")||e.target.closest(".panel"))return;
   sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()}},{passive:true});
 document.addEventListener("touchend",e=>{if(!sw)return;const s=sw;sw=null;const p=e.changedTouches&&e.changedTouches[0];if(!p)return;
   const dx=p.clientX-s.x,dy=p.clientY-s.y;
   if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5||Date.now()-s.t>800)return;
+  if(s.day){stepDay(dx<0?1:-1);return}
   go(dx<0?1:-1);const a=$("app");if(a){a.classList.remove("sw-l","sw-r");void a.offsetWidth;a.classList.add(dx<0?"sw-l":"sw-r")}},{passive:true});
 
 /* ---------- 書きかけ（端末に自動保存） ---------- */
@@ -946,9 +954,7 @@ document.addEventListener("click",async e=>{
     if(t.closest("#mfOv"))return}
   if((t.id==="dayOv"&&PDOWN===t)||t.closest("[data-day-close]")){S.dayOpen=false;render();return}
   /* 日の一覧の前の日・次の日（2026-11-17 依頼者「日付を開いたところに前の日、次の日のボタン」）。月をまたいだらその月を読む */
-  {const st=t.closest("[data-day-step]");if(st){const nd=addDays(parse(S.sel),Number(st.dataset.dayStep)||0);S.sel=ymd(nd);
-    if(nd.getFullYear()!==S.cursor.getFullYear()||nd.getMonth()!==S.cursor.getMonth()){S.cursor=new Date(nd.getFullYear(),nd.getMonth(),1);subscribe()}
-    render();return}}
+  {const st=t.closest("[data-day-step]");if(st){stepDay(Number(st.dataset.dayStep)||0);return}}
   const ac=t.closest("[data-add-cell]");   // パソコン：日付の右を押すとその日の予定を追加
   if(ac&&!isMob()){if(db&&S.canWrite&&core&&canAddHere()){S.sel=ac.dataset.addCell;openEditor(null,ac.dataset.addCell)}return}
   if(t.closest("[data-sr-close]")){closeSearch();return}
