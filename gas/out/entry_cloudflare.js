@@ -78,7 +78,13 @@ export async function newVapidKeys() {
   return { publicKey: b64u(raw), privateJwk: { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y, d: jwk.d } };
 }
 // 端末の中で動く小さなプログラム（通知を出す・押したら開く）
-const SW_JS = `self.addEventListener("install",e=>self.skipWaiting());self.addEventListener("activate",e=>e.waitUntil(self.clients.claim()));
+// 電波がないとき（2026-11-17 依頼者「オフラインでも最終みたカレンダーみれるように」）：入口のページを開けなければ、端末に置いた「最後に見た予定」の画面（/offline.html）を出す
+const SW_JS = `const CN="nanairo-off-1",PRE=["/offline.html","/offline.js","/icon-192.png"];
+self.addEventListener("install",e=>{e.waitUntil(caches.open(CN).then(c=>c.addAll(PRE)).catch(()=>{}));self.skipWaiting()});
+self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CN).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener("fetch",e=>{const r=e.request;if(r.method!=="GET")return;const u=new URL(r.url);if(u.origin!==self.location.origin||u.pathname.startsWith("/push/"))return;
+if(r.mode==="navigate"){e.respondWith(Promise.race([fetch(r),new Promise((_,no)=>setTimeout(()=>no(new Error("slow")),12000))]).catch(()=>caches.match("/offline.html").then(x=>x||new Response("電波がありません",{headers:{"content-type":"text/plain; charset=utf-8"}}))));return}
+if(PRE.includes(u.pathname))e.respondWith(fetch(r).then(x=>{if(x.ok){const y=x.clone();caches.open(CN).then(c=>c.put(r,y))}return x}).catch(()=>caches.match(r)))});
 self.addEventListener("push",e=>{let d={};try{d=e.data?e.data.json():{}}catch(x){d={title:"なないろ",body:e.data?e.data.text():""}}
 e.waitUntil(self.registration.showNotification(d.title||"なないろ",{body:d.body||"",tag:d.tag||undefined,icon:"/icon-192.png",badge:"/icon-192.png",data:{url:d.url||"/"}}))});
 self.addEventListener("notificationclick",e=>{e.notification.close();const u=new URL((e.notification.data&&e.notification.data.url)||"/",self.location.origin).href;
@@ -100,8 +106,39 @@ try{var reg=await navigator.serviceWorker.getRegistration("/");var s=reg&&await 
 if(Notification.permission==="denied")return;try{if(localStorage.getItem("pushLater")&&Date.now()-Number(localStorage.getItem("pushLater"))<7*864e5&&!ask.force)return}catch(e){}
 show("🔔 カレンダーに予定が入ったときと、毎朝の今日の予定を、このスマホにお知らせします。",[["受け取る",sub,"go"],["あとで",function(){try{localStorage.setItem("pushLater",String(Date.now()))}catch(e){}hide()}]])}
 async function off(){try{var reg=await navigator.serviceWorker.getRegistration("/");var s=reg&&await reg.pushManager.getSubscription();if(s){var ep=s.endpoint;await s.unsubscribe();reply({sg:"push-unsub",endpoint:ep})}}catch(e){}}
+function snap(d){try{if(!Array.isArray(d.ev)||d.ev.length>3000)return;var t=JSON.stringify({v:1,at:Number(d.at)||Date.now(),who:String(d.who||"").slice(0,40),from:String(d.from||""),to:String(d.to||""),ev:d.ev});if(t.length<3000000)localStorage.setItem("calSnap",t)}catch(e){}}
+function chip(){if(navigator.onLine!==false||document.getElementById("offchip"))return;var a=document.createElement("a");a.id="offchip";a.href="/offline.html";a.textContent="📵 電波がありません：最後に見た予定を見る";document.body.appendChild(a)}
+window.addEventListener("offline",chip);window.addEventListener("online",function(){var c=document.getElementById("offchip");if(c)c.remove()});setTimeout(chip,3000);
+try{if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js").catch(function(){})}catch(e){}
 window.addEventListener("message",function(e){var d=e.data;if(!d||typeof d!=="object"||!/^https:\\/\\/([a-z0-9-]+\\.)*(google\\.com|googleusercontent\\.com)$/.test(e.origin))return;app=e.source;
-if(d.sg==="push-ask"&&typeof d.key==="string"&&d.key.length>60){ask=d;check()}else if(d.sg==="push-off")off()});})();`;
+if(d.sg==="push-ask"&&typeof d.key==="string"&&d.key.length>60){ask=d;check()}else if(d.sg==="push-off")off();else if(d.sg==="cal-snap")snap(d);else if(d.sg==="cal-snap-clear"){try{localStorage.removeItem("calSnap")}catch(x){}}});})();`;
+
+// 電波がないときの画面（最後に見た予定・見るだけ）
+const OFFLINE_HTML = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>なないろカレンダー（電波なし）</title>
+<link rel="icon" type="image/png" href="/icon-192.png"><style>
+body{margin:0;background:#f8fafc;color:#1f2937;font:15px/1.5 -apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif}
+header{position:sticky;top:0;background:#fff;border-bottom:1px solid #e2e8f0;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;z-index:2}
+header h1{font-size:17px;margin:0}header p{margin:2px 0 8px;color:#64748b;font-size:13px}header button{font:inherit;padding:7px 14px;border-radius:10px;border:1px solid #2563eb;background:#2563eb;color:#fff;font-weight:700}
+main{padding:8px 12px calc(24px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+.day{margin:14px 0 4px;font-weight:700;color:#334155}.day.today{color:#dc2626}.day.sun{color:#dc2626}.day.sat{color:#2563eb}
+.ev{display:flex;gap:10px;background:#fff;border:1px solid #e2e8f0;border-left:4px solid #94a3b8;border-radius:8px;padding:7px 10px;margin:4px 0}
+.ev.g-staff{background:#eff6ff;border-left-color:#3b82f6}.ev.g-user{background:#fff7ed;border-left-color:#f97316}.ev.g-other{background:#f8fafc}
+.tm{min-width:62px;color:#475569;font-size:13px}.tt{font-weight:600}.sub{color:#64748b;font-size:12px}.none{color:#64748b;padding:24px 4px}
+.tag{font-size:11px;background:#fce7f3;color:#9d174d;border-radius:6px;padding:0 5px;margin-left:4px}</style></head>
+<body><header><h1>📵 電波がありません</h1><p id="info">最後に見た予定を出しています（見るだけ）。</p><button id="retry">もう一度つなぐ</button></header><main id="list"></main><script src="/offline.js"></script></body></html>`;
+const OFFLINE_JS = `(function(){var WD="日月火水木金土";function p2(n){return(n<10?"0":"")+n}function ymd(d){return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate())}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+document.getElementById("retry").onclick=function(){location.href="/"};
+var s=null;try{s=JSON.parse(localStorage.getItem("calSnap")||"null")}catch(e){}var L=document.getElementById("list"),I=document.getElementById("info");
+if(!s||!Array.isArray(s.ev)){I.textContent="この端末には、まだ予定が残っていません。電波のあるところで一度カレンダーを開くと、次から電波がなくても見られます。";return}
+var at=new Date(s.at);I.textContent=(at.getMonth()+1)+"/"+at.getDate()+" "+p2(at.getHours())+":"+p2(at.getMinutes())+" に見た予定です（見るだけ。新しい予定・変更は電波が戻ってから）。";
+var by={},today=ymd(new Date());s.ev.forEach(function(e){if(!e||!e.d)return;var d=new Date(e.d+"T00:00:00"),end=e.e&&e.e>=e.d?e.e:e.d,n=0;while(ymd(d)<=end&&n<62){var k=ymd(d);if(k>=s.from&&k<=s.to)(by[k]=by[k]||[]).push(e);d.setDate(d.getDate()+1);n++}});
+var days=Object.keys(by).sort();if(!days.length){L.innerHTML='<p class="none">予定はありません。</p>';return}var h="",first=null;
+days.forEach(function(k){var d=new Date(k+"T00:00:00"),w=d.getDay(),cls="day"+(k===today?" today":w===0?" sun":w===6?" sat":"");if(!first&&k>=today)first=k;
+h+='<div class="'+cls+'" id="d'+k+'">'+(d.getMonth()+1)+"月"+d.getDate()+"日("+WD[w]+")"+(k===today?"　今日":"")+"</div>";
+by[k].sort(function(a,b){return(a.a?0:1)-(b.a?0:1)||String(a.s).localeCompare(String(b.s))}).forEach(function(e){var tm=e.a?"終日":(e.d===k?e.s:"")+"〜"+(e.e===k?e.n:"");
+h+='<div class="ev g-'+esc(e.g)+'"><div class="tm">'+esc(tm)+'</div><div><div class="tt">'+esc(e.t)+(e.b?'<span class="tag">放デイ</span>':"")+'</div><div class="sub">'+esc(e.l)+(e.p?"・"+esc(e.p):"")+"</div></div></div>"})});
+L.innerHTML=h;var f=document.getElementById("d"+(first||days[days.length-1]));if(f)setTimeout(function(){f.scrollIntoView({block:"start"});window.scrollBy(0,-90)},30)})();`;
 
 // アプリに渡してよい値だけを通す（ほかの値は捨てる）
 const PASS = { page: /^(calendar|sougei|shift)$/, e: /^v[123]$/, d: /^\d{4}-\d{2}-\d{2}$/, k: /^[0-9a-f]{40,80}$/ };
@@ -127,6 +164,7 @@ export function entryPage(reqUrl, appUrl) {
 <link rel="manifest" href="/manifest.webmanifest">
 <style>html,body{margin:0;height:100%;background:#fff}iframe{position:fixed;inset:0;width:100%;height:100%;border:0}
 #pushbar{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));z-index:9;background:#fff;border:1px solid #cbd5e1;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:12px;font:15px/1.5 -apple-system,"Hiragino Sans",sans-serif;color:#1f2937}
+#offchip{position:fixed;left:50%;transform:translateX(-50%);top:calc(6px + env(safe-area-inset-top));z-index:9;background:#1f2937;color:#fff;border-radius:999px;padding:7px 14px;font:14px -apple-system,"Hiragino Sans",sans-serif;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
 #pushbar p{margin:0 0 8px}#pushbar button{font:inherit;padding:8px 14px;margin-right:8px;border-radius:10px;border:1px solid #cbd5e1;background:#f1f5f9}#pushbar button.go{background:#2563eb;color:#fff;border-color:#2563eb;font-weight:700}</style>
 </head><body>
 <iframe src="${esc(src)}" title="${esc(title)}" allow="clipboard-read; clipboard-write; fullscreen" referrerpolicy="no-referrer"></iframe>
@@ -147,6 +185,9 @@ export default {
     if (request.method === "POST" && url.pathname === "/push/newkeys") return new Response(JSON.stringify(await newVapidKeys()), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
     if (request.method !== "GET" && request.method !== "HEAD") return new Response(null, { status: 405, headers: { allow: "GET" } });
     if (url.pathname === "/sw.js") return new Response(SW_JS, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache", "service-worker-allowed": "/" } });
+    if (url.pathname === "/offline.html") return new Response(OFFLINE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache", "x-frame-options": "DENY", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; script-src 'self'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'" } });
+    if (url.pathname === "/offline.js") return new Response(OFFLINE_JS, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" } });
     if (url.pathname === "/entry.js") return new Response(ENTRY_JS, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" } });
     if (url.pathname === "/icon-180.png" || url.pathname === "/apple-touch-icon.png" || url.pathname === "/apple-touch-icon-precomposed.png")
       return new Response(b64bytes(ICON180), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });

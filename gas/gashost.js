@@ -137,7 +137,7 @@ function showPushMenu() {
   document.getElementById("sghPushOn").onclick = () => { hideOverlay(); pushAsk(true); };
   document.getElementById("sghPushOff").onclick = () => { hideOverlay(); try { G.top.postMessage({ sg: "push-off" }, WRAP); } catch (e) {} };
 }
-function logout() { const t = token; token = ""; store.del(TK); store.del(MK); me = null; rawCall("auth.logout", [t]).catch(() => {}); location.reload(); }
+function logout() { const t = token; token = ""; store.del(TK); store.del(MK); me = null; try { if (WRAP) G.top.postMessage({ sg: "cal-snap-clear" }, WRAP); } catch (e) {} rawCall("auth.logout", [t]).catch(() => {}); location.reload(); }   // 入口のページに覚えた「電波がないときの予定」も消す
 
 /* ---------- 右下の「ログイン中」 ---------- */
 let chip = null, menu = null;

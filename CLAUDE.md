@@ -450,6 +450,13 @@ Excel出力の前の確認（`exportCheck`）の2つめ以降に「← 前のチ
 - 画面：入口のページの中で開いたとき（`SGHost.wrap`）だけ、ログインのあと gashost の `pushAsk` が入口に `push-ask` → 入口の下に「🔔 … 受け取る／あとで」（あとで＝7日出さない）。受け取る＝許可→登録→`push-sub` → `push.subscribe`。メニュー「🔔 通知」（`showPushMenu`）で受け取る／止める。iPhoneは iOS 16.4以上でホーム画面のアイコンから開いたときだけ（Safariのままなら「ホーム画面に追加」の案内）
 - 実機は未確認。テスト `mcp/test-entry.mjs`（RFC 8291 の例と一致）・`gas/test-gas.js`・`pw/entry_ui.js`
 
+## 電波がないときに最後に見た予定（2026-11-17 依頼者「オフラインでも最終みたカレンダーみれるようにできる？電波ないところでも」）
+- 入口のページ（なないろのアイコン）から開いたときだけ。Googleのアドレス（…/exec）で開いた画面は電波がないと開けない（Googleの画面は端末に置けない）
+- カレンダー（`calendar_app.js` の `offlineSnap`）：月を読むたび（前後の月も）、メモリの月（`MC`）の予定を `{sg:"cal-snap", at, who, from, to, ev:[{d,e,a,s,n,t,l,g,p,b}]}`（日付・時刻・題名 `ttl`・ラベル名・職員/利用者/その他・場所・放デイ。メモ・送迎表の中身は送らない、3000件まで）で入口へ（`SGHost.wrap` があり、はめこまれているときだけ）。ログアウトで `cal-snap-clear`（gashost の `logout`）
+- 入口（`mcp/entry-worker.mjs`）：`entry.js` が Google からの `cal-snap` を端末の `localStorage.calSnap` に（3MBまで）、開いたら毎回 `/sw.js` を登録。`/sw.js` は `/offline.html`・`/offline.js`・アイコンを端末に置き（`nanairo-off-1`）、画面を開くときつながらない（12秒）と `/offline.html` を出す。
+  `/offline.html`＋`/offline.js`：「📵 電波がありません」・「11/17 8:30 に見た予定です（見るだけ）」・日ごとの一覧（今日へ移る・職員=青/利用者=橙/その他=灰）・「もう一度つなぐ」。開いている途中で電波が切れたら上に「📵 電波がありません：最後に見た予定を見る」（`#offchip`）
+- 見るだけ（入力・保存は電波が戻ってから）。テスト `mcp/test-entry.mjs`・`pw/entry_ui.js`（本物のカレンダーを入口の中で開く→残る→電波なしで開くと出る→ログアウトで消える）
+
 ## 週は月曜始まり（2026-11-07 依頼者「カレンダーを日曜始まりではなく月曜始まりに」）
 職場カレンダーの月の画面（`gridRange`・`rangeOf` の `MON0`、見出し `.dow` 月〜日）、送迎表の日付選び（`DatePop`。依頼者「すべてのカレンダー」）、シフト表の画面（`.sh-grid` の見出し・`lead`、下の職員の曜日のパターンの列）、シフト表のExcel（曜日の列 月〜日・`lead`）。データ（曜日の番号 0=日）はそのまま。テスト `pw/gas_ui.js`・`test-shift.js`
 

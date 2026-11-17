@@ -66,6 +66,9 @@ assert.strictEqual(sent.length, 1); assert.strictEqual(sent[0].init.headers["con
 }
 assert.strictEqual((await go("/push/send", { method: "POST", body: "{}" })).status, 400, "鍵が無ければ送らない");
 const sw = await go("/sw.js"); assert.ok((await sw.text()).includes("showNotification"), "通知を出すプログラム");
+{ const st = await (await go("/sw.js")).text(); assert.ok(st.includes('"fetch"') && st.includes("/offline.html") && st.includes("caches.match"), "電波がないときは端末の画面"); }
+{ const oh = await go("/offline.html"), ot = await oh.text(); assert.ok(oh.status === 200 && ot.includes('<script src="/offline.js"></script>') && (ot.match(/<script/gi) || []).length === 1 && /frame-ancestors 'none'/.test(oh.headers.get("content-security-policy")), "電波がないときの画面");
+  const oj = await (await go("/offline.js")).text(); assert.ok(oj.includes("calSnap") && oj.includes("esc("), "最後に見た予定を出す（文字はエスケープ）"); }
 const ej = await (await go("/entry.js")).text(); assert.ok(ej.includes("push-ask") && ej.includes("pushManager.subscribe"), "受け取る案内");
 assert.ok(/script-src 'self'/.test((await go("/")).headers.get("content-security-policy")));
 console.log("entry page OK（通知の暗号化は RFC 8291 の例と一致）");

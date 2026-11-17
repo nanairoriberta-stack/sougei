@@ -274,7 +274,7 @@ function prefetch(){
   if(!db||document.visibilityState==="hidden")return;
   for(const dl of[1,-1]){const r=rangeOf(new Date(S.cursor.getFullYear(),S.cursor.getMonth()+dl,1)),k=keyOfRange(r),c=MC.get(k);
     if(c&&Date.now()-c.at<60000)continue;
-    try{db.collection("days").where("maxEnd",">=",ymd(r.start)).where("date","<=",ymd(r.end)).limit(1000).get().then(snap=>{const docs=snap.docs.map(d=>d.data());docs.from=ymd(r.start);docs.to=ymd(r.end);if(!MC.has(k)||MC.get(k).at<Date.now()-1000)mcPut(k,docs)}).catch(()=>{})}catch{}}
+    try{db.collection("days").where("maxEnd",">=",ymd(r.start)).where("date","<=",ymd(r.end)).limit(1000).get().then(snap=>{const docs=snap.docs.map(d=>d.data());docs.from=ymd(r.start);docs.to=ymd(r.end);if(!MC.has(k)||MC.get(k).at<Date.now()-1000)mcPut(k,docs);offlineSnap()}).catch(()=>{})}catch{}}
 }
 let pfT;
 function subscribe(){
@@ -285,10 +285,19 @@ function subscribe(){
   try{
     unsub=db.collection("days").where("maxEnd",">=",ymd(start)).where("date","<=",ymd(end)).limit(1000)
       .onSnapshot(snap=>{const docs=snap.docs.map(d=>d.data());docs.from=ymd(start);docs.to=ymd(end);mcPut(k,docs);setDocs(docs);S.loaded=true;if(S.dbState==="error")S.dbState="ok";render();
-          bootSave(k,docs);clearTimeout(pfT);pfT=setTimeout(prefetch,800)},
+          bootSave(k,docs);clearTimeout(pfT);pfT=setTimeout(prefetch,800);offlineSnap()},
         ()=>{S.dbState="error";render()});
   }catch{S.dbState="error";render()}
 }
+/* 電波がないときに見る「最後に見た予定」（2026-11-17 依頼者「オフラインでも最終みたカレンダーみれるように。電波ないところでも」）。
+   入口のページ（なないろのアイコン）の中で開いているときだけ、読んだ月（前後の月も）の予定を入口のページに渡す → 入口がスマホに覚え、電波がないときはそれを出す（見るだけ）。
+   ログアウトすると消す（gashost）。送るのは題名・日付・時刻・ラベル・場所だけ */
+let osT=0;
+function offlineSnap(){const H=window.SGHost;if(!H||!H.wrap||!window.top||window.top===window)return;clearTimeout(osT);osT=setTimeout(()=>{try{
+  const all=[];let from="",to="";for(const v of MC.values()){if(!v.docs)continue;all.push(...v.docs);if(v.docs.from&&(!from||v.docs.from<from))from=v.docs.from;if(v.docs.to&&v.docs.to>to)to=v.docs.to}
+  if(!all.length)return;const m=C.mergeDays(all.concat([...PATCH.values()].map(v=>v.d))),evs=Object.values(core?core.overlay(m):m).filter(e=>e&&!e.deleted&&e.date&&e.endDate>=from&&e.date<=to);
+  const LN=Object.fromEntries(LABELS.map(l=>[l.k,l.n])),ev=evs.slice(0,3000).map(e=>({d:e.date,e:e.endDate,a:e.allDay?1:0,s:e.start||"",n:e.end||"",t:String(ttl(e)||"(題名なし)").slice(0,80),l:LN[e.label]||"",g:grpOf(e.label).k,p:String(e.place||"").slice(0,40),b:e.biz==="houkago"?1:0}));
+  const me=H.me||{};window.top.postMessage({sg:"cal-snap",v:1,at:Date.now(),who:String(me.name||""),from,to,ev},H.wrap)}catch(x){}},1500)}
 function go(delta){S.cursor=new Date(S.cursor.getFullYear(),S.cursor.getMonth()+delta,1);subscribe();render()}
 /* 月の画面・リストを左右になぞると月が変わる（左へ＝次の月、右へ＝前の月） */
 let sw=null;
