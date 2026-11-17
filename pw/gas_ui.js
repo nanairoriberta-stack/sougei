@@ -21,7 +21,7 @@ const D = path.join(__dirname, "../gas/out");
     api(t, "kv.merge", [{ key: "sheet:" + date, base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, { id: "blkNote1", kind: "block", time: "12:00", staffId: m0.staff.find((x) => x.name === "八壁").id, label: "黒田給食利用", vehicleId: "" }] } }]); }
   { const E2 = engFor("v2"), m2 = api(t, "kv.get", ["v2:master"]).data.value; api(t, "kv.cas", [{ key: "v2:pattern:1", rev: 0, value: E2.resolveSeedPattern(m2, E2.SEED_PATTERNS.mon) }]); }   // 月曜の週間パターン（いつもの時刻・2026-11-12）
   const yo = rows().find((r) => r[1] === "余村慎");
-  const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js", "exceljs.min.js": "node_modules/exceljs/dist/exceljs.min.js" };
+  const LOC = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js", "three.min.js": "node_modules/three/build/three.min.js", "exceljs.min.js": "node_modules/exceljs/dist/exceljs.min.js", "mammoth.browser.min.js": "node_modules/mammoth/mammoth.browser.min.js" };
   const b = await chromium.launch();
   async function open(file, vp, boot, outName, extraInit) {
     const ctx = await b.newContext({ viewport: vp, colorScheme: "light" }); const pg = await ctx.newPage();
@@ -321,6 +321,56 @@ const D = path.join(__dirname, "../gas/out");
     await C2.pg.click('[data-add-cell="2026-11-12"]'); await C2.pg.waitForTimeout(400);
     assert.ok(await C2.pg.locator("#evForm").isVisible(), "日付の右で予定を追加"); assert.strictEqual(await C2.pg.inputValue("#f-date"), "2026-11-12");
     assert.deepStrictEqual(real(C2.errs), []); await C2.pg.context().close(); console.log("パソコンのカレンダー: 日付の右で追加"); }
+  { // マンションのカレンダー（2026-11-17 依頼者）：ﾏﾝｼｮﾝイベント・全体のタブには出さない・日付に活動計画書（Excel・Word）を貼って見る・消す
+    const ExcelJS = require("exceljs"), JSZip = require("jszip");
+    const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet("11月20日"); ws.addRow(["時刻", "活動"]); ws.addRow(["10:00", "朝の体操"]); ws.addRow(["14:00", "誕生日会"]);
+    fs.writeFileSync(path.join(__dirname, "t_plan.xlsx"), await wb.xlsx.writeBuffer());
+    const z = new JSZip();
+    z.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+    z.file("_rels/.rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+    z.file("word/document.xml", '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>11月の活動計画（散歩・買い物）</w:t></w:r></w:p></w:body></w:document>');
+    fs.writeFileSync(path.join(__dirname, "t_plan.docx"), await z.generateAsync({ type: "nodebuffer" }));
+    const M = await open("calendar.html", { width: 1280, height: 900 }, boot, "calendar_mansion.html");
+    await M.pg.waitForTimeout(500); await M.pg.fill("#sghNo", "000"); await M.pg.fill("#sghPin", "5829"); await M.pg.click("#sghGo"); await M.pg.waitForTimeout(2500);
+    await M.pg.click('[data-biz="mansion"]'); await M.pg.waitForTimeout(400);
+    assert.strictEqual(await M.pg.evaluate(() => document.documentElement.dataset.biz), "mansion", "マンションのタブ");
+    await M.pg.hover('.cell[data-day="2026-11-20"]'); await M.pg.click('[data-add-cell="2026-11-20"]'); await M.pg.waitForTimeout(400);
+    assert.ok(await M.pg.locator("[data-mansion-ev]").isVisible(), "マンションの予定（事業・ラベルは選ばない）"); assert.strictEqual(await M.pg.locator(".grppick").count(), 0);
+    await M.pg.fill("#f-title", "誕生日会"); await M.pg.fill("#f-place", "マンション1F"); await M.pg.click("[data-save]"); await M.pg.waitForTimeout(2000);
+    const evs = Object.values(api(t, "docs.query", [{ col: "days", from: "2026-11-20", to: "2026-11-20" }]).data.reduce((a, d) => Object.assign(a, d.events || {}), {}));
+    const me1 = evs.find((e) => e.title === "誕生日会"); assert.ok(me1 && me1.biz === "mansion" && me1.label === "mevent" && !me1.sg, "保存 " + JSON.stringify(me1));
+    assert.ok((await M.pg.locator('.cell[data-day="2026-11-20"]').innerText()).includes("誕生日会"), "マンションのタブに出る");
+    await M.pg.click('[data-biz="all"]'); await M.pg.waitForTimeout(400);
+    assert.ok(!(await M.pg.locator('.cell[data-day="2026-11-20"]').innerText()).includes("誕生日会"), "全体のタブには出さない");
+    await M.pg.click('[data-biz="mansion"]'); await M.pg.waitForTimeout(400);
+    await M.pg.click('.cell[data-day="2026-11-20"] .num'); await M.pg.waitForTimeout(400);
+    assert.ok(await M.pg.locator("#panel [data-mf-zone]").isVisible(), "日の欄に活動計画書");
+    await M.pg.setInputFiles("#panel [data-mf-file]", [path.join(__dirname, "t_plan.xlsx"), path.join(__dirname, "t_plan.docx")]); await M.pg.waitForTimeout(3000);
+    const names = await M.pg.$$eval("#panel [data-mf-view]", (l) => l.map((x) => x.innerText)); assert.deepStrictEqual(names, ["t_plan.xlsx", "t_plan.docx"], "2つ入る");
+    assert.ok(await M.pg.locator('[data-mf-dot="2026-11-20"]').count(), "月のマスに📄");
+    await M.pg.screenshot({ path: "g_mansion.png" });
+    await M.pg.click('#panel [data-mf-view]:text-is("t_plan.xlsx")'); await M.pg.waitForSelector("#mfOv .mf-tbl", { timeout: 15000 });
+    assert.ok((await M.pg.locator("#mfOv").innerText()).includes("朝の体操"), "Excelの中身が見える");
+    await M.pg.screenshot({ path: "g_mansion_xlsx.png" });
+    await M.pg.click("[data-mf-close]"); await M.pg.waitForTimeout(200);
+    await M.pg.click('#panel [data-mf-view]:text-is("t_plan.docx")'); await M.pg.waitForSelector("#mfOv .mf-doc", { timeout: 15000 });
+    assert.ok((await M.pg.locator("#mfOv .mf-doc").innerText()).includes("11月の活動計画（散歩・買い物）"), "Wordの中身が見える");
+    await M.pg.click("[data-mf-close]"); await M.pg.waitForTimeout(200);
+    const docxId = await M.pg.getAttribute('#panel [data-mf-view]:text-is("t_plan.docx")', "data-mf-view");
+    M.pg.once("dialog", (d) => d.accept()); await M.pg.click(`#panel [data-mf-del="${docxId}"]`); await M.pg.waitForTimeout(1500);
+    assert.deepStrictEqual(api(t, "mfile.list", [{ date: "2026-11-20" }]).data.items.map((x) => x.name), ["t_plan.xlsx"], "消すとサーバーからも消える");
+    // マンションの人でない職員：見るだけ（＋・ファイルを選ぶは出さない）
+    assert.deepStrictEqual(real(M.errs), []); await M.pg.context().close();
+    { const hr = rows().find((r) => r[1] === "日野"), hp = String(hr[3]), ht = api("", "auth.login", [String(hr[0]).padStart(3, "0"), hp, "node"]).data.token; api(ht, "auth.changePin", [hp, "4826"]);
+      const H = await open("calendar.html", { width: 1280, height: 900 }, boot, "calendar_mansion2.html");
+      await H.pg.waitForTimeout(500); await H.pg.fill("#sghNo", String(hr[0]).padStart(3, "0")); await H.pg.fill("#sghPin", "4826"); await H.pg.click("#sghGo"); await H.pg.waitForTimeout(2500);
+      await H.pg.click('[data-biz="mansion"]'); await H.pg.waitForTimeout(400); await H.pg.click('.cell[data-day="2026-11-20"] .num'); await H.pg.waitForTimeout(1200);
+      assert.strictEqual(await H.pg.locator("#panel [data-mf-file]").count(), 0, "貼れない"); assert.ok(await H.pg.locator("#addBtn").isDisabled(), "＋も押せない");
+      assert.ok((await H.pg.locator("#panel [data-mf-zone]").innerText()).includes("t_plan.xlsx"), "見られる");
+      await H.pg.click('#panel [data-ev]'); await H.pg.waitForTimeout(400);
+      assert.ok((await H.pg.locator("[data-ro-why]").innerText()).includes("マンションの勤務の人と管理者だけ"), "予定は見るだけ");
+      assert.deepStrictEqual(real(H.errs), []); await H.pg.context().close(); }
+    console.log("マンションのカレンダー・活動計画書 OK"); }
   // りんく・ぷれいす版：担当を「生活介護へ依頼」にした便 → 生活介護（11/1からは新体制版）の保留欄に【りんく依頼】。担当・車が決まるとりんく側の便に出る
   { const v3m = api(t, "kv.get", ["v3:master"]).data.value, kid = v3m.users[0];
     api(t, "kv.merge", [{ key: "v3:sheet:" + date, base: null, baseKnown: false, mine: { runs: [{ id: "rqUI", kind: "meet", time: "15:00", staffId: "__req__", vehicleId: "", userIds: [kid.id], staffRiderIds: [], note: "" }], blocks: [] } }]);
@@ -1043,7 +1093,7 @@ const D = path.join(__dirname, "../gas/out");
     await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false }); await cdp.detach();
     console.log("左右になぞって月:", m0, "→", m1, "/ 保存済みまで", ms, "ms（月の読み直しは4秒かかる設定）"); }
   { // 事業のタブ：全体／生活介護／放課後デイ。これまでの予定は生活介護
-    assert.deepStrictEqual(await A.pg.$$eval("#bizTabs [data-biz]", (b) => b.map((x) => x.textContent)), ["全体", "生活介護", "放課後デイ"]);
+    assert.deepStrictEqual(await A.pg.$$eval("#bizTabs [data-biz]", (b) => b.map((x) => x.textContent)), ["全体", "生活介護", "放課後デイ", "マンション"]);
     const before = await A.pg.locator("#panel .ev-row").count();
     await A.pg.click('[data-biz="houkago"]'); await A.pg.waitForTimeout(300);
     assert.strictEqual(await A.pg.locator("#panel .ev-row").count(), 0, "放課後デイのタブでは生活介護の予定は出ない");

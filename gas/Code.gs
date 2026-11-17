@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.17c',
+  VERSION: '2026.11.17d',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -88,10 +88,10 @@ function pushUnsubscribe_(me, endpoint) {
   });
 }
 // 登録した全員（except＝その職員番号の端末は除く）に送る。12件ずつ入口のページへ（いっしょに送る）。届かなくなった宛先（404・410）は消す
-function pushSend_(payload, except) {
+function pushSend_(payload, except, only) {   // only＝この職員番号の人だけ（{番号:1}）
   var entry = entryUrl_(), v = entry ? pushVapid_() : null; if (!v) return { sent: 0 };
   var sh = pushSheet_(), n = sh.getLastRow(); if (n < 2) return { sent: 0 };
-  var rows = sh.getRange(2, 1, n - 1, 4).getValues().filter(function (r) { return r[1] && String(r[0]) !== String(except || ''); });
+  var rows = sh.getRange(2, 1, n - 1, 4).getValues().filter(function (r) { return r[1] && String(r[0]) !== String(except || '') && (!only || only[normNo_(r[0])]); });
   var reqs = [];
   for (var i = 0; i < rows.length; i += 12) reqs.push({ url: entry + '/push/send', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     payload: JSON.stringify({ vapid: v, subject: entry, payload: payload, items: rows.slice(i, i + 12).map(function (r) { return { endpoint: String(r[1]), keys: { p256dh: String(r[2]), auth: String(r[3]) } }; }) }) });
@@ -112,15 +112,16 @@ function pushMd_(ds) { var p = String(ds).split('-').map(Number); if (p.length <
 function pushCal_(me, pu) {
   var entry = entryUrl_(); if (!entry || !pu || !pu.title) return null;
   var head = { 'new': '📅 予定が入りました', chg: '✏️ 予定が変わりました', del: '🗑 予定が消されました' }[pu.kind] || '📅 カレンダー';
+  if (pu.mansion) head = head.replace('予定', 'マンションの予定');
   return pushSend_({ title: head, body: (pu.date ? pushMd_(pu.date) + ' ' : '') + pu.title + '（' + me.name + 'さん）', tag: 'ev_' + pu.id,
-    url: '/?page=calendar' + (pu.date ? '&d=' + pu.date : '') }, me.no);
+    url: '/?page=calendar' + (pu.date ? '&d=' + pu.date : '') }, me.no, pu.mansion ? mansionNos_() : null);   // マンションの予定はマンションの人だけに
 }
 // 毎朝の「今日の予定」（時間で動くきっかけ。setup・installPushTrigger で毎日7時台に入れる）
 function pushDaily() {
   if (!entryUrl_()) return null;
   var today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
   var evMap = TCCore.mergeDays(docsQuery_({ col: 'days', from: today, to: today }));
-  var list = Object.keys(evMap).map(function (k) { return evMap[k]; }).filter(function (e) { return e && !e.deleted && e.date <= today && (e.endDate || e.date) >= today && e.title; })
+  var list = Object.keys(evMap).map(function (k) { return evMap[k]; }).filter(function (e) { return e && !e.deleted && e.biz !== 'mansion' && e.date <= today && (e.endDate || e.date) >= today && e.title; })   // マンションの予定は朝のまとめに入れない
     .sort(function (a, b) { return (a.allDay ? 0 : 1) - (b.allDay ? 0 : 1) || String(a.start || '').localeCompare(String(b.start || '')) || String(a.title).localeCompare(String(b.title)); });
   if (!list.length) return pushSend_({ title: '📅 今日の予定 ' + pushMd_(today), body: '今日の予定はありません', tag: 'daily', url: '/?page=calendar&d=' + today });
   var lines = list.slice(0, 8).map(function (e) { return (e.allDay || !e.start ? '' : String(e.start).replace(/^0/, '') + ' ') + e.title; });
@@ -383,6 +384,10 @@ var HANDLERS = {
   // スマホの通知（入口のページの中で開いているとき。2026-11-16 依頼者）
   'push.key': function (me) { var v = pushVapid_(); return { key: v ? v.publicKey : null }; },
   'push.subscribe': function (me, a) { return pushSubscribe_(me, a[0]); },
+  'mfile.list': function (me, a) { return mfileList_(a[0] || {}); },
+  'mfile.get': function (me, a) { return mfileGet_(String(a[0] || '')); },
+  'mfile.put': function (me, a) { return mfilePut_(me, a[0] || {}); },
+  'mfile.del': function (me, a) { return mfileDel_(me, String(a[0] || '')); },
   'push.unsubscribe': function (me, a) { return pushUnsubscribe_(me, a[0]); },
   'log.list': function (me, a) { if (me.role !== '管理者') throw { code: 'denied', message: '管理者のみ' }; return logList_(a[0] || 200); },
   'ai.messages': function (me, a) { return aiMessages_(me, a[0]); },
@@ -509,7 +514,7 @@ function logout_(token) {
   var th = hash_(String(token || '')); CacheService.getScriptCache().remove('s:' + th); CacheService.getScriptCache().remove('m:' + th);
   withLock_(function () { var r = rows_(APP.SH.sess), sh = sheet_(APP.SH.sess); for (var i = 0; i < r.length; i++) if (r[i][0] === th) sh.getRange(i + 2, 3).setValue(new Date(0)); });
 }
-function publicMe_(me) { return { no: me.no, name: me.name, role: me.role, mustChange: !!me.mustChange, canSougei: me.role === '管理者' || me.role === '送迎表', admin: me.role === '管理者', version: APP.VERSION, aiApi: aiEnabled_(), shift: shiftGroups_(me), shiftOk: shiftGroups_(me).length > 0 || isShiftMember_(me.name) }; }
+function publicMe_(me) { return { no: me.no, name: me.name, role: me.role, mustChange: !!me.mustChange, canSougei: me.role === '管理者' || me.role === '送迎表', admin: me.role === '管理者', version: APP.VERSION, aiApi: aiEnabled_(), shift: shiftGroups_(me), shiftOk: shiftGroups_(me).length > 0 || isShiftMember_(me.name), mansionOk: mansionOk_(me) }; }
 /* 料金がかかるAI（API版の AI調整・AIと相談）を使えるか。キーを入れていなければ、送迎表の画面にボタンを出さない */
 function aiEnabled_() { try { return !!PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY'); } catch (e) { return false; } }
 function staffList_() {
@@ -525,10 +530,11 @@ function calSearch_(q) {
   if (!terms.length) return { items: [], more: false };
   var day = function (n) { var d = new Date(today_() + 'T00:00:00'); d.setDate(d.getDate() + n); return Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd'); };
   var events = TCCore.mergeDays(docsQuery_({ col: 'days', from: day(-366), to: day(731) }));
-  var biz = q.biz === 'houkago' || q.biz === 'seikatsu' ? q.biz : '';
+  var biz = q.biz === 'houkago' || q.biz === 'seikatsu' || q.biz === 'mansion' ? q.biz : '';
   var hits = Object.keys(events).map(function (k) { return events[k]; }).filter(function (e) {
     if (!e || e.deleted) return false;
-    if (biz && (e.biz === 'houkago' ? 'houkago' : 'seikatsu') !== biz) return false;
+    var eb = e.biz === 'houkago' || e.biz === 'mansion' ? e.biz : 'seikatsu';
+    if (biz ? eb !== biz : eb === 'mansion') return false;   // 全体の検索にはマンションの予定を入れない（マンションのタブで探す）
     var sg = e.sg || {};
     var hay = norm([e.title, e.place, e.memo, (e.tanto || []).join(' '), (e.users || []).join(' '), (sg.staff || []).join(' '), (sg.users || []).join(' '), sg.reason, sg.note, sg.meetPlace, sg.sendPlace].join(' '));
     return terms.every(function (t) { return hay.indexOf(t) >= 0; });
@@ -890,6 +896,12 @@ function calApply_(me, op) {
     var raws = paths.map(function (p) { var d = docGet_(p, idx); return d ? d.value : null; });
     // 入れた予定は、だれでも変更・削除できる（2026-11-15 依頼者「入れたカレンダーの内容は誰でも編集できるように。変更に対応できるよう」。以前は送迎表に反映する予定は作った人か管理者だけ）。
     // だれが変えたかは変更履歴に残る（作った人 createdBy はそのまま）
+    // マンションの予定は、マンションの人と管理者だけが入れる・直す・消す（前の内容・新しい内容のどちらかがマンションなら）
+    if (op.kind !== 'comment') {
+      var prevEv = null; raws.forEach(function (r) { var e = r && r.events && r.events[op.id]; if (e) prevEv = e; });
+      if (((prevEv && prevEv.biz === 'mansion') || (op.ev && op.ev.biz === 'mansion')) && !mansionOk_(me))
+        throw { code: 'permission_denied', message: 'マンションの予定は、マンションの勤務の人と管理者だけが入れられます' };
+    }
     var res = TCCore.applyOp(op, paths, raws);
     if (res.status === 'outdated') return { status: 'failed' };
     if (res.status !== 'ok') return { status: res.status, reason: res.reason || null, theirs: res.theirs || null };
@@ -905,7 +917,7 @@ function calApply_(me, op) {
     var docs = res.writes.filter(function (w) { return w.path.indexOf('days/') === 0; }).map(function (w) { return w.data; });
     // スマホの通知に使う中身（cal.apply の返事からは外す）。シフト表・TimeTreeから写した予定は知らせない
     var ex0 = null; raws.forEach(function (r) { var e = r && r.events && r.events[op.id]; if (e) ex0 = e; });
-    var push = op.kind === 'comment' || /^(sh|tt)/.test(op.id) ? null : { id: op.id, title: title, date: (op.ev && op.ev.date) || (ex0 && ex0.date) || '',
+    var push = op.kind === 'comment' || /^(sh|tt)/.test(op.id) ? null : { id: op.id, title: title, date: (op.ev && op.ev.date) || (ex0 && ex0.date) || '', mansion: (op.ev && op.ev.biz === 'mansion') || (ex0 && ex0.biz === 'mansion') || false,
       kind: op.kind === 'delete' ? 'del' : op.kind === 'restore' ? 'new' : (ex0 && !ex0.deleted ? 'chg' : 'new') };
     return { status: 'ok', docs: docs, _push: push };
   });
@@ -928,6 +940,7 @@ function sanitizeOp_(op) {
   if (o.kind === 'upsert') {
     var ev = TCCore.normEvent(op.ev, o.id, 1);
     if (!ev) throw { code: 'invalid_argument', message: '予定の内容が正しくありません' };
+    if (ev.biz === 'mansion') ev.sg = null;   // マンションの予定は送迎表に反映しない
     o.ev = ev; o.fromDate = D.test(op.fromDate) ? op.fromDate : ev.date;
   } else if (o.kind === 'comment') {
     o.eventId = o.id; o.cmKey = D.test(op.cmKey) ? op.cmKey : '';
@@ -982,6 +995,58 @@ function shiftGroups_(me) {
   var v = String(me.shift || '');
   if (/両方|全|◯|○|〇/.test(v)) return ['m', 'f'];
   var out = []; if (/男/.test(v)) out.push('m'); if (/女/.test(v)) out.push('f'); return out;
+}
+/* マンションのカレンダー（2026-11-17 依頼者「マンションカレンダー。入れるのはマンションの勤務の人と管理者だけ」）：
+   入れる・直す・消す・活動計画書を貼る・消すのは、管理者・シフト表を組む人（SHIFT_EDITORS_・G列）・シフト表（男性・女性）に名前がある職員。見るのは全員 */
+function mansionOk_(me) { return !!me && (me.role === '管理者' || shiftGroups_(me).length > 0 || isShiftMember_(me.name)); }
+function mansionNos_() {   // 通知を送る相手（マンションの予定はマンションの人だけに知らせる）
+  var out = {}; rows_(APP.SH.ids).forEach(function (r) { if (!String(r[0]).trim() || String(r[4]).trim()) return;
+    var me = { no: normNo_(r[0]), name: String(r[1]).trim(), role: String(r[2]).trim(), shift: String(r[6] == null ? '' : r[6]).trim() };
+    if (mansionOk_(me)) out[me.no] = 1; });
+  return out;
+}
+/* マンションの日ごとの活動計画書（2026-11-17 依頼者「日付を開いて、ワードやエクセルをドロップすると活動計画書ができるように」→「その日に貼り付けて見られる」）
+   _docs に mfile/<日付>/<ID>（中身は base64、meta に 日付・名前・大きさ・種類・入れた人）。見るのは全員、貼る・消すのはマンションの人と管理者 */
+var MFILE_MAX_ = 3 * 1024 * 1024;   // 1つ3MBまで（スプレッドシートに入れるため）
+var MFILE_EXT_ = /\.(xlsx|xlsm|xls|docx|doc|pdf|png|jpe?g|gif|csv|txt)$/i;
+function mfileList_(q) {
+  var D = /^\d{4}-\d{2}-\d{2}$/, from = D.test(q.from) ? q.from : (D.test(q.date) ? q.date : ''), to = D.test(q.to) ? q.to : from;
+  if (!from) throw { code: 'invalid_argument', message: '' };
+  var sh = sheet_(APP.SH.docs), n = sh.getLastRow(); if (n < 2) return { items: [] };
+  var out = [];
+  sh.getRange(2, 1, n - 1, 4).getValues().forEach(function (r) {
+    var p = String(r[0]); if (p.indexOf('mfile/') !== 0) return;
+    var m = r[3] ? JSON.parse(r[3]) : {}; if (m.deleted || !(m.date >= from && m.date <= to)) return;
+    out.push({ id: p.slice(6), date: m.date, name: m.name, size: m.size, type: m.type, by: m.byName || '', at: m.at || '' });
+  });
+  out.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : String(a.at).localeCompare(String(b.at)); });
+  return { items: out };
+}
+function mfilePath_(id) { if (!/^\d{4}-\d{2}-\d{2}\/[A-Za-z0-9_-]{6,40}$/.test(id)) throw { code: 'invalid_argument', message: '' }; return 'mfile/' + id; }
+function mfileGet_(id) {
+  var d = docGet_(mfilePath_(id)); if (!d || !d.meta || d.meta.deleted) throw { code: 'not_found', message: 'このファイルはもうありません（消された可能性があります）' };
+  return { name: d.meta.name, type: d.meta.type, size: d.meta.size, data: String(d.value || '') };
+}
+function mfilePut_(me, f) {
+  if (!mansionOk_(me)) throw { code: 'permission_denied', message: '活動計画書を貼れるのは、マンションの勤務の人と管理者だけです' };
+  var D = /^\d{4}-\d{2}-\d{2}$/, name = String(f.name || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 120), data = String(f.data || '');
+  if (!D.test(f.date) || !name || !MFILE_EXT_.test(name)) throw { code: 'invalid_argument', message: 'Word・Excel・PDF・画像のファイルを入れてください' };
+  if (!/^[A-Za-z0-9+\/=]*$/.test(data) || !data) throw { code: 'invalid_argument', message: 'ファイルを読み込めませんでした' };
+  var size = Math.floor(data.length * 3 / 4) - (/==$/.test(data) ? 2 : /=$/.test(data) ? 1 : 0);
+  if (size > MFILE_MAX_) throw { code: 'invalid_argument', message: 'ファイルが大きすぎます（3MBまで）' };
+  var id = f.date + '/' + Utilities.getUuid().replace(/-/g, '').slice(0, 20), at = new Date().toISOString();
+  var meta = { date: f.date, name: name, size: size, type: String(f.type || '').slice(0, 100), by: me.no, byName: me.name, at: at };
+  withLock_(function () { docSet_(mfilePath_(id), data, 1, meta); });
+  log_(me, 'マンション', '活動計画書を貼る', f.date + ' ' + name);
+  return { id: id, date: f.date, name: name, size: size, type: meta.type, by: me.name, at: at };
+}
+function mfileDel_(me, id) {
+  if (!mansionOk_(me)) throw { code: 'permission_denied', message: '活動計画書を消せるのは、マンションの勤務の人と管理者だけです' };
+  var path = mfilePath_(id), name = '';
+  withLock_(function () { var idx = docIndex_(), d = docGet_(path, idx); if (!d || d.meta.deleted) return;
+    name = d.meta.name; docSet_(path, null, d.rev + 1, Object.assign({}, d.meta, { deleted: true, delBy: me.name, delAt: new Date().toISOString() }), idx); });
+  if (name) log_(me, 'マンション', '活動計画書を消す', id.slice(0, 10) + ' ' + name);
+  return { ok: true };
 }
 /* シフト表（男性・女性のどちらか）に名前がある職員か。カレンダーに「シフト表」のボタンを出すかどうかに使う */
 function isShiftMember_(name) {

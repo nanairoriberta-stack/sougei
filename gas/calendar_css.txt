@@ -4,7 +4,7 @@
   --bg:#f3f5f4; --surface:#ffffff; --sunken:#eaeeec; --ink:#18201d; --muted:#5f6b66; --line:#dde3e0;
   --accent:#13795b; --accent-ink:#ffffff; --accent-soft:#dff1ea;
   --sun:#c93838; --sat:#2a62c4; --danger:#c23a32; --warn:#9a6a00; --warn-soft:#fbf1d6; --ok:#13795b;
-  --l-meeting:#3f63cf; --l-visit:#11897a; --l-deadline:#d0443a; --l-leave:#b8901a; --l-event:#8352c9; --l-user:#c2410c; --l-help:#3f63cf; --l-ride:#11897a; --l-hwork:#8352c9; --l-shift:#0e7490; --l-monitor:#be185d; --l-shien:#4d7c0f; --l-nintei:#9a3412; --l-extra:#a16207; --l-other:#6f7c86; --l-sother:#8a7a4a; --l-uother:#9a5a3a; --l-late:#0e7490; --l-hcancel:#64748b; --l-liberta:#7c3aed; --l-early:#0e7490;
+  --l-meeting:#3f63cf; --l-visit:#11897a; --l-deadline:#d0443a; --l-leave:#b8901a; --l-event:#8352c9; --l-user:#c2410c; --l-help:#3f63cf; --l-ride:#11897a; --l-hwork:#8352c9; --l-shift:#0e7490; --l-monitor:#be185d; --l-shien:#4d7c0f; --l-nintei:#9a3412; --l-extra:#a16207; --l-other:#6f7c86; --l-sother:#8a7a4a; --l-uother:#9a5a3a; --l-late:#0e7490; --l-hcancel:#64748b; --l-liberta:#7c3aed; --l-early:#0e7490; --l-mevent:#0f766e;
   --font:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
   --mono:"DM Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
   --radius:10px;
@@ -13,13 +13,13 @@
   --bg:#111614; --surface:#18201d; --sunken:#1f2925; --ink:#e6ece9; --muted:#97a49e; --line:#2b3632;
   --accent:#43c08f; --accent-ink:#0b1a14; --accent-soft:#1d3a2f;
   --sun:#ff8282; --sat:#86afff; --danger:#ff7d73; --warn:#f0c252; --warn-soft:#3a2f12; --ok:#43c08f;
-  --l-meeting:#7d9bff; --l-visit:#3fc7b2; --l-deadline:#ff7d70; --l-leave:#e2bd4a; --l-event:#b58cf2; --l-user:#fb923c; --l-help:#7d9bff; --l-ride:#3fc7b2; --l-hwork:#b58cf2; --l-shift:#22b8cf; --l-monitor:#f472b6; --l-shien:#a3d65c; --l-nintei:#fb923c; --l-extra:#facc15; --l-other:#9aa7b0; --l-sother:#c7b27a; --l-uother:#e0a07a; --l-late:#22b8cf; --l-hcancel:#94a3b8; --l-liberta:#a78bfa; --l-early:#22b8cf;
+  --l-meeting:#7d9bff; --l-visit:#3fc7b2; --l-deadline:#ff7d70; --l-leave:#e2bd4a; --l-event:#b58cf2; --l-user:#fb923c; --l-help:#7d9bff; --l-ride:#3fc7b2; --l-hwork:#b58cf2; --l-shift:#22b8cf; --l-monitor:#f472b6; --l-shien:#a3d65c; --l-nintei:#fb923c; --l-extra:#facc15; --l-other:#9aa7b0; --l-sother:#c7b27a; --l-uother:#e0a07a; --l-late:#22b8cf; --l-hcancel:#94a3b8; --l-liberta:#a78bfa; --l-early:#22b8cf; --l-mevent:#2dd4bf;
   color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#111614; --surface:#18201d; --sunken:#1f2925; --ink:#e6ece9; --muted:#97a49e; --line:#2b3632;
   --accent:#43c08f; --accent-ink:#0b1a14; --accent-soft:#1d3a2f;
   --sun:#ff8282; --sat:#86afff; --danger:#ff7d73; --warn:#f0c252; --warn-soft:#3a2f12; --ok:#43c08f;
-  --l-meeting:#7d9bff; --l-visit:#3fc7b2; --l-deadline:#ff7d70; --l-leave:#e2bd4a; --l-event:#b58cf2; --l-user:#fb923c; --l-help:#7d9bff; --l-ride:#3fc7b2; --l-hwork:#b58cf2; --l-shift:#22b8cf; --l-monitor:#f472b6; --l-shien:#a3d65c; --l-nintei:#fb923c; --l-extra:#facc15; --l-other:#9aa7b0; --l-sother:#c7b27a; --l-uother:#e0a07a; --l-late:#22b8cf; --l-hcancel:#94a3b8; --l-liberta:#a78bfa; --l-early:#22b8cf;
+  --l-meeting:#7d9bff; --l-visit:#3fc7b2; --l-deadline:#ff7d70; --l-leave:#e2bd4a; --l-event:#b58cf2; --l-user:#fb923c; --l-help:#7d9bff; --l-ride:#3fc7b2; --l-hwork:#b58cf2; --l-shift:#22b8cf; --l-monitor:#f472b6; --l-shien:#a3d65c; --l-nintei:#fb923c; --l-extra:#facc15; --l-other:#9aa7b0; --l-sother:#c7b27a; --l-uother:#e0a07a; --l-late:#22b8cf; --l-hcancel:#94a3b8; --l-liberta:#a78bfa; --l-early:#22b8cf; --l-mevent:#2dd4bf;
   color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.55}
@@ -55,7 +55,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .primary{height:34px;padding:0 14px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:13px}
 
 /* 事業のタブ（全体／生活介護／放課後デイ） */
-:root{--b-seikatsu:#2f8f6b;--b-houkago:#d9822b}
+:root{--b-seikatsu:#2f8f6b;--b-houkago:#d9822b;--b-mansion:#0f766e}
 .biztabs{max-width:1240px;margin:0 auto;padding-block:12px 0;display:flex;gap:4px;border-bottom:1px solid var(--line)}
 .biztabs button{flex:0 0 auto;height:38px;padding:0 18px;border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--sunken);color:var(--muted);font-size:14px;font-weight:700;margin-bottom:-1px}
 .biztabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:inset 0 3px 0 var(--accent)}
@@ -313,13 +313,15 @@ html.srchopen,html.srchopen body{overflow:hidden}
 html[data-biz="all"]{--bg:#eaf2fb}
 html[data-biz="seikatsu"]{--bg:#e8f5ec}
 html[data-biz="houkago"]{--bg:#fbecf1}
+html[data-biz="mansion"]{--bg:#e6f4f1}   /* マンション＝薄い青緑（2026-11-17） */
 html[data-biz] .biztabs button[aria-selected="true"]{background:var(--bg)}
-@media (prefers-color-scheme: dark){html:not([data-theme="light"])[data-biz="all"]{--bg:#111821}html:not([data-theme="light"])[data-biz="seikatsu"]{--bg:#111a14}html:not([data-theme="light"])[data-biz="houkago"]{--bg:#1c1317}}
-html[data-theme="dark"][data-biz="all"]{--bg:#111821}html[data-theme="dark"][data-biz="seikatsu"]{--bg:#111a14}html[data-theme="dark"][data-biz="houkago"]{--bg:#1c1317}
+@media (prefers-color-scheme: dark){html:not([data-theme="light"])[data-biz="all"]{--bg:#111821}html:not([data-theme="light"])[data-biz="seikatsu"]{--bg:#111a14}html:not([data-theme="light"])[data-biz="houkago"]{--bg:#1c1317}html:not([data-theme="light"])[data-biz="mansion"]{--bg:#0f1a19}}
+html[data-theme="dark"][data-biz="all"]{--bg:#111821}html[data-theme="dark"][data-biz="seikatsu"]{--bg:#111a14}html[data-theme="dark"][data-biz="houkago"]{--bg:#1c1317}html[data-theme="dark"][data-biz="mansion"]{--bg:#0f1a19}
 /* 切り替わったのが一目で分かるように：上の帯にも色・タブの色・色が変わるときは少しなめらかに */
 html[data-biz="all"]{--bz:#3b7dd8;--bar:#dceafa}
 html[data-biz="seikatsu"]{--bz:#2f8f6b;--bar:#d6efdf}
 html[data-biz="houkago"]{--bz:#d6537f;--bar:#f8dbe6}
+html[data-biz="mansion"]{--bz:#0f766e;--bar:#d3ece7}
 @media (prefers-color-scheme: dark){html:not([data-theme="light"])[data-biz]{--bar:var(--surface)}}
 html[data-theme="dark"][data-biz]{--bar:var(--surface)}
 html[data-biz] .bar{background:var(--bar);box-shadow:inset 0 4px 0 var(--bz)}
@@ -404,3 +406,28 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 
 /* 送迎変更の時刻：いつもの時刻を薄い灰色で入れておく（直すと黒字。2026-11-12 依頼者） */
 .input.dflt{color:#a8a29e}
+
+/* マンションの活動計画書（2026-11-17） */
+.mf{margin:10px 12px;padding:10px 12px;border:2px dashed var(--line,#cbd5e1);border-radius:12px;background:var(--surface,#fff)}
+.mf.mf-over{border-color:var(--b-mansion);background:#e6f4f1}
+.mf-h{font-weight:700;display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.mf-list{list-style:none;margin:0 0 8px;padding:0}
+.mf-list li{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 0;border-top:1px solid var(--line,#e2e8f0)}
+.mf-list li:first-child{border-top:0}
+.mf-name{flex:1 1 160px;text-align:left;border:0;background:none;color:var(--b-mansion);font-weight:700;text-decoration:underline;padding:4px 0;font-size:15px;word-break:break-all;cursor:pointer}
+.mf-list small{color:var(--muted);font-size:12px}
+.mf-add{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.mf-pick{display:inline-block;padding:8px 14px;border-radius:10px;cursor:pointer}
+@media (max-width:560px){.mf-drop{display:none}}
+.mf-dot{font-size:11px;margin-left:2px}
+.ds-mf{overflow:auto;max-height:40vh}
+.mf-view{max-width:980px;width:min(980px,100%)}
+.mf-body{max-height:80vh;overflow:auto}
+.mf-tools{margin-bottom:8px}
+.mf-tbl{overflow:auto;margin-bottom:12px}
+.mf-tbl table{border-collapse:collapse;font-size:13px}
+.mf-tbl td{border:1px solid var(--line,#cbd5e1);padding:3px 6px;white-space:pre-wrap;vertical-align:top;min-width:2em}
+.mf-doc{line-height:1.7}.mf-doc table{border-collapse:collapse}.mf-doc td,.mf-doc th{border:1px solid #cbd5e1;padding:3px 6px}
+.mf-img{max-width:100%}
+.mf-pdf{width:100%;height:70vh;border:0}
+.mf-txt{white-space:pre-wrap;font-size:13px}

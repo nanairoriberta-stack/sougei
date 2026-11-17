@@ -36,6 +36,7 @@
 <div id="dayRoot"></div>
 <div id="searchRoot"></div>
 <div id="sheetRoot"></div>
+<div id="mfRoot"></div>
 <div class="toast" id="toast" role="status" hidden></div>
 <input type="file" id="restoreFile" accept=".json,application/json" hidden>
 

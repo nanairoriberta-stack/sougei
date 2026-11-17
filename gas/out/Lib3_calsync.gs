@@ -18,7 +18,7 @@ const HOLD_ID = "__hold__";                                  // 送迎表の「�
    職員その他（sother）・その他予定（other）＝担当の職員の欄、担当がいなければ保留の欄（2026-11-10 依頼者「その他予定もコマで。利用者・職員のその他と同じように」）。
    シフト表から入った予定（ID sh…）・TimeTreeから写した予定（tt…）はコマにしない。担当がこの版の職員にいない・ほかの事業の予定（担当なし）は入れない */
 function komaSg(master, ev) {
-  if (!ev || ev.sg || ev.deleted) return null;
+  if (!ev || ev.sg || ev.deleted || ev.biz === "mansion") return null;   // マンションの予定は送迎表に出さない
   const id = String(ev.id || "");
   // シフト表から入った予定（sh…）はコマにしない。TimeTreeから写した予定（tt…）も、写したままの「その他予定」はコマにしない（数が多い）。
   // 職員その他・利用者その他に直した予定はコマにする（2026-11-11 依頼者「小瀧 研修 出てない」＝写した予定を職員その他に直したものだった、と見て）
@@ -50,7 +50,7 @@ function specsFor(master, events, date) {
   for (const ev of events || []) {
     // 利用者その他（uother）で時間が入っているものは、送迎表の保留の欄にコマとして出す（2026-11-10 依頼者「山崎 入浴」がコマに出ない）。終日のものは特記事項だけ
     // 終日の予定も 8:30 にコマ（2026-11-10 依頼者「基本終日予定もコマが出るように。時間は8:30」）。要らないコマは送迎表で「コマだけ消す」
-    const sg0 = ev && (ev.sg || komaSg(master, ev));
+    const sg0 = ev && ev.biz !== "mansion" && (ev.sg || komaSg(master, ev));   // マンションの予定は送迎表に出さない
     if (!ev || ev.deleted || !sg0 || !sg0.type) continue;
     if (!(ev.date <= date && ev.endDate >= date)) continue;
     const whole = !!ev.allDay || (ev.date < date && ev.endDate > date);

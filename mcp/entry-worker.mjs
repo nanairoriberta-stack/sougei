@@ -137,7 +137,7 @@ var days=Object.keys(by).sort();if(!days.length){L.innerHTML='<p class="none">�
 days.forEach(function(k){var d=new Date(k+"T00:00:00"),w=d.getDay(),cls="day"+(k===today?" today":w===0?" sun":w===6?" sat":"");if(!first&&k>=today)first=k;
 h+='<div class="'+cls+'" id="d'+k+'">'+(d.getMonth()+1)+"月"+d.getDate()+"日("+WD[w]+")"+(k===today?"　今日":"")+"</div>";
 by[k].sort(function(a,b){return(a.a?0:1)-(b.a?0:1)||String(a.s).localeCompare(String(b.s))}).forEach(function(e){var tm=e.a?"終日":(e.d===k?e.s:"")+"〜"+(e.e===k?e.n:"");
-h+='<div class="ev g-'+esc(e.g)+'"><div class="tm">'+esc(tm)+'</div><div><div class="tt">'+esc(e.t)+(e.b?'<span class="tag">放デイ</span>':"")+'</div><div class="sub">'+esc(e.l)+(e.p?"・"+esc(e.p):"")+"</div></div></div>"})});
+h+='<div class="ev g-'+esc(e.g)+'"><div class="tm">'+esc(tm)+'</div><div><div class="tt">'+esc(e.t)+(e.b===2?'<span class="tag">マンション</span>':e.b?'<span class="tag">放デイ</span>':"")+'</div><div class="sub">'+esc(e.l)+(e.p?"・"+esc(e.p):"")+"</div></div></div>"})});
 L.innerHTML=h;var f=document.getElementById("d"+(first||days[days.length-1]));if(f)setTimeout(function(){f.scrollIntoView({block:"start"});window.scrollBy(0,-90)},30)})();`;
 
 // アプリに渡してよい値だけを通す（ほかの値は捨てる）

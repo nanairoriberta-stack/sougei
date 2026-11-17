@@ -797,6 +797,43 @@ async function bootstrap() {
     await admin.call("auth.logout", admin.token || "").catch(() => {});
     return "期限 " + Math.round(yrs(g.sheets.get("_sessions").data[row][2])) + "年・ホーム画面のアドレス";
   });
+  await test("マンションのカレンダー：入れる・直す・消すのはマンションの人と管理者だけ・送迎表に出ない・活動計画書を貼る/見る/消す（2026-11-17 依頼者）", async () => {
+    const { g, admin } = await bootstrap();
+    const a = device(g); const ma = await a.login(noOf(g, "八壁"), pinOf(g, "八壁"));   // シフト表を組む人＝マンションの人
+    const b = device(g); const mb = await b.login(noOf(g, "日野"), pinOf(g, "日野"));   // ほかの職員
+    assert.strictEqual(ma.mansionOk, true, "八壁さんは入れられる"); assert.strictEqual(mb.mansionOk, false, "日野さんは見るだけ");
+    const ev = (t, extra) => Object.assign({ title: t, date: "2026-11-20", endDate: "2026-11-20", allDay: false, start: "10:00", end: "11:00", label: "mevent", biz: "mansion", place: "マンション1F", memo: "", members: [], sg: { type: "staff_off", staff: ["八壁"], users: [] } }, extra || {});
+    await b.call("cal.apply", { kind: "upsert", opId: "op_mns00001", id: "ev_mns00001", baseRev: null, ev: ev("誕生日会") }).then(() => assert.fail("日野さんは入れられない"), (e) => assert.strictEqual(e.code, "permission_denied"));
+    assert.strictEqual((await a.call("cal.apply", { kind: "upsert", opId: "op_mns00002", id: "ev_mns00002", baseRev: null, ev: ev("誕生日会") })).status, "ok");
+    assert.strictEqual((await a.call("cal.apply", { kind: "upsert", opId: "op_mns00003", id: "ev_mns00003", baseRev: null, ev: ev("会議", { label: "other", tanto: ["八壁"], sg: null }) })).status, "ok");
+    const days = await b.call("docs.query", { col: "days", from: "2026-11-20", to: "2026-11-20" });
+    const evs = Object.assign({}, ...days.map((d) => d.events || {}));
+    assert.ok(evs.ev_mns00002 && evs.ev_mns00002.biz === "mansion" && !evs.ev_mns00002.sg, "マンションの予定（送迎表の中身は外す）");
+    await b.call("cal.apply", { kind: "delete", opId: "op_mns00004", id: "ev_mns00002", date: "2026-11-20" }).then(() => assert.fail("日野さんは消せない"), (e) => assert.strictEqual(e.code, "permission_denied"));
+    await b.call("cal.apply", { kind: "upsert", opId: "op_mns00005", id: "ev_mns00002", baseRev: evs.ev_mns00002.rev, ev: ev("誕生日会", { biz: "seikatsu", label: "other", sg: null }) }).then(() => assert.fail("日野さんは別の事業に移せない"), (e) => assert.strictEqual(e.code, "permission_denied"));
+    const sh = (await admin.call("kv.get", "v2:sheet:2026-11-20"));
+    const blocks = ((sh && sh.value) || {}).blocks || [];
+    assert.ok(!blocks.some((x) => /ev_mns/.test(x.id)), "送迎表にコマを出さない（担当のあるその他でも）");
+    // 活動計画書
+    const xlsx = Buffer.from("PK\u0003\u0004 test excel").toString("base64");
+    await b.call("mfile.put", { date: "2026-11-20", name: "活動計画書.xlsx", type: "", data: xlsx }).then(() => assert.fail("日野さんは貼れない"), (e) => assert.strictEqual(e.code, "permission_denied"));
+    await a.call("mfile.put", { date: "2026-11-20", name: "ウイルス.exe", data: xlsx }).then(() => assert.fail("Word・Excel など以外"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+    await a.call("mfile.put", { date: "2026-11-20", name: "大きい.xlsx", data: "A".repeat(4300000) }).then(() => assert.fail("3MBまで"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+    const f = await a.call("mfile.put", { date: "2026-11-20", name: "活動計画書.xlsx", type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data: xlsx });
+    await a.call("mfile.put", { date: "2026-11-21", name: "21日.docx", data: xlsx });
+    const l1 = (await b.call("mfile.list", { from: "2026-11-20", to: "2026-11-20" })).items;
+    assert.deepStrictEqual(l1.map((x) => [x.name, x.by]), [["活動計画書.xlsx", "八壁"]], "ほかの職員も一覧で見られる（日付ごと）");
+    assert.strictEqual((await b.call("mfile.list", { from: "2026-11-01", to: "2026-11-30" })).items.length, 2, "月の分");
+    assert.strictEqual((await b.call("mfile.get", f.id)).data, xlsx, "中身が同じ");
+    await b.call("mfile.del", f.id).then(() => assert.fail("日野さんは消せない"), (e) => assert.strictEqual(e.code, "permission_denied"));
+    await a.call("mfile.del", f.id);
+    assert.strictEqual((await b.call("mfile.list", { date: "2026-11-20" })).items.length, 0, "消える");
+    await b.call("mfile.get", f.id).then(() => assert.fail("消したものは開けない"), (e) => assert.strictEqual(e.code, "not_found"));
+    await b.call("mfile.get", "../kv/master").then(() => assert.fail("ほかの文書は読めない"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+    const logs = g.sheets.get("変更履歴").data.map((r) => r.join("|")).join("\n");
+    assert.ok(logs.includes("活動計画書を貼る") && logs.includes("活動計画書を消す"), "変更履歴");
+    return "入れる人だけ・送迎表に出ない・活動計画書 OK";
+  });
   await test("シフト表作成システムとの連携（?page=export）：キーで読むだけ・シフト表と予定がv1の形で出る（2026-11-10 依頼）", async () => {
     const { g, admin } = await bootstrap();
     const get = (p) => JSON.parse(g.ctx.doGet({ parameter: p }).getContent());

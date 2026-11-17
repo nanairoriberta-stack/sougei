@@ -607,3 +607,12 @@ console.log('extra OK');
   assert.deepStrictEqual(y.staffOv[ks.id], { start: '11:00', lateTbd: '病院受診' });
   assert.ok(!(ks.id in (C.reconcile(m, x, [], D).staffOv || {})), '予定を消すと元に戻る');
   console.log('late tbd OK'); }
+// マンションの予定は送迎表に出さない（2026-11-17 依頼者「マンションカレンダー」）：担当のあるその他・休みの中身があっても
+{ const D = '2026-11-02';
+  const evM = [{ id: 'evmn1', rev: 1, date: D, endDate: D, allDay: false, start: '10:00', end: '11:00', title: '会議', label: 'other', biz: 'mansion', tanto: ['八壁'] },
+    { id: 'evmn2', rev: 1, date: D, endDate: D, allDay: true, title: '八壁 休み', label: 'leave', biz: 'mansion', sg: { type: 'staff_off', staff: ['八壁'] } }];
+  const x = C.reconcile(m, sheet, evM, D);
+  assert.ok(!x.blocks.some((b) => /evmn/.test(b.id)) && !(x.staffOv || {})[S('八壁').id], 'マンションの予定は反映しない');
+  assert.strictEqual(C.reconcile(m, sheet, [{ ...evM[0], biz: 'seikatsu' }], D).blocks.filter((b) => /evmn1/.test(b.id)).length, 1, '生活介護ならコマになる（比べるため）');
+  const nl = E.calNoteLines(m, evM, D); assert.ok(!nl.user.length && !nl.staff.length && !nl.biz.length, '特記事項にも出さない ' + JSON.stringify(nl));
+  console.log('mansion not on sheet OK'); }

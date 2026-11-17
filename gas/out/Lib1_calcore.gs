@@ -13,7 +13,7 @@ const LOCK_WAIT_MAX = 90000;   // ロック待ちの上限（超えたら後で�
 const MAX_BYTES = 240000;      // 1文書の上限（基盤は256KiB）
 const MAX_COMMENTS = 100;
 const TRASH_DAYS = 30;
-const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien", "extra", "sother", "uother", "late", "early", "hcancel", "liberta", "nintei"];  // late=遅刻・early=早退（2026-11-06。中身は職員時間変更）  // sother=職員のその他・uother=利用者のその他（2026-11-05）
+const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien", "extra", "sother", "uother", "late", "early", "hcancel", "liberta", "nintei", "mevent"];  // late=遅刻・early=早退（2026-11-06。中身は職員時間変更）  // sother=職員のその他・uother=利用者のその他（2026-11-05）
   // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
 const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "user_extra", "help", "hwork", "shift", "help_cancel", "liberta"];   // liberta＝リベルタ（ﾏﾝｼｮﾝ）の泊まり なし／あり（2026-11-07）   // help_cancel＝いつものヘルプをその日だけなし（2026-11-07）
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -44,7 +44,7 @@ function normEvent(r, id, depth) {
     id: String(id), title: str(r.title, 80) || "（無題）", date, endDate, allDay,
     start: allDay ? "" : start, end: allDay ? "" : end,
     label: LABEL_KEYS.includes(r.label) ? r.label : "other",
-    biz: r.biz === "houkago" ? "houkago" : "seikatsu",   // 事業：生活介護（これまでの予定）／放課後デイ
+    biz: r.biz === "houkago" || r.biz === "mansion" ? r.biz : "seikatsu",   // マンション（2026-11-17。送迎表には反映しない・入れるのはマンションの人と管理者だけ）   // 事業：生活介護（これまでの予定）／放課後デイ
     place: str(r.place, 80), memo: str(r.memo, 2000),
     users: Array.isArray(r.users) ? [...new Set(r.users.filter(x => typeof x === "string" && x && x.length <= 40))].slice(0, 20) : [],  // 利用者の名前（利用者のその他）
     tanto: Array.isArray(r.tanto) ? [...new Set(r.tanto.filter(x => typeof x === "string" && x && x.length <= 40))].slice(0, 20) : [],  // 担当（職員の名前。その他予定）
