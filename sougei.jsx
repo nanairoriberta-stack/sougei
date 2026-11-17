@@ -8276,11 +8276,11 @@ function VehicleTimeline({ master, data, weekday }) {
 }
 
 /* 「迎え/送りが不要(理由あり)」ゾーン: 未割当チップをドラッグ→その場で理由を入力。Excelの特記事項に「迎え無し: 名前(理由)」で出る */
-function NoRideZone({ master, weekday, noRide, kind, label, onSetNoRide }) {
+function NoRideZone({ master, weekday, noRide, kind, label, onSetNoRide, absent }) {
   const [ov, setOv] = useState(false);
   const [pendingId, setPendingId] = useState(null); // 理由入力中の利用者ID
   const [reasonText, setReasonText] = useState("");
-  const list = master.users.filter((u) => (noRide[u.id] || {})[kind] && (u.days || []).includes(weekday));
+  const list = master.users.filter((u) => (noRide[u.id] || {})[kind] && (u.days || []).includes(weekday) && !(absent || {})[u.id]);   // 欠席の人は出さない（2026-11-17 依頼者「猪原休みが入っているのに、こちらが消えていない」。Excelも欠席の人は送迎なしに出さない）
   const pendingUser = pendingId ? master.users.find((x) => x.id === pendingId) : null;
   const commit = () => {
     const t = reasonText.trim();
@@ -8497,9 +8497,9 @@ function UnassignedPanel({ master, data, weekday, onPick, onToggleAbsent, extraU
       <LibertaZone master={master} weekday={weekday} libertaOff={data.libertaOff || {}} libertaOn={data.libertaOn || {}} onToggle={onToggleLiberta} />
       <UserTimeZone master={master} weekday={weekday} userTime={data.userTime || {}} onSet={onSetUserTime} />
       {row("meet", "迎え")}
-      <NoRideZone master={master} weekday={weekday} noRide={noRide} kind="meet" label="迎え" onSetNoRide={onSetNoRide} />
+      <NoRideZone master={master} weekday={weekday} noRide={noRide} kind="meet" label="迎え" onSetNoRide={onSetNoRide} absent={data.userAbsent || {}} />
       {row("send", "送り")}
-      <NoRideZone master={master} weekday={weekday} noRide={noRide} kind="send" label="送り" onSetNoRide={onSetNoRide} />
+      <NoRideZone master={master} weekday={weekday} noRide={noRide} kind="send" label="送り" onSetNoRide={onSetNoRide} absent={data.userAbsent || {}} />
       <div>
         <div className="text-xs font-bold text-stone-500 mb-1">本日欠席(クリックで戻す)</div>
         <div className="flex flex-wrap gap-1 mb-2">

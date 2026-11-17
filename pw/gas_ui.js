@@ -124,7 +124,8 @@ const D = path.join(__dirname, "../gas/out");
   { // 退勤のマスにほかのコマも入れておく（退勤を上下に動かす試し。2026-11-17 依頼者）
     const tk = api(t, "kv.get", ["master"]).data.value.staff.find((x) => x.name === "高井"), s0 = api(t, "kv.get", ["sheet:" + date]).data.value;
     const en = s0.staffOv[tk.id].end, [h, mi] = en.split(":").map(Number), sl = Math.floor((h * 60 + mi - 1) / 30) * 30, tm = `${Math.floor(sl / 60)}:${String(sl % 60).padStart(2, "0")}`;
-    api(t, "kv.merge", [{ key: "sheet:" + date, base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, { id: "blkLeave1", kind: "block", time: tm, staffId: tk.id, label: "片付け", vehicleId: "" }] } }]); }
+    api(t, "kv.merge", [{ key: "sheet:" + date, base: s0, baseKnown: true, mine: { ...s0, blocks: [...s0.blocks, { id: "blkLeave1", kind: "block", time: tm, staffId: tk.id, label: "片付け", vehicleId: "" }],
+      userAbsent: { ...(s0.userAbsent || {}), [api(t, "kv.get", ["master"]).data.value.users.find((x) => x.name === "猪原").id]: true } } }]); }   // 猪原（いつもは母と来所・母迎え）を欠席に
   const P = await open("sougei.html", { width: 1400, height: 900 }, boot);
   await P.pg.waitForTimeout(500); await P.pg.fill("#sghNo", "000"); await P.pg.fill("#sghPin", "5829"); await P.pg.click("#sghGo"); await P.pg.waitForTimeout(5000);
   await P.pg.screenshot({ path: "g_sougei.png" });
@@ -143,6 +144,10 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.click(`[data-leave-down="${tk.id}"]`); await P.pg.waitForTimeout(300);
     assert.strictEqual((await order())[1], "退勤", "▼で1つ下へ");
     console.log("退勤を同じマスで上下に動かす OK"); }
+  { // 欠席の人は「迎え不要・送り不要（理由あり）」に出さない（2026-11-17 依頼者「猪原休みが入っているのに、こちらが消えていない」）。馬場さん（家族送り）は出る
+    const tx = await P.pg.evaluate(() => [...document.querySelectorAll("div")].filter((d) => /^(迎え|送り)不要/.test((d.firstElementChild || {}).innerText || "")).map((d) => d.innerText).join(" | "));
+    assert.ok(tx.includes("馬場") && !tx.includes("猪原"), "欠席の猪原さんは出さない: " + tx.slice(0, 300));
+    console.log("欠席の人は迎え不要・送り不要に出さない OK"); }
   { const body0 = await P.pg.locator("#root").innerText();   // 見ていない箱（送迎の抜け・使える車）は出さない
     assert.ok(!body0.includes("送迎の抜けがあります") && !body0.includes("🚗 使える車") && !body0.includes("全員に迎え・送りが入っています"), "右の箱を出さない"); }
   // 日付ボタンの📅：カレンダーはボタンのすぐ下・左そろえに出る。日を押すとその日に
