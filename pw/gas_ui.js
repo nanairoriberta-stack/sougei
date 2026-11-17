@@ -375,6 +375,17 @@ const D = path.join(__dirname, "../gas/out");
     M.pg.once("dialog", (d) => d.accept()); await M.pg.click(`#panel [data-mf-del="${docxId}"]`); await M.pg.waitForTimeout(1500);
     assert.deepStrictEqual(api(t, "mfile.list", [{ date: "2026-11-20" }]).data.items.map((x) => x.name), ["t_plan.xlsx"], "消すとサーバーからも消える");
     // マンションの人でない職員：見るだけ（＋・ファイルを選ぶは出さない）
+    { // パソコンの右の日の欄も紙を送るように：トラックパッドの横なぞり・画面に触れて左右になぞる（2026-11-17 依頼者「この部分の滑らかな左右スワイプ」）
+      const pd = () => M.pg.locator("#panel .panel-date").innerText();
+      assert.ok((await pd()).startsWith("11月20日"), await pd());
+      await M.pg.hover("#panel .panel-head"); for (let k = 0; k < 6; k++) { await M.pg.mouse.wheel(40, 0); await M.pg.waitForTimeout(16); }
+      await M.pg.waitForTimeout(900); assert.ok((await pd()).startsWith("11月21日"), "横なぞりで次の日 " + await pd());
+      for (let k = 0; k < 6; k++) { await M.pg.mouse.wheel(0, 40); await M.pg.waitForTimeout(16); }
+      await M.pg.waitForTimeout(500); assert.ok((await pd()).startsWith("11月21日"), "縦のスクロールでは変わらない");
+      await M.pg.evaluate(() => { const el = document.querySelector("#panel .panel-date");
+        const mk = (type, x) => { const t = new Touch({ identifier: 1, target: el, clientX: x, clientY: 200 }); el.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === "touchend" ? [] : [t], changedTouches: [t] })); };
+        mk("touchstart", 1000); for (let k = 1; k <= 6; k++) mk("touchmove", 1000 + 240 * k / 6); mk("touchend", 1240); });
+      await M.pg.waitForTimeout(700); assert.ok((await pd()).startsWith("11月20日"), "右へなぞると前の日 " + await pd()); }
     assert.deepStrictEqual(real(M.errs), []); await M.pg.context().close();
     { const hr = rows().find((r) => r[1] === "日野"), hp = String(hr[3]), ht = api("", "auth.login", [String(hr[0]).padStart(3, "0"), hp, "node"]).data.token; api(ht, "auth.changePin", [hp, "4826"]);
       const H = await open("calendar.html", { width: 1280, height: 900 }, boot, "calendar_mansion2.html");

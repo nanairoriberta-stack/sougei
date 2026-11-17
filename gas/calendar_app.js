@@ -229,8 +229,8 @@ function renderPanel(vis,ps){
   if(!S.loaded&&S.dbState==="connecting")body=`<div class="empty">予定を読み込んでいます…</div>`;
   else if(!evs.length)body=`<div class="empty">この日の予定はまだありません。${can?"<br>「この日に追加」から登録できます。":""}</div>`;
   else body=`<ul class="ev-list">${evs.map(e=>evRow(e,ps)).join("")}</ul>`;
-  $("panel").innerHTML=`<div class="panel-head"><button class="ds-step" data-day-step="-1" aria-label="前の日">‹</button><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="ds-step" data-day-step="1" aria-label="次の日">›</button><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${body}${mfSection(S.sel)}`;
-  slideIn($("panel"),24);
+  $("panel").innerHTML=`<div class="pn-page"><div class="panel-head"><button class="ds-step" data-day-step="-1" aria-label="前の日">‹</button><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="ds-step" data-day-step="1" aria-label="次の日">›</button><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${body}${mfSection(S.sel)}</div>`;
+  slideIn($("panel").querySelector(".pn-page"));
 }
 /* スマホ：日付を押すと、その日の予定の一覧が下から出る（TimeTreeのように）。右上の＋でその日に予定を入れる */
 const isMob=()=>matchMedia("(max-width:560px)").matches;
@@ -311,6 +311,31 @@ document.addEventListener("touchend",()=>{
   if(d.dy>90||(d.dy>30&&Date.now()-d.t<250)){sh.style.transform="translateY(100%)";setTimeout(()=>{S.dayOpen=false;render()},180)}
   else sh.style.transform="";
 });
+/* パソコンの右の日の欄も、紙を送るように左右へめくる（2026-11-17 依頼者「この部分の滑らかな左右スワイプのことでした」）。
+   画面に触れる端末は指について動く。トラックパッドの2本指の横なぞり（横の wheel）でも同じ */
+function pageGo(p,n){if(!p){stepDay(n);return}p.style.transition="transform .16s ease-in,opacity .16s";p.style.transform=`translateX(${n>0?-100:100}%)`;p.style.opacity="0.5";setTimeout(()=>stepDay(n),150)}
+function pageBack(p){if(!p)return;p.style.transition="transform .2s ease-out,opacity .2s";p.style.transform="";p.style.opacity=""}
+function pageDrag(p,dx){if(!p)return;p.style.transition="none";p.style.transform=`translateX(${dx}px)`;p.style.opacity=String(1-Math.min(.4,Math.abs(dx)/900))}
+let pnSwipe=null;
+document.addEventListener("touchstart",e=>{const pn=e.target.closest&&e.target.closest("#panel");pnSwipe=null;
+  if(!pn||e.touches.length!==1||ed||$("ov")||$("mfOv")||e.target.closest("input,textarea,select,.mf-tbl"))return;
+  pnSwipe={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now(),axis:"",dx:0,page:pn.querySelector(".pn-page")}},{passive:true});
+document.addEventListener("touchmove",e=>{if(!pnSwipe)return;const dx=e.touches[0].clientX-pnSwipe.x,dy=e.touches[0].clientY-pnSwipe.y;
+  if(!pnSwipe.axis&&(Math.abs(dx)>10||Math.abs(dy)>10))pnSwipe.axis=Math.abs(dx)>Math.abs(dy)*1.2?"x":"y";
+  if(pnSwipe.axis==="y"){pnSwipe=null;return}
+  if(pnSwipe.axis==="x"){pnSwipe.dx=dx;pageDrag(pnSwipe.page,dx);e.preventDefault()}},{passive:false});
+document.addEventListener("touchend",()=>{if(!pnSwipe)return;const w=pnSwipe;pnSwipe=null;if(w.axis!=="x")return;
+  if(Math.abs(w.dx)>70||(Math.abs(w.dx)>30&&Date.now()-w.t<250))pageGo(w.page,w.dx<0?1:-1);else pageBack(w.page)});
+let pnWheel=null;
+document.addEventListener("wheel",e=>{const pn=e.target.closest&&e.target.closest("#panel");if(!pn||ed||$("ov")||$("mfOv"))return;
+  if(Math.abs(e.deltaX)<=Math.abs(e.deltaY)||Math.abs(e.deltaX)<1)return;   // 縦のなぞり（ふつうのスクロール）はそのまま
+  e.preventDefault();
+  if(!pnWheel)pnWheel={dx:0,page:pn.querySelector(".pn-page"),done:false,t:0};
+  const w=pnWheel;if(w.done)return;
+  w.dx-=e.deltaX;clearTimeout(w.t);
+  if(Math.abs(w.dx)>140){w.done=true;pageGo(w.page,w.dx<0?1:-1);w.t=setTimeout(()=>{pnWheel=null},700);return}
+  pageDrag(w.page,w.dx);
+  w.t=setTimeout(()=>{pageBack(w.page);pnWheel=null},140)},{passive:false});
 /* ---------- 予定の検索（TimeTreeのように）：上の🔍から。1年前〜2年先の予定を、題名・名前・場所・メモなどで探す ----------
    サーバー（cal.search）の結果に、この端末の最新（まだ送っていない変更・削除）を重ねる。いまの事業のタブの予定だけ */
 const SR={open:false,q:"",items:[],loading:false,err:"",more:false,seq:0,timer:0};
@@ -421,9 +446,7 @@ function stepDay(n){const nd=addDays(parse(S.sel),n);S.sel=ymd(nd);S.slideIn=n;
 document.addEventListener("touchstart",e=>{sw=null;
   if(e.touches.length!==1||ed||SR.open||$("ov")||$("mfOv")||!e.target.closest)return;
   if(e.target.closest("input,select,textarea,.mf-tbl"))return;
-  if(e.target.closest("#dayOv"))return;   // 日の一覧は指についてめくる（上の dsSwipe）
-  const day=e.target.closest("#panel");
-  if(day){sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now(),day:true};return}
+  if(e.target.closest("#dayOv,#panel"))return;   // 日の一覧・右の日の欄は指についてめくる（dsSwipe・pnSwipe）
   if(S.dayOpen||!e.target.closest("#app")||e.target.closest(".panel"))return;
   sw={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()}},{passive:true});
 document.addEventListener("touchend",e=>{if(!sw)return;const s=sw;sw=null;const p=e.changedTouches&&e.changedTouches[0];if(!p)return;

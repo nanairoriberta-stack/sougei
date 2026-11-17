@@ -437,4 +437,5 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 .ds-page{flex:1;min-height:0;display:flex;flex-direction:column;will-change:transform;background:inherit}
 .ds-page .ds-list{flex:1;min-height:0;max-height:none}
 .ds-page .ds-mf{flex:none}
-#panel{will-change:transform}
+#panel{overflow:hidden;touch-action:pan-y}
+.pn-page{display:flex;flex-direction:column;gap:12px;will-change:transform}
