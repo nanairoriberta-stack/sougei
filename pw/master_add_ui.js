@@ -198,6 +198,18 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.waitForFunction(() => window.__dl, null, { timeout: 20000 });
     const got = await P.pg.evaluate(async () => { const r = await fetch(window.__dl.href); const b = new Uint8Array(await r.arrayBuffer()); return { name: window.__dl.name, bytes: Array.from(b) }; });
     const fn = got.name; assert.ok(/^週間パターン_月曜日_.*\.xlsx$/.test(fn), "週間パターンのExcel " + fn);
+    { // 用紙をA3にして出す（2026-11-18 依頼者「エクセル出力の時にA4かA3を選択できるように」）。日別のExcel出力のとなりにも同じ選択
+      const ExcelJS0 = require("exceljs"); const w0 = new ExcelJS0.Workbook(); await w0.xlsx.load(Buffer.from(got.bytes));
+      assert.strictEqual(w0.getWorksheet("送迎表").pageSetup.paperSize, 9, "いつもはA4");
+      await P.pg.click('[data-paper="A3"] >> nth=0'); await P.pg.evaluate(() => { window.__dl = null; });
+      await P.pg.click("[data-pattern-print]"); await P.pg.waitForFunction(() => window.__dl, null, { timeout: 20000 });
+      const g3 = await P.pg.evaluate(async () => { const r = await fetch(window.__dl.href); return { name: window.__dl.name, bytes: Array.from(new Uint8Array(await r.arrayBuffer())) }; });
+      assert.ok(/_A3\.xlsx$/.test(g3.name), "ファイル名にA3 " + g3.name);
+      const w3 = new ExcelJS0.Workbook(); await w3.xlsx.load(Buffer.from(g3.bytes));
+      assert.strictEqual(w3.getWorksheet("送迎表").pageSetup.paperSize, 8, "A3の用紙");
+      assert.strictEqual(await P.pg.evaluate(() => localStorage.getItem("sg:paper")), "A3", "端末に覚える");
+      await P.pg.click('[data-paper="A4"] >> nth=0');
+      console.log("用紙 A3 で出力 OK", g3.name); }
     const ExcelJS = require("exceljs"); const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(got.bytes));
     const ws = wb.getWorksheet("送迎表"); assert.match(String(ws.getRow(1).getCell(2).value), /^月曜日の週間(パターン|ﾊﾟﾀｰﾝ)$/, "日付のかわりに「月曜日の週間パターン」（Excelは半角カナ）");
     let n = 0; ws.eachRow((row) => row.eachCell((c) => { if (/ﾍﾙﾌﾟ|迎|送/.test(String(c.value || ""))) n++; })); assert.ok(n > 10, "便・ヘルプが入っている " + n);

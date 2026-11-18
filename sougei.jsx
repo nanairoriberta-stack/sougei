@@ -2647,7 +2647,7 @@ function makeLibNameHelpers(sheet, wd) {
   return { isLibOn, nameHome };
 }
 
-function buildExcelHtml(master, sheet, date) {
+function buildExcelHtml(master, sheet, date, paper) {
   const BR = '<br style="mso-data-placement:same-cell">';
   const wd = weekdayOf(date);
   const { nameHome } = makeLibNameHelpers(sheet, wd); // 「(自宅)」「(帰宅)」の補足付き氏名
@@ -2781,7 +2781,7 @@ function buildExcelHtml(master, sheet, date) {
 <x:FitToPage/>
 <x:Print>
 <x:ValidPrinterInfo/>
-<x:PaperSizeIndex>9</x:PaperSizeIndex>
+<x:PaperSizeIndex>${paper === "A3" ? 8 : 9}</x:PaperSizeIndex>
 <x:FitWidth>1</x:FitWidth>
 <x:FitHeight>1</x:FitHeight>
 </x:Print>
@@ -2801,12 +2801,12 @@ td.c { width: 58pt; }
 <body><table>${rows}</table></body></html>`;
 }
 
-function downloadExcel(master, sheet, date) {
-  const html = buildExcelHtml(master, sheet, date);
+function downloadExcel(master, sheet, date, paper) {
+  const html = buildExcelHtml(master, sheet, date, paper);
   const blob = new Blob(["\ufeff" + html], { type: "application/vnd.ms-excel" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `送迎表_${dateWithDay(date)}_${appVerLabel()}.xls`;
+  a.download = `送迎表_${dateWithDay(date)}_${appVerLabel()}${paper === "A3" ? "_A3" : ""}.xls`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -3853,7 +3853,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   const wb = opts.wb || new ExcelJS.Workbook();
   const ws = wb.addWorksheet(opts.sheetName || "送迎表", {
     pageSetup: {
-      paperSize: 9, // A4
+      paperSize: opts.paper === "A3" ? 8 : 9, // A4（A3を選んだら 8。2026-11-18 依頼者「エクセル出力の時にA4かA3を選択できるように」）
       orientation: "landscape",
       fitToPage: true,
       fitToWidth: 1,
@@ -4397,7 +4397,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   // ※ ヘルプ車なしシートを作る2回目の呼び出しでは作らない(同じシートが二重にできるため)
   if (!opts.gridOnly) {
     const ws2 = wb.addWorksheet("車両の動き", {
-      pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 1,
+      pageSetup: { paperSize: opts.paper === "A3" ? 8 : 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 1,
         margins: { left: 0.25, right: 0.25, top: 0.6, bottom: 0.3, header: 0.1, footer: 0.1 } },
     });
     const set2 = (row, col, value, opt = {}) => {
@@ -4494,14 +4494,16 @@ async function exportExcel(master, sheet, date, xo) {
   try {
     const ExcelJS = await loadExcelJS();
     // 1枚目=通常(ヘルプにも車名あり) / 2枚目=ヘルプの車名だけ消したもの
-    const colw = bestColW(ExcelJS, master, sheet, date);   // 用紙いっぱいに大きく出る列の幅
-    const wb = buildWorkbook(ExcelJS, master, sheet, date, { colw, dayLabel: ex.dayLabel });
-    buildWorkbook(ExcelJS, master, sheet, date, { wb, sheetName: "送迎表(ヘルプ車なし)", hideHelpVeh: true, gridOnly: true, colw, dayLabel: ex.dayLabel });
+    const paper = ex.paper || excelPaper();   // A4 / A3（A3は同じ形で約1.4倍に印刷される）
+    const colw = bestColW(ExcelJS, master, sheet, date);   // 用紙いっぱいに大きく出る列の幅（A4・A3は縦横の比が同じなので同じ幅）
+    const wb = buildWorkbook(ExcelJS, master, sheet, date, { colw, dayLabel: ex.dayLabel, paper });
+    buildWorkbook(ExcelJS, master, sheet, date, { wb, sheetName: "送迎表(ヘルプ車なし)", hideHelpVeh: true, gridOnly: true, colw, dayLabel: ex.dayLabel, paper });
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = ex.fileLabel ? `${ex.fileLabel}_${appVerLabel()}.xlsx` : `送迎表_${dateWithDay(date)}_${appVerLabel()}.xlsx`;
+    const ps = paper === "A3" ? "_A3" : "";
+    a.download = ex.fileLabel ? `${ex.fileLabel}_${appVerLabel()}${ps}.xlsx` : `送迎表_${dateWithDay(date)}_${appVerLabel()}${ps}.xlsx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -4509,8 +4511,22 @@ async function exportExcel(master, sheet, date, xo) {
   } catch (e) {
     console.error(e);
     notify("Excelライブラリの読み込みに失敗したため、簡易形式(.xls)で出力します。", "error");
-    downloadExcel(master, sheet, date);
+    downloadExcel(master, sheet, date, ex.paper || excelPaper());
   }
+}
+/* Excel出力の用紙（A4／A3）。端末に覚える（2026-11-18 依頼者「エクセル出力の時にA4かA3を選択できるようにして」） */
+const excelPaper = () => { try { return localStorage.getItem("sg:paper") === "A3" ? "A3" : "A4"; } catch (e) { return "A4"; } };
+function PaperPick() {
+  const [p, setP] = useState(excelPaper);
+  const pick = (v) => { setP(v); try { localStorage.setItem("sg:paper", v); } catch (e) {} };
+  return (
+    <span className="inline-flex items-center rounded border border-stone-300 overflow-hidden text-xs align-middle" title="Excelで出すときの用紙の大きさ（横1枚に収めます）。A3は同じ形のまま約1.4倍の大きさで印刷されます" data-paper-pick>
+      <span className="px-1.5 text-stone-500 bg-stone-50">用紙</span>
+      {["A4", "A3"].map((v) => (
+        <button key={v} type="button" className={`px-2 py-1 ${p === v ? "bg-sky-600 text-white" : "bg-white hover:bg-stone-50"}`} onClick={() => pick(v)} data-paper={v} aria-pressed={p === v}>{v}</button>
+      ))}
+    </span>
+  );
 }
 
 /* ============================================================
@@ -11074,6 +11090,7 @@ function AppInner() {
               <button className={btnSec} onClick={saveToPattern} title="今表示している日の内容を、この曜日の週間パターンとして保存します(その日限りの休み・時間変更は含みません)">パターンに保存</button>
               <button className={btnSec} onClick={() => setModal({ type: "importDay" })} title="この日の送迎表だけをExcelから直接取り込みます(週間パターンは変更しません)">📥 Excel取込</button>
               <button className={btnSec} onClick={handleExport}>📄 Excel出力</button>
+              <PaperPick />
               <button className={btnPri} onClick={() => {
                 if (!sheet) { notify("先に送迎表を作成してください(パターンから読込)", "warn"); return; }
                 setModal({ type: "autoWizard", step: 0, offStaff: [], timeStaff: [], absentUsers: [], meetChanges: [], sendChanges: [], otherPlans: [] });
@@ -11595,12 +11612,13 @@ function AppInner() {
               </div>
               <button className={btnPri} onClick={() => setModal({ type: "import" })}>📥 Excelから取り込み</button>
               <button className={btnSec} data-pattern-print
-                title="この曜日の週間パターンを、日別の送迎表と同じ形のExcel(A4横1枚)で出します。開いて印刷してください"
+                title="この曜日の週間パターンを、日別の送迎表と同じ形のExcel(横1枚・用紙はとなりでA4かA3)で出します。開いて印刷してください"
                 onClick={() => {
                   if (!pattern || (!(pattern.runs || []).length && !(pattern.blocks || []).length)) { notify(`${DAYS[weekday]}曜日のパターンが空です`, "warn"); return; }
                   const d0 = nextDateOfWeekday(weekday);
                   exportExcel(patternMaster || master, { ...emptySheet(), ...pattern, staffOv: pattern.staffOv || {} }, d0, { dayLabel: `${DAYS[weekday]}曜日の週間パターン`, fileLabel: `週間パターン_${DAYS[weekday]}曜日` });
                 }}>🖨 この曜日を印刷(Excel)</button>
+              <PaperPick />
             </div>
             <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg p-2 mb-3">
               ここで組んだ{DAYS[weekday]}曜日の固定パターンは、日別の送迎表で「パターンから読込」を押すと取り込まれます。退職などで職員がいなくなった予定は自動的に「保留」列に表示され、クリックして別の職員へ割り当て直せます。

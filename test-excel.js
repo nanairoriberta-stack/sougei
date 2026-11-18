@@ -24,6 +24,13 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     console.log(name, "→", last, "／印刷:", ws.headerFooter.oddHeader);
   }
   assert.ok(back.getWorksheet("車両の動き"), "車両の動きのシートはそのまま");
+  { // 用紙 A4／A3（2026-11-18 依頼者「エクセル出力の時にA4かA3を選択できるように」）
+    assert.strictEqual(back.getWorksheet("送迎表").pageSetup.paperSize, 9, "いつもはA4");
+    const w3 = E.buildWorkbook(ExcelJS, m, sheet, date, { paper: "A3" }); E.buildWorkbook(ExcelJS, m, sheet, date, { wb: w3, sheetName: "送迎表(ヘルプ車なし)", hideHelpVeh: true, gridOnly: true, paper: "A3" });
+    const b3 = new ExcelJS.Workbook(); await b3.xlsx.load(await w3.xlsx.writeBuffer());
+    for (const n of ["送迎表", "送迎表(ヘルプ車なし)", "車両の動き"]) { const ps = b3.getWorksheet(n).pageSetup; assert.strictEqual(ps.paperSize, 8, n + " はA3"); assert.strictEqual(ps.orientation, "landscape"); assert.strictEqual(ps.fitToHeight, 1, n + " 1枚に収める"); }
+    assert.ok(E.buildExcelHtml(m, sheet, date, "A3").includes("<x:PaperSizeIndex>8<"), ".xls もA3");
+    console.log("用紙 A4／A3 OK"); }
   // 予備の簡易形式(.xls)
   assert.ok(E.buildExcelHtml(m, sheet, date).includes(ver), ".xls の見出しにも");
   // ファイル名に使う文字（Windowsで使えない文字が入らない）
