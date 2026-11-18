@@ -4284,7 +4284,14 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     const cBottom = absRow; // 休み行まで含めて縦にマージ
     const totalN = noteTo - noteFrom + 1;
     const maxColN = Math.max(1, Math.floor(totalN / 3));
-    const ncolN = Math.max(1, Math.min(noteLines2.length > 6 ? 2 : 1, maxColN));
+    // 特記事項が多くて縦に入りきらない（1行409まで×行の数）ときは、列を増やして横に分ける（2026-11-18 依頼者「下部が文字がきれる」）
+    const roomN = XL_MAX_ROW_H * ((hasSogei ? zoneTop + 1 : uCr) <= absRow ? absRow - (hasSogei ? zoneTop + 1 : uCr) + 1 : 1);
+    const colWsum = (a, b) => { let w = 0; for (let c = a; c <= b; c++) { const cw = ws.getColumn(c).width; w += cw == null ? 9 : cw; } return w; };
+    const needFor = (nc) => { const per = Math.ceil(noteLines2.length / nc) || 1, cw = Math.floor(totalN / nc); let mx = 0;
+      for (let ci = 0; ci < nc; ci++) { const cf = noteFrom + ci * cw, ct = ci === nc - 1 ? noteTo : cf + cw - 1; mx = Math.max(mx, cellNeedH(toHankakuKana(noteLines2.slice(ci * per, (ci + 1) * per).join("\n")), colWsum(cf, ct), 11)); }
+      return mx; };
+    let ncolN = Math.max(1, Math.min(noteLines2.length > 6 ? 2 : 1, maxColN));
+    while (ncolN < maxColN && needFor(ncolN) > roomN) ncolN++;
     const perN = Math.ceil(noteLines2.length / ncolN) || 1;
     const colWN = Math.floor(totalN / ncolN);
     let needN = 0;
@@ -4298,7 +4305,10 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     }
     let acc = 0;
     for (let rr = cTop; rr <= cBottom; rr++) acc += ws.getRow(rr).height || 17;
-    if (acc < needN) ws.getRow(uCr).height = (ws.getRow(uCr).height || 17) + (needN - acc);
+    if (acc < needN) {   // 足りない分は下の行から、1行409まで（あふれた分は上の行へ）
+      let rest = needN - acc;
+      for (let rr = cBottom; rr >= cTop && rest > 0.01; rr--) { const rw = ws.getRow(rr), cur = rw.height || 17, add = Math.min(rest, XL_MAX_ROW_H - cur); if (add > 0) { rw.height = cur + add; rest -= add; } }
+    }
     chunksN.forEach(([cf, ct, chunk]) => {
       if (cBottom > cTop || ct > cf) ws.mergeCells(cTop, cf, Math.max(cTop, cBottom), ct);
       setCell(cTop, cf, chunk, { vAlign: "top" });
@@ -4464,6 +4474,7 @@ function fitRowHeights(ws) {
   const merges = {};   // 親セルの番地 → {top,left,bottom,right}
   Object.values(ws._merges || {}).forEach((m) => { const mm = m && (m.model || m); if (mm && mm.top != null) merges[ws.getCell(mm.top, mm.left).address] = { top: mm.top, left: mm.left, bottom: mm.bottom, right: mm.right }; });
   const need = [];   // [下の行, 上の行, 要る高さ]
+  ws.eachRow({ includeEmpty: true }, (row) => { if ((row.height || 0) > XL_MAX_ROW_H) row.height = XL_MAX_ROW_H; });   // Excelは409より高くできない
   ws.eachRow({ includeEmpty: false }, (row, ri) => {
     row.eachCell({ includeEmpty: false }, (cell, ci) => {
       if (cell.isMerged && cell.master && cell.master !== cell && cell.master.address !== cell.address) return;
@@ -4472,21 +4483,38 @@ function fitRowHeights(ws) {
       const al = cell.alignment || {}; if (al.shrinkToFit) return;
       const rg = merges[cell.address] || { top: ri, left: ci, bottom: ri, right: ci };
       let w = 0; for (let c = rg.left; c <= rg.right; c++) w += colW(c);
-      const size = (cell.font && cell.font.size) || 11;
-      // 列の幅1＝約7ピクセル（Excelの標準）、全角1文字＝文字の大きさ×4/3ピクセル。左右の余白の分を引く
-      // 行の終わりに「〜」「)」「、」などが来ると Excel は前の文字ごと次の行へ送るので、1行に入る字数は1字少なめに見る
-      const chars = Math.max(1, Math.floor((7 * w - 8) / (size * 4 / 3)) - 1);
-      const lines = al.wrapText === false ? txt.split("\n").length : txt.split("\n").reduce((a, l) => a + Math.max(1, Math.ceil(dispW(l) / chars)), 0);
-      need.push([rg.bottom, rg.top, lines * size * 1.75 + 4]);   // 游ゴシックは1行に文字の大きさの約1.7倍の高さが要る（以前の見積りは約1.54倍で、下が切れていた）
+      let size = (cell.font && cell.font.size) || 11;
+      // Excelの1行の高さは409まで。それより高く要るときは（行を高くしても切れるので）文字を小さくして収める（2026-11-18 依頼者「特記事項(利用者)の下部が文字がきれる」）
+      const room = XL_MAX_ROW_H * (rg.bottom - rg.top + 1);
+      let h = cellNeedH(txt, w, size, al.wrapText === false);
+      while (h > room && size > 6) { size = Math.max(6, size - 0.5); h = cellNeedH(txt, w, size, al.wrapText === false); }
+      if (size !== ((cell.font && cell.font.size) || 11)) cell.font = { ...(cell.font || {}), size };
+      need.push([rg.bottom, rg.top, h]);
     });
   });
   let changed = 0;
   need.sort((a, b) => (a[0] - a[1]) - (b[0] - b[1]));          // 1行のセルを先に（結合はそのあと足りない分だけ）
   for (const [bot, top, h] of need) {
     let total = 0; for (let r = top; r <= bot; r++) total += ws.getRow(r).height || 15;
-    if (total + 0.5 < h) { const lr = ws.getRow(bot); lr.height = (lr.height || 15) + (h - total); changed++; }
+    if (total + 0.5 < h) {
+      // 足りない分は下の行から。1行は409まで（超えるとExcelが409にして文字が切れる）なので、あふれた分は上の行へ
+      let rest = h - total;
+      let did = false;
+      for (let r = bot; r >= top && rest > 0.01; r--) { const rw = ws.getRow(r), cur = rw.height || 15, add = Math.min(rest, XL_MAX_ROW_H - cur); if (add > 0) { rw.height = cur + add; rest -= add; did = true; } }
+      if (did) changed++;
+    }
   }
   return changed;
+}
+const XL_MAX_ROW_H = 409;   // Excelの行の高さの上限（ポイント）
+/* 折り返したときに要る高さ（fitRowHeights と特記事項の枠で同じ見積り）。w=列の幅の合計 */
+function cellNeedH(txt, w, size, noWrap) {
+  const dispW = (s) => [...String(s)].reduce((a, ch) => a + (/[\uFF61-\uFF9F\x20-\x7E]/.test(ch) ? 0.6 : 1), 0);
+  // 列の幅1＝約7ピクセル（Excelの標準）、全角1文字＝文字の大きさ×4/3ピクセル。左右の余白の分を引く
+  // 行の終わりに「〜」「)」「、」などが来ると Excel は前の文字ごと次の行へ送るので、1行に入る字数は1字少なめに見る
+  const chars = Math.max(1, Math.floor((7 * w - 8) / (size * 4 / 3)) - 1);
+  const lines = noWrap ? String(txt).split("\n").length : String(txt).split("\n").reduce((a, l) => a + Math.max(1, Math.ceil(dispW(l) / chars)), 0);
+  return lines * size * 1.75 + 4;   // 游ゴシックは1行に文字の大きさの約1.7倍の高さが要る（以前の見積りは約1.54倍で、下が切れていた）
 }
 
 async function exportExcel(master, sheet, date, xo) {

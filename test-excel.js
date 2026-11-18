@@ -439,6 +439,22 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.ok(ws.getRow(1).height >= 4 * 11 * 1.5, "4行ぶん以上 " + ws.getRow(1).height);
   assert.ok(ws.getRow(2).height + ws.getRow(3).height >= 6 * 11 * 1.5, "結合したセルは合わせて6行ぶん以上");
   assert.strictEqual(E13.fitRowHeights(ws), 0, "2回目は何もしない");
+  { // 2026-11-18 依頼者「やはり特記事項(利用者)の下部が文字がきれる」：Excelの1行の高さは409まで。特記事項が多いと1行に800を超える高さを入れていて、Excelが409にして下が切れた
+    //  → 1行409まで・足りない分は枠の上の行へ・それでも入らなければ列を増やす・最後は文字を小さく
+    for (const n of [12, 25, 40, 80]) {
+      const notes = Array.from({ length: n }, (_, i) => `利用者${i} 通院のため10:00〜12:00不在（○○病院・家族付き添い）`).join("\n");
+      const w3 = E13.buildWorkbook(ExcelJS, m, Object.assign(E13.emptySheet(), { runs: p.runs, blocks: p.blocks, notes }), "2026-11-02").getWorksheet("送迎表");
+      w3.eachRow({ includeEmpty: true }, (r, ri) => assert.ok((r.height || 0) <= E13.XL_MAX_ROW_H, n + "件：" + ri + "行目が" + r.height + "（409まで）"));
+      let cell = null; w3.eachRow((r) => r.eachCell((c) => { if (!cell && String(c.value).startsWith("利用者0 ")) cell = c; }));
+      const mg = Object.values(w3._merges).map((x) => x.model || x).find((x) => w3.getCell(x.top, x.left).address === cell.address);
+      let H = 0; for (let r = mg.top; r <= mg.bottom; r++) H += w3.getRow(r).height || 15;
+      let W = 0; for (let c = mg.left; c <= mg.right; c++) W += w3.getColumn(c).width || 9;
+      const need = E13.cellNeedH(String(cell.value), W, cell.font.size);
+      assert.ok(H + 0.5 >= need, n + "件：特記事項の枠の高さ " + H + " ≥ 要る高さ " + need.toFixed(1));
+      assert.strictEqual(E13.fitRowHeights(w3), 0, n + "件：もう足りている");
+      console.log("特記事項" + n + "件：枠の高さ " + H + "・文字 " + cell.font.size + "pt OK");
+    }
+  }
   // 2026-11-13 依頼者「エクセルで下がきれる文字がある」：半角の時刻・ｶﾅまじりの行がちょうど1行に収まる見積りだと、Excelでは折り返して下が切れた
   //  → 1行に入る字数は少なめ・行の高さは文字の大きさの1.75倍で見る（11ptの全角で幅11の列に約4字。以前は5字で数えた）
   const ws2 = new ExcelJS.Workbook().addWorksheet("t2");
