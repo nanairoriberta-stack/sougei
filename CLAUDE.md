@@ -84,6 +84,10 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - 通常の迎え・送りの便に訓練の人を乗せる指定（`trainUserIds`/`trainBothIds`/`trainDropIds`/`trainEndIds`）は「訓練の人を乗せるとき（開く）」の中にたたむ
 - 以前の「🏁 この訓練送りで送迎終了にする」ボタン（noRide に「訓練送りで終了」を入れる別のやり方）は廃止。入っている noRide はそのまま効く
 
+## 送迎表の「🏃 訓練」のタブ（2026-11-18 依頼者「訓練タブを作ってそこにまとめて見れるようにしてほしい」→ 送迎表のタブ・訓練に行く利用者）
+- 週間パターンの次のタブ（`TrainTab`・`data-train-tab`）。見るだけ。利用者（部署の順 `byBaseDept`）×日の表で、訓練に行く人＝種別「訓練迎」「訓練送」（`mode:"train"`）の便に乗る人と、通常の便で訓練の指定（`trainUserIds`/`trainBothIds`/`trainDropIds`/`trainEndIds`）の人（`trainEntriesOf`）。マスに 訓練迎/訓練送（迎→訓練）・時刻・担当（なければ「担当未定」）・車、通常の迎え/送りも兼ねるとき（`rideKindOf`）はそう書く
+- 「送迎表（週ごと）」＝開いている日の週（月曜から `trainWeekOf`）の日ごとの送迎表（開いている日は画面の今の値）、‹ 前の週・次の週 ›、日付を押すとその日の送迎表へ。「週間パターン」＝月〜日の週間パターン。下に人数と訓練のメモ（`training`）。テスト `pw/master_add_ui.js`
+
 ## ルールを日付で切り替える（2026-10-29）
 - `master.rulesUntil=[{until:"YYYY-MM-DD", rules}]`（古い順）：その日までの送迎表はその rules、最後の区切りの翌日からは `master.rules`（いちばん新しいルール）。`rulesAtDate`
 - その日のルールは `applyDayDept(…, dateStr)` で入る（送迎表の日の画面 `sheetMaster`・チェック・Claudeの `get_day`）。週間パターン（日付なし）は新しいルール。`get_rules` は `date` を渡すとその日の分

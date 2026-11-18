@@ -9058,6 +9058,139 @@ function UserTab({ master, update }) {
 /* ============================================================
    ヘルプ表タブ(2026-11-06〜 週間パターンとは別。登録した行だけ・確認にだけ使う)
    ============================================================ */
+// ---------- 訓練のタブ（2026-11-18 依頼者「訓練タブを作ってそこにまとめて見れるようにしてほしい」→ 送迎表のタブに、訓練に行く利用者） ----------
+// 送迎表・週間パターンの便から、訓練に行く人（種別「訓練迎」「訓練送」mode:"train" の便に乗る人、通常の便で訓練の指定 trainUserIds/trainBothIds/trainDropIds/trainEndIds の人）を集める
+function trainEntriesOf(master, sh) {
+  const out = [];
+  if (!sh) return out;
+  const vName = (id) => { const v = resolveVehicle(master, id); return v ? v.name : ""; };
+  const sName = (id) => { if (!id) return ""; if (id === HOLD_ID) return "保留"; const s = (master.staff || []).find((x) => x.id === id); return s ? s.name : ""; };
+  for (const r of sh.runs || []) {
+    if (r.kind !== "meet" && r.kind !== "send") continue;
+    const ids = new Set();
+    if (r.mode === "train") (r.userIds || []).forEach((id) => ids.add(id));
+    for (const k of ["trainUserIds", "trainBothIds", "trainDropIds", "trainEndIds"]) (r[k] || []).forEach((id) => ids.add(id));
+    for (const id of ids) {
+      const lab = (r.trainEndIds || []).includes(id) ? "迎→訓練(終了)" : (r.trainDropIds || []).includes(id) ? "迎→訓練" : r.kind === "meet" ? "訓練迎" : "訓練送";
+      out.push({ userId: id, kind: r.kind, label: lab, time: r.time || "", staff: sName(r.staffId), veh: vName(r.vehicleId), same: !!rideKindOf(r, id), runId: r.id });
+    }
+  }
+  return out.sort((a, b) => String(a.time).localeCompare(String(b.time)));
+}
+const trainYmd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function trainWeekOf(ds) {
+  const [y, m, d] = String(ds).split("-").map(Number);
+  const t = new Date(y, m - 1, d);
+  t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); // 月曜から
+  return Array.from({ length: 7 }, (_, i) => { const x = new Date(t); x.setDate(t.getDate() + i); return trainYmd(x); });
+}
+function TrainTab({ master, date, sheet, onOpenDate }) {
+  const [mode, setMode] = useState("week"); // week=この週の送迎表 / pattern=週間パターン
+  const [start, setStart] = useState(() => trainWeekOf(date)[0]);
+  const [cols, setCols] = useState(null); // [{key,label,sub,date,data}]
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setCols(null); setErr("");
+    (async () => {
+      try {
+        if (KV) KV.flushLocal(); // 直前の編集も含める
+        let list;
+        if (mode === "pattern") {
+          list = await Promise.all(DAY_ORDER.map(async (wd) => ({ key: "p" + wd, label: DAYS[wd] + "曜", sub: "", data: await sGet(`pattern:${wd}`) })));
+        } else {
+          const ds = trainWeekOf(start);
+          list = await Promise.all(ds.map(async (d) => {
+            const [, mm, dd] = d.split("-").map(Number);
+            const wd = new Date(d + "T00:00:00").getDay();
+            const data = d === date && sheet ? sheet : await sGet(`sheet:${d}`);
+            return { key: d, date: d, label: `${mm}/${dd}`, sub: DAYS[wd], wd, data };
+          }));
+        }
+        if (alive) { list.key = mode + ":" + start; setCols(list); }
+      } catch (e) { if (alive) setErr(String((e && e.message) || e)); }
+    })();
+    return () => { alive = false; };
+  }, [mode, start]);
+  const shift = (n) => { const [y, m, d] = start.split("-").map(Number); const t = new Date(y, m - 1, d + n * 7); setStart(trainYmd(t)); };
+  const byCol = (cols || []).map((c) => trainEntriesOf(master, c.data));
+  const uids = new Set(); byCol.forEach((l) => l.forEach((e) => uids.add(e.userId)));
+  const users = byBaseDept(master, (master.users || []).filter((u) => uids.has(u.id)));
+  const unknown = [...uids].filter((id) => !users.some((u) => u.id === id));
+  const memoOf = (c) => String((c.data && c.data.training) || "").trim();
+  const anyMemo = (cols || []).some((c) => memoOf(c));
+  const deptName = (id) => { const d = (master.departments || []).find((x) => x.id === id); return d ? d.name : ""; };
+  const cell = (list) => list.length ? list.map((e, i) => (
+    <div key={i} className={`text-[11px] leading-tight rounded px-1 py-0.5 mb-0.5 ${e.kind === "meet" ? "bg-violet-50 border border-violet-200" : "bg-teal-50 border border-teal-200"}`} data-train-item={e.kind}>
+      <b>{e.label}</b> {e.time}
+      <div className="text-stone-600">{[e.staff || "担当未定", e.veh].filter(Boolean).join("・")}{e.same ? <span className="text-violet-700">（通常の{e.kind === "meet" ? "迎え" : "送り"}も兼ねる）</span> : null}</div>
+    </div>
+  )) : null;
+  return (
+    <div className="p-3" data-train-tab>
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <b className="text-base">🏃 訓練に行く利用者</b>
+        <div className="flex rounded border border-stone-300 overflow-hidden text-sm">
+          <button className={`px-3 py-1 ${mode === "week" ? "bg-sky-600 text-white" : "bg-white"}`} onClick={() => setMode("week")} data-train-mode="week">送迎表（週ごと）</button>
+          <button className={`px-3 py-1 ${mode === "pattern" ? "bg-sky-600 text-white" : "bg-white"}`} onClick={() => setMode("pattern")} data-train-mode="pattern">週間パターン</button>
+        </div>
+        {mode === "week" && (
+          <div className="flex items-center gap-1 text-sm">
+            <button className="px-2 py-1 rounded border border-stone-300 bg-white" onClick={() => shift(-1)} data-train-prev>‹ 前の週</button>
+            <span className="px-1" data-train-week>{(() => { const ds = trainWeekOf(start); const f = (d) => d.slice(5).replace("-", "/").replace(/^0/, "").replace("/0", "/"); return `${f(ds[0])}〜${f(ds[6])}`; })()}</span>
+            <button className="px-2 py-1 rounded border border-stone-300 bg-white" onClick={() => shift(1)} data-train-next>次の週 ›</button>
+            <button className="px-2 py-1 rounded border border-stone-300 bg-white" onClick={() => setStart(trainWeekOf(date)[0])}>今の日の週</button>
+          </div>
+        )}
+      </div>
+      <div className="text-xs text-stone-500 mb-2">種別「訓練迎」「訓練送」の便と、通常の便で訓練の人として乗せている人を集めています（見るだけ）。直すときは{mode === "week" ? "その日の送迎表" : "週間パターン"}で。</div>
+      {err && <div className="text-sm text-rose-700 mb-2">読み込めませんでした：{err}</div>}
+      {!cols && !err && <div className="text-sm text-stone-500" data-train-loading>読み込み中…</div>}
+      {cols && (
+        <div className="overflow-x-auto">
+          <table className="border-collapse text-sm bg-white" data-train-table={cols.key}>
+            <thead>
+              <tr>
+                <th className="border border-stone-300 px-2 py-1 bg-stone-100 sticky left-0 z-10 text-left min-w-[7rem]">利用者</th>
+                {cols.map((c) => (
+                  <th key={c.key} className={`border border-stone-300 px-2 py-1 bg-stone-100 min-w-[8.5rem] ${c.wd === 0 ? "text-rose-600" : c.wd === 6 ? "text-sky-700" : ""} ${c.date === date ? "bg-amber-100" : ""}`}>
+                    {c.date && onOpenDate ? <button className="underline decoration-dotted" onClick={() => onOpenDate(c.date)} title="この日の送迎表を開く">{c.label}({c.sub})</button> : <>{c.label}{c.sub ? `(${c.sub})` : ""}</>}
+                    {c.date && !c.data && <div className="text-[10px] font-normal text-stone-400">表なし</div>}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u, ri) => (
+                <tr key={u.id} style={deptRowStyle(master, users, ri)} data-train-user={u.name}>
+                  <td className="border border-stone-300 px-2 py-1 sticky left-0 bg-white z-10 whitespace-nowrap"><b>{u.name}</b><div className="text-[10px] text-stone-500">{deptName(u.deptId)}</div></td>
+                  {cols.map((c, ci) => <td key={c.key} className="border border-stone-300 px-1 py-1 align-top">{cell(byCol[ci].filter((e) => e.userId === u.id))}</td>)}
+                </tr>
+              ))}
+              {unknown.length > 0 && unknown.map((id) => (
+                <tr key={id}>
+                  <td className="border border-stone-300 px-2 py-1 sticky left-0 bg-white z-10 text-stone-400">（利用者の一覧にいない人）</td>
+                  {cols.map((c, ci) => <td key={c.key} className="border border-stone-300 px-1 py-1 align-top">{cell(byCol[ci].filter((e) => e.userId === id))}</td>)}
+                </tr>
+              ))}
+              <tr className="bg-stone-50">
+                <td className="border border-stone-300 px-2 py-1 sticky left-0 bg-stone-50 z-10 font-bold">人数</td>
+                {cols.map((c, ci) => <td key={c.key} className="border border-stone-300 px-2 py-1 text-center" data-train-count={c.key}>{new Set(byCol[ci].map((e) => e.userId)).size}人</td>)}
+              </tr>
+              {anyMemo && (
+                <tr>
+                  <td className="border border-stone-300 px-2 py-1 sticky left-0 bg-white z-10 font-bold">訓練のメモ</td>
+                  {cols.map((c) => <td key={c.key} className="border border-stone-300 px-2 py-1 align-top text-xs whitespace-pre-wrap">{memoOf(c)}</td>)}
+                </tr>
+              )}
+            </tbody>
+          </table>
+          {!users.length && !unknown.length && <div className="text-sm text-stone-500 mt-2" data-train-empty>{mode === "week" ? "この週" : "週間パターン"}には訓練の便がありません。</div>}
+        </div>
+      )}
+    </div>
+  );
+}
 function HelpBoardTab({ master, update, patterns: patterns0, loading, onDeletePattern, onAddPattern }) {
   // 井上入浴→井上ヘルプ など、同じヘルプは同じ名前で並べる
   const patterns = useMemo(() => Object.fromEntries(Object.entries(patterns0 || {}).map(([k, p]) => [k, p ? { ...p, blocks: canonHelpBlocks(p.blocks) } : p])), [patterns0]);
@@ -10803,6 +10936,7 @@ function AppInner() {
     ["vehmove", "車両の動き"],
     ["sim3d", "🚌 3Dマップ"],
     ["pattern", "週間パターン"],
+    ["train", "🏃 訓練"],
     ["staff", "職員"],
     ["vehicles", "車両"],
     ["users", "利用者"],
@@ -11558,6 +11692,7 @@ function AppInner() {
           </div>
         )}
         {(tab === "staff" || tab === "users") && <PeopleFromBar master={master} from={peopleFrom} setFrom={setPeopleFrom} rawUpdate={updateMaster} kind={tab} />}
+        {tab === "train" && <TrainTab master={master} date={date} sheet={sheet} onOpenDate={(d) => { setTab("sheet"); setDate(d); }} />}
         {tab === "staff" && <StaffTab master={master} update={updatePeople} />}
         {tab === "vehicles" && <VehicleTab master={master} update={updateMaster} />}
         {tab === "users" && <UserTab master={master} update={updatePeople} />}

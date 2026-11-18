@@ -231,6 +231,28 @@ const D = path.join(__dirname, "../gas/out");
     assert.match(await P.pg.locator("#sghAttMsg").innerText(), /出しました/);
     await P.pg.click("#sghAttClose"); await P.pg.waitForTimeout(200);
     console.log("期間の出欠（Excel）:", got.name, "○", marks); }
+  { // 訓練のタブ（2026-11-18 依頼者「訓練タブを作ってそこにまとめて見れるようにしてほしい」→ 送迎表のタブ・訓練に行く利用者）
+    const mv = api(t, "kv.get", ["v2:master"]).data.value, u1 = mv.users[0], u2 = mv.users[1], st = mv.staff[0];
+    api(t, "kv.cas", [{ key: "v2:sheet:2026-11-04", rev: 0, value: Object.assign(engFor("v2").emptySheet(), { training: "11/4 ○○園で作業訓練", runs: [
+      { id: "tr_m1", kind: "meet", mode: "train", time: "09:30", staffId: st.id, vehicleId: "", userIds: [u1.id] },
+      { id: "tr_s1", kind: "send", time: "15:00", staffId: "", vehicleId: "", userIds: [u2.id], trainBothIds: [u2.id] }] }) }]);
+    await P.pg.click('button:text-is("🏃 訓練")'); await P.pg.waitForSelector('[data-train-table="week:2026-11-02"]', { timeout: 20000 });
+    assert.match(await P.pg.textContent("[data-train-week]"), /^11\/2〜11\/8$/, "開いている日の週（月曜から）");
+    const row1 = await P.pg.textContent(`[data-train-user="${u1.name}"]`), row2 = await P.pg.textContent(`[data-train-user="${u2.name}"]`);
+    assert.ok(row1.includes("訓練迎") && row1.includes("09:30") && row1.includes(st.name), "訓練迎の便の人 " + row1);
+    assert.ok(row2.includes("訓練送") && row2.includes("担当未定") && row2.includes("通常の送りも兼ねる"), "通常の送りの便で訓練の人 " + row2);
+    assert.strictEqual(await P.pg.textContent('[data-train-count="2026-11-04"]'), "2人", "その日の人数");
+    assert.ok(await P.pg.locator("text=11/4 ○○園で作業訓練").count() > 0, "訓練のメモ");
+    await P.pg.click("[data-train-next]"); await P.pg.waitForSelector('[data-train-table="week:2026-11-09"]', { timeout: 20000 });
+    assert.match(await P.pg.textContent("[data-train-week]"), /^11\/9〜11\/15$/, "次の週");
+    assert.strictEqual(await P.pg.locator(`[data-train-user="${u1.name}"]`).count(), 0, "次の週には出ない");
+    await P.pg.click('[data-train-mode="pattern"]'); await P.pg.waitForSelector('[data-train-table^="pattern:"]', { timeout: 20000 });
+    assert.ok((await P.pg.$$eval("[data-train-table] th", (l) => l.map((x) => x.textContent))).includes("月曜"), "週間パターンの列");
+    await P.pg.click('[data-train-mode="week"]'); await P.pg.waitForSelector('[data-train-table="week:2026-11-09"]', { timeout: 20000 });
+    await P.pg.click("[data-train-prev]"); await P.pg.waitForSelector('[data-train-table="week:2026-11-02"]', { timeout: 20000 });
+    await P.pg.click('[data-train-table] th button:has-text("11/4")'); await P.pg.waitForTimeout(1500);
+    assert.ok(await P.pg.locator("[data-train-tab]").count() === 0, "日付を押すとその日の送迎表へ");
+    console.log("訓練のタブ OK", row1.slice(0, 30), "/", row2.slice(0, 30)); }
   assert.deepStrictEqual(P.errs.filter((e) => !/net::ERR_FAILED|favicon/.test(e)), [], "画面エラーなし");
   // 送迎表を開くときの手直し（中抜けの初期値）が書き込みの失敗で止まっても、「読み込み中…」のままにしないで開く（2026-11-09 依頼者「読み込みがすごい時間かかってる」）
   { const m1 = api(t, "kv.get", ["master"]).data.value, r1 = api(t, "kv.get", ["master"]).data.rev; const { away1, ...noFlag } = m1;
