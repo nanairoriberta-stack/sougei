@@ -4342,7 +4342,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       // 元リベルタの職員(当日部署変更◆で移動して来た人も含む)は、日勤の名簿ではなく「早:/遅:」の分類側に入れる
       const libId = (master.departments.find((d) => /リベルタ/.test(d.name)) || {}).id;
       const fromLib = (s) => s.deptId === libId || s.baseDeptId === libId;
-      const own = allStaffToday.filter((s) => (((s.deptByDay || {})[wd]) || s.deptId) === deptId && !isOffToday(s) && (deptId === libId || !fromLib(s)));
+      const own = allStaffToday.filter((s) => ((s.dayApplied ? "" : ((s.deptByDay || {})[wd])) || s.deptId) === deptId && !isOffToday(s) && (deptId === libId || !fromLib(s)));
       const subs = allStaffToday.filter((s) => deptId !== libId && fromLib(s) && belongDeptOf(master, s, wd) === deptId && !isOffToday(s));
       const subDay = subs.filter((s) => effShiftRank(s) === 0);
       const early = subs.filter((s) => effShiftRank(s) === 1).map(deco).join("・");
@@ -11278,14 +11278,18 @@ function AppInner() {
                   const wd2 = weekdayOf(date);
                   return (
                     <div className="bg-white border border-stone-300 rounded-lg p-3 mt-3">
-                      <div className="font-bold text-stone-700 text-sm mb-1">パート職員の本日出欠 <span className="font-normal text-xs text-stone-400">(名前をクリックで休み⇔出勤を切り替え。Excel下段の職員欄・人数に反映)</span></div>
+                      <div className="font-bold text-stone-700 text-sm mb-1">パート職員の本日出欠・部署 <span className="font-normal text-xs text-stone-400">(名前をクリックで休み⇔出勤を切り替え。右の欄でこの日だけの部署。Excel下段の職員欄・人数に反映)</span></div>
                       <div className="flex flex-wrap gap-1">
                         {parts.map((s) => {
                           const fx = (s.offDays || []).includes(wd2);
                           const o = (sheet.staffOv || {})[s.id] || {};
                           const isOff = fx ? !o.workToday : !!o.off;
+                          const usual = (s.deptByDay || {})[wd2] || s.deptId;
+                          const dNow = o.deptId || usual;
+                          const moved = !!o.deptId && o.deptId !== usual;
                           return (
-                            <button key={s.id}
+                            <span key={s.id} className={`inline-flex items-stretch rounded border ${moved ? "border-amber-400 bg-amber-50" : "border-transparent"}`} data-part-box={s.id}>
+                            <button
                               className={`text-xs px-2 py-1 rounded border ${isOff ? "bg-stone-100 text-stone-400 border-stone-200 line-through" : "bg-emerald-50 text-emerald-800 border-emerald-300"}`}
                               title={fx ? "この曜日は固定休(クリックで休日出勤⇔休み)" : "クリックで本日の休み⇔出勤"}
                               onClick={() => updateSheet((prev) => {
@@ -11298,6 +11302,19 @@ function AppInner() {
                               })}>
                               <span data-part={s.id}>{s.name} {o.start || s.start}-{o.end || s.end}{isOff ? "(休)" : ""}{!isOff && (sheet.blocks || []).some((b) => b.staffId === s.id && String(b.id || "").startsWith("cal_") && /^不在（/.test(b.label || "")) ? "(中抜けあり)" : ""}</span>
                             </button>
+                            {/* 本日だけの部署（2026-11-18 依頼者「パートさんも本日のみ部署変更あるときがある」）。いつもと同じに戻すと変更なし */}
+                            <select className={`text-[11px] ml-0.5 px-0.5 rounded border ${moved ? "border-amber-400 text-amber-900 font-bold" : "border-stone-200 text-stone-500"} bg-white`} value={dNow} data-part-dept={s.id}
+                              title="この日だけの部署（Excelの部署の職員欄・人数に入ります）"
+                              onChange={(e) => { const v = e.target.value; updateSheet((prev) => {
+                                const ov2 = { ...(prev.staffOv || {}) };
+                                const cur = { ...(ov2[s.id] || {}) };
+                                if (!v || v === usual) delete cur.deptId; else cur.deptId = v;
+                                ov2[s.id] = cur;
+                                return { ...prev, staffOv: ov2 };
+                              }); }}>
+                              {master.departments.map((d) => <option key={d.id} value={d.id}>{d.name}{d.id === usual ? "（いつも）" : ""}</option>)}
+                            </select>
+                            </span>
                           );
                         })}
                       </div>

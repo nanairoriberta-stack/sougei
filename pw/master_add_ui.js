@@ -128,6 +128,17 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(ab.includes("松養生高２女性 現場実習"), "連絡事項 " + ab);
     const pt = await tx(`[data-part="${pS.id}"]`); if (pS.emp === "パート") assert.ok(pt && !pt.includes(pS.end), "パート職員の出欠にPM休の退勤 " + pt + " / いつも " + pS.end);
     console.log("特記事項（カレンダーから）：利用者「" + au.split("\n")[1] + "」 職員「" + as.split("\n")[1] + "」 連絡事項「" + ab.split("\n").slice(-1)[0] + "」 パート「" + pt + "」"); }
+  { // パートさんの本日だけの部署（2026-11-18 依頼者「パートさんも本日のみ部署変更あるときがある」）
+    const mv = api(t, "kv.get", ["v2:master"]).data.value, pt = mv.staff.find((x) => x.emp === "パート" && !x.deptByDay), usual = pt.deptId, to = mv.departments.find((d) => d.id !== usual).id;
+    const sel = `[data-part-dept="${pt.id}"]`;
+    assert.strictEqual(await P.pg.inputValue(sel), usual, "最初はいつもの部署");
+    assert.ok((await P.pg.locator(`${sel} option[value="${usual}"]`).innerText()).includes("（いつも）"));
+    await P.pg.selectOption(sel, to); await P.pg.waitForTimeout(3500);
+    assert.strictEqual(((api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value.staffOv || {})[pt.id] || {}).deptId, to, "その日の送迎表に部署が入る");
+    assert.ok(/amber/.test(await P.pg.getAttribute(`[data-part-box="${pt.id}"]`, "class")), "変えたことが分かる色");
+    await P.pg.selectOption(sel, usual); await P.pg.waitForTimeout(3500);
+    assert.strictEqual(((api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value.staffOv || {})[pt.id] || {}).deptId, undefined, "いつもに戻すと変更なし");
+    console.log("パートの本日の部署 OK", pt.name); }
   { // 中抜け（2026-11-05 依頼者）：カレンダーの中抜けはコマを出さず灰色・新見さんのいつもの中抜け（14:00〜16:00）も灰色。職員のタブで直せる
     const mv = api(t, "kv.get", ["v2:master"]).data.value, ni = mv.staff.find((x) => x.name === "新見"), hi = mv.staff.find((x) => x.name === "日野");
     assert.ok(api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value.blocks.some((b) => b.id === "cal_ev_away0001_" + hi.id), "データには不在のコマがある");

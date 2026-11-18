@@ -156,6 +156,9 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 送迎表は右をあける（画面幅1000px以上）。`doGet` は calendar かつ `embed=1` のときだけ `XFrameOptionsMode.ALLOWALL`（ほかは今までどおり DEFAULT）。
 中のカレンダーは送り終わると `postMessage({sg:"cal-saved"})` → 送迎表がすぐ読み直す（`refreshCalendar`・`pollOnce`）。公開URLが分からないときは「設定シートB2」の案内
 
+## パートさんの本日だけの部署（2026-11-18 依頼者「パートさんも本日のみ部署変更あるときがある　変えるようにできる？」）
+パートは表の列が無い（`StaffOvModal` を開けない）ので、日の画面の下の「パート職員の本日出欠・部署」で名前の右の選択（`data-part-dept`、いつもの部署に「（いつも）」）→ その日の `staffOv[職員].deptId`（いつもと同じに戻すと消す）。変えた人は橙の枠（`data-part-box`）。Excelの職員の欄・人数はその部署に（`buildWorkbook` の `own` は当日の部署を当てた人 `dayApplied` では曜日ごとの部署 `deptByDay` を見ない＝以前は曜日ごとの部署があると当日の変更が効かなかった）。カレンダーの職員時間変更・休日出勤の「その日の部署」でも入る（以前から）。テスト `test-excel.js`・`pw/master_add_ui.js`
+
 ## 送迎表の職員の変更の画面で基本部署は変えない（2026-11-12 依頼者「間違ってそこを変えるパターンある」）
 送迎表の日の画面で職員の名前を押して出る「○○ の変更」（`StaffOvModal`）の「基本部署の変更」の選択はなくし、今の基本部署を表示だけ（`data-base-dept`）。変えるのは職員のタブ。この日だけは「本日の部署」のまま
 

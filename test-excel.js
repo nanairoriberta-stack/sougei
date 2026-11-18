@@ -31,6 +31,21 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     for (const n of ["送迎表", "送迎表(ヘルプ車なし)", "車両の動き"]) { const ps = b3.getWorksheet(n).pageSetup; assert.strictEqual(ps.paperSize, 8, n + " はA3"); assert.strictEqual(ps.orientation, "landscape"); assert.strictEqual(ps.fitToHeight, 1, n + " 1枚に収める"); }
     assert.ok(E.buildExcelHtml(m, sheet, date, "A3").includes("<x:PaperSizeIndex>8<"), ".xls もA3");
     console.log("用紙 A4／A3 OK"); }
+  { // パートさんの本日だけの部署（2026-11-18 依頼者「パートさんも本日のみ部署変更あるときがある」）：Excelの職員の欄は変えた部署に（曜日ごとの部署があっても当日の変更が先）
+    const m2 = JSON.parse(JSON.stringify(m)), mi = m2.staff.find((s) => s.name === "三島"), dY = mi.deptId, dT = m2.departments.find((d) => d.name.startsWith("津田")).id;
+    mi.deptByDay = { 1: dY };
+    const sh = Object.assign({}, sheet, { staffOv: { [mi.id]: { deptId: dT } } });
+    const ws = E.buildWorkbook(ExcelJS, E.applyDayDept(m2, 1, sh.staffOv, null, null, date), sh, date).getWorksheet("送迎表");
+    let hr = 0; ws.eachRow((r, ri) => { if (!hr && r.getCell(1).value === "職員" && /^嫁島\(/.test(String(r.getCell(2).value))) hr = ri; });
+    assert.ok(hr, "職員の欄");
+    const col = (name) => { let c0 = 0; ws.getRow(hr).eachCell((c, ci) => { if (!c0 && String(c.value).startsWith(name)) c0 = ci; }); return String(ws.getRow(hr + 1).getCell(c0).value || ""); };
+    assert.ok(col("津田").split(/[\n･]/).includes("三島"), "三島は津田の欄 " + col("津田"));
+    assert.ok(!col("嫁島").split(/[\n･]/).includes("三島"), "嫁島の欄にはいない " + col("嫁島"));
+    const cnt = (name) => { let v = ""; ws.getRow(hr).eachCell((c) => { if (!v && String(c.value).startsWith(name)) v = String(c.value); }); return v; };
+    const ws0 = E.buildWorkbook(ExcelJS, E.applyDayDept(m2, 1, {}, null, null, date), sheet, date).getWorksheet("送迎表");
+    let t0 = ""; ws0.getRow(hr).eachCell((c) => { if (!t0 && String(c.value).startsWith("津田")) t0 = String(c.value); });
+    assert.notStrictEqual(cnt("津田"), t0, "津田の人数が変わる " + t0 + " → " + cnt("津田"));
+    console.log("パートの本日の部署 OK", t0, "→", cnt("津田")); }
   // 予備の簡易形式(.xls)
   assert.ok(E.buildExcelHtml(m, sheet, date).includes(ver), ".xls の見出しにも");
   // ファイル名に使う文字（Windowsで使えない文字が入らない）
