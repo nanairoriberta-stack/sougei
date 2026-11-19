@@ -1038,7 +1038,8 @@ const D = path.join(__dirname, "../gas/out");
   { const lb = s2.blocks.find((x) => x.calId === global.__longHelp);   // 2時間より長いヘルプ（2026-11-19）
     assert.ok(lb && lb.durMin === 210 && /^0?9:00$/.test(lb.time), "3時間半のヘルプが送迎表に " + JSON.stringify(lb));
     const ev = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {})).find((e) => e.id === global.__longHelp);
-    assert.strictEqual(api(t, "cal.apply", [{ kind: "delete", opId: "op_longhelp1", id: ev.id, date, baseRev: ev.rev }]).status, "ok");
+    { const r = api(t, "cal.apply", [{ kind: "delete", opId: "op_longhelp1", id: ev.id, date, baseRev: ev.rev }]); assert.ok(r && r.ok !== false && !r.error, "長いヘルプを消す " + JSON.stringify(r).slice(0, 200)); }
+    assert.ok(!api(t, "kv.get", ["sheet:" + date]).data.value.blocks.some((x) => x.calId === global.__longHelp), "消すと送迎表からも消える");
     console.log("長いヘルプ（9:00〜12:30＝210分）が送迎表に OK"); }
   assert.strictEqual(s2.userAbsent[U(absent)], true, "欠席");
   assert.strictEqual(s2.userExtra[exU.id], true, "利用日外利用 → 今日だけ利用"); assert.strictEqual(s2.userTime[exU.id].send, "15:00");
