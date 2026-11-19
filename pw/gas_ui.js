@@ -1008,13 +1008,9 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(400);
     assert.ok(await A.pg.locator("text=ヘルプの終わりの時刻を入れてください").count(), "終わりの時刻が空なら保存しない");
     await A.pg.fill("[data-help-end]", "12:30"); await save();
-    if (process.env.DBG) { console.log("DBG sheet:", await A.pg.locator(".sheet").count() ? (await A.pg.locator(".sheet").innerText()).slice(0, 600) : "閉じた"); await A.pg.screenshot({ path: "/tmp/claude-0/-home-user-sougei/ba02a258-b789-563b-8156-f883aa978f9b/scratchpad/lh.png" }); console.log("DBG evs", JSON.stringify(Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {})).filter((e) => e.label === "help").map((e) => [e.title, e.start, e.end, e.sg && e.sg.users]))); }
-    const lb = api(t, "kv.get", ["sheet:" + date]).data.value.blocks.find((x) => x.calId && x.kind === "help" && x.time === "09:00");
-    assert.ok(lb && lb.durMin === 210, "3時間半のヘルプが送迎表に " + JSON.stringify(lb));
-    const ev = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {})).find((e) => e.id === lb.calId);
-    assert.strictEqual(ev.end, "12:30");
-    assert.strictEqual(api(t, "cal.apply", [{ kind: "delete", opId: "op_longhelp1", id: ev.id, date, baseRev: ev.rev }]).status, "ok");
-    await A.pg.waitForTimeout(300); console.log("長いヘルプ（9:00〜12:30＝210分）OK"); }
+    const ev = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {})).find((e) => e.label === "help" && e.start === "09:00");
+    assert.ok(ev && ev.end === "12:30", "9:00〜12:30のヘルプ " + JSON.stringify(ev && [ev.start, ev.end]));
+    global.__longHelp = ev.id; console.log("長いヘルプ：カレンダーに 9:00〜12:30"); }
   // 利用者休み：欠席（理由つき）
   const absent = m.users.find((u) => !["森", "中村"].includes(u.name) && u.name.length >= 2).name;
   await add("user"); await pick("users", absent); await A.pg.click('[data-fill="w-reason"][data-v="体調不良"]'); await save();
@@ -1037,8 +1033,13 @@ const D = path.join(__dirname, "../gas/out");
   const s2 = api(t, "kv.get", ["sheet:" + date]).data.value; const S = (n) => m.staff.find((x) => x.name === n).id, U = (n) => m.users.find((x) => x.name === n).id;
   assert.strictEqual(s2.noRide[U("森")].meet, "受診後送り"); assert.strictEqual(s2.userTime[U("森")].send, "15:30");
   { const sr = s2.runs.find((r) => r.kind === "send" && r.userIds.includes(U("森"))); assert.ok(!sr || sr.places[U("森")] === "病院", "送り先（便に入っていれば）"); console.log("送り先:", sr ? sr.places[U("森")] : "（まだ便なし）"); }
-  const hb = s2.blocks.find((x) => x.calId && x.kind === "help"); assert.ok(hb && hb.staffId === "__hold__" && hb.label === "中村" && hb.note === "○○病院" && hb.time === "14:00", JSON.stringify(hb));
+  const hb = s2.blocks.find((x) => x.calId && x.kind === "help" && x.calId !== global.__longHelp); assert.ok(hb && hb.staffId === "__hold__" && hb.label === "中村" && hb.note === "○○病院" && hb.time === "14:00", JSON.stringify(hb));
   assert.strictEqual(hb.durMin, 30, "ヘルプの時間（30分）が送迎表に");
+  { const lb = s2.blocks.find((x) => x.calId === global.__longHelp);   // 2時間より長いヘルプ（2026-11-19）
+    assert.ok(lb && lb.durMin === 210 && lb.time === "09:00", "3時間半のヘルプが送迎表に " + JSON.stringify(lb));
+    const ev = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {})).find((e) => e.id === global.__longHelp);
+    assert.strictEqual(api(t, "cal.apply", [{ kind: "delete", opId: "op_longhelp1", id: ev.id, date, baseRev: ev.rev }]).status, "ok");
+    console.log("長いヘルプ（9:00〜12:30＝210分）が送迎表に OK"); }
   assert.strictEqual(s2.userAbsent[U(absent)], true, "欠席");
   assert.strictEqual(s2.userExtra[exU.id], true, "利用日外利用 → 今日だけ利用"); assert.strictEqual(s2.userTime[exU.id].send, "15:00");
   assert.strictEqual(s2.staffOv[S("八壁")].end, "19:00", "勤務時間変更");
