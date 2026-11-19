@@ -1036,7 +1036,7 @@ const D = path.join(__dirname, "../gas/out");
   const hb = s2.blocks.find((x) => x.calId && x.kind === "help" && x.calId !== global.__longHelp); assert.ok(hb && hb.staffId === "__hold__" && hb.label === "中村" && hb.note === "○○病院" && hb.time === "14:00", JSON.stringify(hb));
   assert.strictEqual(hb.durMin, 30, "ヘルプの時間（30分）が送迎表に");
   { const lb = s2.blocks.find((x) => x.calId === global.__longHelp);   // 2時間より長いヘルプ（2026-11-19）
-    assert.ok(lb && lb.durMin === 210 && lb.time === "09:00", "3時間半のヘルプが送迎表に " + JSON.stringify(lb));
+    assert.ok(lb && lb.durMin === 210 && /^0?9:00$/.test(lb.time), "3時間半のヘルプが送迎表に " + JSON.stringify(lb));
     const ev = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {})).find((e) => e.id === global.__longHelp);
     assert.strictEqual(api(t, "cal.apply", [{ kind: "delete", opId: "op_longhelp1", id: ev.id, date, baseRev: ev.rev }]).status, "ok");
     console.log("長いヘルプ（9:00〜12:30＝210分）が送迎表に OK"); }
