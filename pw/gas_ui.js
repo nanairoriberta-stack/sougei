@@ -1008,6 +1008,7 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(400);
     assert.ok(await A.pg.locator("text=ヘルプの終わりの時刻を入れてください").count(), "終わりの時刻が空なら保存しない");
     await A.pg.fill("[data-help-end]", "12:30"); await save();
+    if (process.env.DBG) { console.log("DBG sheet:", await A.pg.locator(".sheet").count() ? (await A.pg.locator(".sheet").innerText()).slice(0, 600) : "閉じた"); await A.pg.screenshot({ path: "/tmp/claude-0/-home-user-sougei/ba02a258-b789-563b-8156-f883aa978f9b/scratchpad/lh.png" }); console.log("DBG evs", JSON.stringify(Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {})).filter((e) => e.label === "help").map((e) => [e.title, e.start, e.end, e.sg && e.sg.users]))); }
     const lb = api(t, "kv.get", ["sheet:" + date]).data.value.blocks.find((x) => x.calId && x.kind === "help" && x.time === "09:00");
     assert.ok(lb && lb.durMin === 210, "3時間半のヘルプが送迎表に " + JSON.stringify(lb));
     const ev = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {})).find((e) => e.id === lb.calId);
