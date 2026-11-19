@@ -5228,15 +5228,20 @@ function ItemModal({ master, data, weekday, initial, onSave, onDelete, onClose }
         <div className="mt-2">
           <Field label="ヘルプの時間">
             <div className="flex flex-wrap gap-1" data-help-dur>
-              {[30, 60, 90, 120].map((mm) => {
+              {/* 2時間より長いヘルプも（2026-11-19 依頼者「2時間までしか入れられない。制限とって」） */}
+              {[30, 60, 90, 120, 180, 240].map((mm) => {
                 const cur = Number(durMin) || (/伊達/.test(label || "") ? 30 : 60);
                 return (
                   <button type="button" key={mm} data-dur={mm} onClick={() => setDurMin(String(mm))}
                     className={`text-sm px-3 py-1 rounded border ${cur === mm ? "bg-sky-600 text-white border-sky-600" : "bg-white border-stone-300 hover:bg-stone-50"}`}>
-                    {mm === 30 ? "30分" : mm === 60 ? "1時間" : mm === 90 ? "1時間半" : "2時間"}
+                    {mm === 30 ? "30分" : mm === 90 ? "1時間半" : mm / 60 + "時間"}
                   </button>
                 );
               })}
+              <select className="text-sm px-1 py-1 rounded border border-stone-300 bg-white" data-dur-more value={[30, 60, 90, 120, 180, 240].includes(Number(durMin)) || !durMin ? "" : String(durMin)} onChange={(e) => e.target.value && setDurMin(e.target.value)} title="ほかの長さ">
+                <option value="">ほかの長さ…</option>
+                {[150, 210, 270, 300, 330, 360, 420, 480, 540, 600].concat([30, 60, 90, 120, 180, 240].includes(Number(durMin)) || !durMin ? [] : [Number(durMin)]).sort((x, y) => x - y).filter((x, i, a) => a.indexOf(x) === i).map((m) => <option key={m} value={m}>{Math.floor(m / 60)}時間{m % 60 ? m % 60 + "分" : ""}</option>)}
+              </select>
             </div>
           </Field>
         </div>

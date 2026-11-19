@@ -999,6 +999,21 @@ const D = path.join(__dirname, "../gas/out");
   console.log("予測:「なか」→", firstHit); await A.pg.fill("#w-dest", "○○病院"); await A.pg.fill("#f-start", "14:00"); await A.pg.check('input[name="w-hdur"][value="30"]'); await A.pg.waitForTimeout(200);   // ヘルプの時間：30分
   assert.ok(await A.pg.locator("#w-end").isHidden(), "ヘルプは開始時刻だけ");
   await A.pg.locator(".sheet").screenshot({ path: "g_help.png" }); await save();
+  { // 2時間より長いヘルプ（2026-11-19 依頼者「2時間までしか入れられない。制限とって」）：3時間・4時間と「終わりの時刻で」
+    await add("help"); await A.pg.click('[data-sgpick="users"][data-name="中村"]').catch(async () => { await A.pg.fill("#f-sgq-users", "中村"); await A.pg.waitForTimeout(300); await A.pg.click('[data-sgpick="users"][data-name="中村"]'); });
+    await A.pg.fill("#f-start", "09:00");
+    assert.ok(await A.pg.locator('input[name="w-hdur"][value="240"]').count(), "4時間を選べる");
+    assert.strictEqual(await A.pg.locator("[data-help-end]").count(), 0, "終わりの時刻の欄はまだ出ない");
+    await A.pg.check('input[name="w-hdur"][value="end"]'); await A.pg.waitForTimeout(300);
+    await A.pg.click("[data-hsave]"); await A.pg.waitForTimeout(400);
+    assert.ok(await A.pg.locator("text=ヘルプの終わりの時刻を入れてください").count(), "終わりの時刻が空なら保存しない");
+    await A.pg.fill("[data-help-end]", "12:30"); await save();
+    const lb = api(t, "kv.get", ["sheet:" + date]).data.value.blocks.find((x) => x.calId && x.kind === "help" && x.time === "09:00");
+    assert.ok(lb && lb.durMin === 210, "3時間半のヘルプが送迎表に " + JSON.stringify(lb));
+    const ev = Object.values(api(t, "docs.query", [{ col: "days", from: date, to: date }]).data).flatMap((d) => Object.values(d.events || {})).find((e) => e.id === lb.calId);
+    assert.strictEqual(ev.end, "12:30");
+    assert.strictEqual(api(t, "cal.apply", [{ kind: "delete", opId: "op_longhelp1", id: ev.id, date, baseRev: ev.rev }]).status, "ok");
+    await A.pg.waitForTimeout(300); console.log("長いヘルプ（9:00〜12:30＝210分）OK"); }
   // 利用者休み：欠席（理由つき）
   const absent = m.users.find((u) => !["森", "中村"].includes(u.name) && u.name.length >= 2).name;
   await add("user"); await pick("users", absent); await A.pg.click('[data-fill="w-reason"][data-v="体調不良"]'); await save();
@@ -1233,6 +1248,8 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.click(`[data-item-id="${hb2.id}"]`); await P.pg.waitForTimeout(400);
     assert.ok((await P.pg.locator("[data-help-dur] button.bg-sky-600").innerText()) === "30分", "送迎表のヘルプの時間");
     await P.pg.locator("[data-help-dur]").screenshot({ path: "g_help_dur.png" });
+    assert.ok(await P.pg.locator('[data-dur="240"]').count(), "送迎表でも4時間（2026-11-19）");
+    await P.pg.selectOption("[data-dur-more]", "300"); assert.strictEqual(await P.pg.inputValue("[data-dur-more]"), "300", "ほかの長さ（5時間）"); assert.strictEqual(await P.pg.locator("[data-help-dur] button.bg-sky-600").count(), 0);
     await P.pg.click('[data-dur="60"]'); await P.pg.click('button:text-is("保存")'); await P.pg.waitForTimeout(1500);
     let d2 = null; for (let i = 0; i < 20 && !(d2 && d2.durMin === 60); i++) { await P.pg.waitForTimeout(500); d2 = api(t, "kv.get", ["sheet:" + date]).data.value.blocks.find((x) => x.id === hb2.id); }
     assert.strictEqual(d2.durMin, 60, "送迎表で1時間に変えられる"); console.log("ヘルプの時間: カレンダー30分 → 送迎表で1時間に"); }

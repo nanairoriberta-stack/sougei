@@ -554,7 +554,13 @@ function workOf(d){
     nrmt:nrSplit(sg.noMeet)[1],nrst:nrSplit(sg.noSend)[1],
     awM:sg.afrom?"time":sg.noAway?"none":"same",afrom:sg.afrom||"",ato:sg.ato||"",
     plan:sg.type==="staff_plan",wsM:sg.wstart?"time":"same",weM:sg.wend?"time":"same",wstart:sg.wstart||"",wend:sg.wend||"",
-    hdur:String(sg.type==="help"&&d.start&&d.end?Math.max(30,minOf(d.end)-minOf(d.start))||60:60)};   // ヘルプの時間（分）
+    ...helpDurOf(sg,d)};   // ヘルプの時間（分）。決まった長さでなければ「終わりの時刻で」（2026-11-19 依頼者「2時間までしか入れられない。制限とって」）
+}
+const HELP_DURS=["30","60","90","120","180","240"];
+function helpDurOf(sg,d){
+  if(!(sg.type==="help"&&d.start&&d.end))return{hdur:"60",hend:""};
+  const m=minOf(d.end)-minOf(d.start);
+  return m>0&&HELP_DURS.includes(String(m))?{hdur:String(m),hend:""}:{hdur:"end",hend:d.end};
 }
 /* 入力欄の状態 → 送迎表に反映する内容 */
 function sgOf(label,w,d){
@@ -587,7 +593,7 @@ function fixTimes(d){
   if(d.label==="leave")d.allDay=!LEAVE_T[w.leave];
   else if(d.label==="hcancel"||d.label==="liberta")d.allDay=true;
   else if(d.label==="user"||d.label==="ride"||d.label==="extra"||d.label==="shift"||LE_LABELS.includes(d.label))d.allDay=true;
-  else if(d.label==="help"){d.allDay=false;d.endDate=d.date;if(d.start)d.end=addMin(d.start,Number(w.hdur)||60)}   // ヘルプは開始時刻と時間（30分・1時間など）
+  else if(d.label==="help"){d.allDay=false;d.endDate=d.date;if(d.start)d.end=w.hdur==="end"?(w.hend||""):addMin(d.start,Number(w.hdur)||60)}   // ヘルプは開始時刻と時間（30分・1時間など）か、終わりの時刻
   else if(d.label==="hwork"||PLAN_LABELS.includes(d.label))d.allDay=false;
   if(d.label==="leave"&&w.leave!=="day")d.endDate=d.date;
 }
@@ -625,7 +631,7 @@ function drawSg(){
   if(!canLabel(L)&&!ro)h=hint("このラベルは送迎表の担当者が入力します。");
   else if(L==="help")h=who("users","利用者","利用者の名前で検索")
     +`<div class="sgsub"><label class="lbl2" for="w-dest">行き先（家以外のときだけ）</label><input class="input" id="w-dest" maxlength="40" value="${esc(w.dest)}" placeholder="例：○○病院" autocomplete="off" ${ro?"readonly":""}></div>`
-    +`<div class="sgsub"><span class="lbl2">ヘルプの時間</span>${radios("w-hdur",String(w.hdur||60),[["30","30分"],["60","1時間"],["90","1時間半"],["120","2時間"]])}</div>`
+    +`<div class="sgsub"><span class="lbl2">ヘルプの時間</span>${radios("w-hdur",String(w.hdur||60),[["30","30分"],["60","1時間"],["90","1時間半"],["120","2時間"],["180","3時間"],["240","4時間"],["end","終わりの時刻で"]])}${String(w.hdur)==="end"?`<span class="awt"><span>〜</span><input class="input" type="time" id="w-hend" value="${esc(w.hend||"")}" step="300" aria-label="ヘルプの終わりの時刻" data-help-end ${ro?"readonly":""}></span>`:""}</div>`
     +hint("開始時刻に、送迎表の「保留」欄へ【ヘルプ】として入ります（選んだ時間の長さ）。担当する職員は送迎表で割り当ててください。");
   else if(L==="ride"||L==="extra")h=who("users","利用者","利用者の名前で検索")
     // 「時間・場所変更」（2026-11-12 依頼者「時間変更を時間場所変更に。時間にはその利用者のその日のいつもの時刻を薄い灰色で」）：時刻の欄と迎え先・送り先の欄はこれを選んだときだけ
@@ -726,7 +732,7 @@ function readSg(pick){
   const rv=n=>{const x=document.querySelector(`input[name="${n}"]:checked`);return x?x.value:null};
   const iv=id=>{const x=$(id);return x?x.value.trim():null};
   for(const[n,k]of[["w-kinmu","kinmu"],["w-leave","leave"],["w-meet","meetM"],["w-send","sendM"],["w-ws","wsM"],["w-we","weM"],["w-hdur","hdur"],["w-aw","awM"],["w-hc","hcM"],["w-lib","lib"],["w-lf","lf"],["w-lto","lto"],["w-ltm","ltm"]]){const v=rv(n);if(v!=null)w[k]=v}
-  for(const[id,k]of[["w-dest","dest"],["w-mplace","mplace"],["w-splace","splace"],["w-reason","reason"],["w-meett","meet"],["w-sendt","send"],["w-dept","dept"],["w-wst","wstart"],["w-wet","wend"],["w-awf","afrom"],["w-awt","ato"],["w-lt","lt"],["w-ltr","ltr"],["w-et","et"],["w-nrmt","nrmt"],["w-nrst","nrst"],["w-nrmo","nrmo"],["w-nrso","nrso"],["w-hct","hct"]]){const v=iv(id);if(v!=null)w[k]=v}
+  for(const[id,k]of[["w-dest","dest"],["w-mplace","mplace"],["w-splace","splace"],["w-reason","reason"],["w-meett","meet"],["w-sendt","send"],["w-dept","dept"],["w-wst","wstart"],["w-wet","wend"],["w-awf","afrom"],["w-awt","ato"],["w-lt","lt"],["w-ltr","ltr"],["w-et","et"],["w-nrmt","nrmt"],["w-nrst","nrst"],["w-nrmo","nrmo"],["w-nrso","nrso"],["w-hct","hct"],["w-hend","hend"]]){const v=iv(id);if(v!=null)w[k]=v}
   if($("w-plan"))w.plan=$("w-plan").checked;
   if($("w-dept")&&w.dept&&w.dept===usualDept((w.staff||[])[0],ed.d.date,bizOf(ed.d)))w.dept="";   // いつもの部署のままなら「変更なし」
   if($("f-place"))ed.d.place=$("f-place").value.trim();   // 場所が項目の中にあるラベル（モニタリング・支援会議）でも書きかけを残す
@@ -765,6 +771,7 @@ function checkSg(d,sg){
     if(!sg.staff.length)return"送迎表に載せるときは、担当の職員を選んでください。";}
   if(sg.type.startsWith("user")&&!sg.users.length)return w.q_users?`「${w.q_users}」はまだ選ばれていません。利用者の欄の一覧から名前を押してください。`:"利用者を選んでください。";
   if(sg.type==="help"&&!sg.users.length)return"利用者を選んでください。";
+  if(sg.type==="help"&&w.hdur==="end"){if(!w.hend)return"ヘルプの終わりの時刻を入れてください。";if(d.start&&minOf(w.hend)<=minOf(d.start))return"ヘルプの終わりの時刻は、始まりより後にしてください。";}
   if(sg.type==="liberta"){if(!sg.users.length)return"利用者を選んでください。";
     {const L=libUsers();const bad=L.length?sg.users.filter(n=>!L.some(u=>u.name===n)):[];if(bad.length)return`${bad.join("・")}さんはリベルタの利用者ではありません（リベルタ利用は、送迎表の利用者のタブでリベルタ（朝・夕）にしている人だけ入れられます）。`;}if(d.date===d.endDate&&sg.lfrom==="pm"&&sg.lto==="am")return"同じ日のときは「朝から」か「夜まで」にしてください（夜から朝までは、終了日を次の日にしてください）。";}
   if(sg.type==="help_cancel"){if(!sg.users.length)return"利用者を選んでください。";if(w.hcM==="time"&&!w.hct)return"キャンセルするヘルプの時刻を入れてください。";}
