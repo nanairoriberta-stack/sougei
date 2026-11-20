@@ -315,7 +315,7 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.click("[data-exp-close]"); await P.pg.waitForTimeout(300); assert.strictEqual(await P.pg.locator("[data-exp-popup]").count(), 0, "閉じる");
     console.log("Excel出力後の変更:", pop.replace(/\n/g, " ")); }
   // 送迎表の右にカレンダーを出す（パソコン）。開いている間、送迎表はその分よける。幅と開いているかは端末に覚える
-  { const calHtml = fs.readFileSync(path.join(D, "calendar.html"), "utf8").replace("/*__BOOT__*/", boot);
+  { const calHtml = fs.readFileSync(path.join(D, "calendar.html"), "utf8").replace("/*__BOOT__*/", boot + "window.__SG_EMBED=1;");   // 本物は START がアドレスの embed=1 を読む（ここの擬似の画面はアドレスを読まない）
     await P.pg.route("https://script.google.com/**", (r) => r.fulfill({ body: calHtml, contentType: "text/html" }));   // 公開URLの代わりに、ここで作ったカレンダーを出す
     await P.pg.click("[data-calside-btn]"); await P.pg.waitForTimeout(400);
     assert.ok(await P.pg.locator("[data-calside]").isVisible(), "右にカレンダー");
