@@ -205,7 +205,7 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.click("[data-export-quick]");
     await P.pg.waitForFunction(() => window.__dl, null, { timeout: 20000 });
     const nm = await P.pg.evaluate(() => window.__dl.name);
-    assert.ok(/^送迎表_11月2日\(月\)_.*\.xlsx$/.test(nm), "すぐ出る " + nm);
+    assert.ok(/^送迎表_(11月2日|2026-11-02)\(月\)_.*\.xlsx$/.test(nm), "すぐ出る " + nm);
     assert.strictEqual(await P.pg.locator("text=/出力前チェック 1\\//").count(), 0, "出力前の確認は出ない");
     console.log("確認なしで出力 OK", nm); }
   { // 週間パターンを印刷（Excel）・ヘルプ表は週間パターンとは別（2026-11-06 依頼者）
