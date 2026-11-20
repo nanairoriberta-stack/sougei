@@ -4543,12 +4543,13 @@ async function exportExcel(master, sheet, date, xo) {
   }
 }
 /* Excel出力の用紙（A4／A3）。端末に覚える（2026-11-18 依頼者「エクセル出力の時にA4かA3を選択できるようにして」） */
-const excelPaper = () => { try { return localStorage.getItem("sg:paper") === "A3" ? "A3" : "A4"; } catch (e) { return "A4"; } };
+// 2026-11-20 依頼者「A3出力をデフォルトにして」：選んでいなければA3（A4を選んだ端末はA4のまま）
+const excelPaper = () => { try { return localStorage.getItem("sg:paper") === "A4" ? "A4" : "A3"; } catch (e) { return "A3"; } };
 function PaperPick() {
   const [p, setP] = useState(excelPaper);
   const pick = (v) => { setP(v); try { localStorage.setItem("sg:paper", v); } catch (e) {} };
   return (
-    <span className="inline-flex items-center rounded border border-stone-300 overflow-hidden text-xs align-middle" title="Excelで出すときの用紙の大きさ（横1枚に収めます）。A3は同じ形のまま約1.4倍の大きさで印刷されます" data-paper-pick>
+    <span className="inline-flex items-center rounded border border-stone-300 overflow-hidden text-xs align-middle" title="Excelで出すときの用紙の大きさ（横1枚に収めます）。いつもはA3。A4はA3と同じ形のまま約0.7倍の大きさで印刷されます" data-paper-pick>
       <span className="px-1.5 text-stone-500 bg-stone-50">用紙</span>
       {["A4", "A3"].map((v) => (
         <button key={v} type="button" className={`px-2 py-1 ${p === v ? "bg-sky-600 text-white" : "bg-white hover:bg-stone-50"}`} onClick={() => pick(v)} data-paper={v} aria-pressed={p === v}>{v}</button>
