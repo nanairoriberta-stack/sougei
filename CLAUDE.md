@@ -155,6 +155,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 送迎表の上の「📅 右にカレンダーを出す」（`data-calside-btn`）→ 右側に `…/exec?page=calendar&embed=1` を iframe で出す（`data-calside`、幅はドラッグで360〜800px、開いているか・幅は端末に `sg:calSide`/`sg:calSideW`）。
 送迎表は右をあける（画面幅1000px以上）。`doGet` は calendar かつ `embed=1` のときだけ `XFrameOptionsMode.ALLOWALL`（ほかは今までどおり DEFAULT）。
 中のカレンダーは送り終わると `postMessage({sg:"cal-saved"})` → 送迎表がすぐ読み直す（`refreshCalendar`・`pollOnce`）。公開URLが分からないときは「設定シートB2」の案内
+2026-11-20 依頼者「右に出すボタンを押したときにその日付のカレンダーが開くように。そのまま送迎表の日付を変えるとカレンダーの画面もついていくように」：開いたときの送迎表の日付をアドレスの `&d=` に（`calSideD0`。そのあとアドレスは変えない＝読み直さない）、送迎表の日付を変えるたびに `{sg:"cal-go", d}` を中の入れ子の窓すべてへ（Google の画面の奥にあるため。4段まで）。カレンダーは `__SG_EMBED` のときだけ、送ってきたのが自分を入れている画面（親・その親…）なら `goDate`（その月を読み、幅がせまければその日の一覧を開く）。入力画面を開いている間は動かさない。開いたときも embed ならその日の一覧を開く。テスト `pw/gas_ui.js`
 
 ## パートさんの本日だけの部署（2026-11-18 依頼者「パートさんも本日のみ部署変更あるときがある　変えるようにできる？」）
 パートは表の列が無い（`StaffOvModal` を開けない）ので、日の画面の下の「パート職員の本日出欠・部署」で名前の右の選択（`data-part-dept`、いつもの部署に「（いつも）」）→ その日の `staffOv[職員].deptId`（いつもと同じに戻すと消す）。変えた人は橙の枠（`data-part-box`）。Excelの職員の欄・人数はその部署に（`buildWorkbook` の `own` は当日の部署を当てた人 `dayApplied` では曜日ごとの部署 `deptByDay` を見ない＝以前は曜日ごとの部署があると当日の変更が効かなかった）。カレンダーの職員時間変更・休日出勤の「その日の部署」でも入る（以前から）。テスト `test-excel.js`・`pw/master_add_ui.js`

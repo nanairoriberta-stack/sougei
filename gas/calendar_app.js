@@ -1116,12 +1116,28 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 window.addEventListener("focus",wake);
 window.addEventListener("beforeunload",e=>{if(core&&core.status().queued&&!store.persistent){e.preventDefault();e.returnValue=""}});
 
+/* ---------- 送迎表の右に出したカレンダー：送迎表の日付についていく（2026-11-20 依頼者「右に出すボタンを押したときにその日付のカレンダーが開くように。送迎表の日付を変えるとカレンダーの画面もついていくように」） ----------
+   送迎表が {sg:"cal-go", d:"YYYY-MM-DD"} を送る。送ってきたのが自分を入れている画面（親・その親…）のときだけ受ける。入力中の画面は動かさない */
+function goDate(ds){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(ds||"")))return;
+  const d=parse(ds);S.sel=ds;
+  const c=new Date(d.getFullYear(),d.getMonth(),1);if(+c!==+S.cursor){S.cursor=c;subscribe()}
+  if(isMob())S.dayOpen=true;   // 幅がせまい（スマホと同じ形）ときはその日の一覧を開く
+  render();
+}
+window.addEventListener("message",e=>{
+  const m=e.data;if(!m||m.sg!=="cal-go"||!window.__SG_EMBED)return;
+  let w=window.parent,ok=false;for(let i=0;i<6&&w;i++){if(e.source===w){ok=true;break}if(w===w.parent)break;w=w.parent}
+  if(!ok||ed)return;
+  if(m.d===S.sel&&(!isMob()||S.dayOpen))return;
+  goDate(m.d);
+});
 /* ---------- 起動 ---------- */
 $("ver").textContent="v"+appVer();try{window.SGHost&&SGHost.onLogin&&SGHost.onLogin(()=>{$("ver").textContent="v"+appVer()})}catch{}
 render();
 (async()=>{
   await window.SGHost.ready;
-  if(/^\d{4}-\d{2}-\d{2}$/.test(window.__SG_DATE||"")){S.sel=window.__SG_DATE;const d=parse(S.sel);S.cursor=new Date(d.getFullYear(),d.getMonth(),1)}
+  if(/^\d{4}-\d{2}-\d{2}$/.test(window.__SG_DATE||"")){S.sel=window.__SG_DATE;const d=parse(S.sel);S.cursor=new Date(d.getFullYear(),d.getMonth(),1);if(window.__SG_EMBED&&isMob())S.dayOpen=true}   // 送迎表の右では、その日の一覧を開いておく
   try{user=await window.claude.use("user")}catch{user=null}
   try{db=await window.claude.use("db")}catch{db=null}
   try{downloads=await window.claude.use("downloads")}catch{downloads=null}

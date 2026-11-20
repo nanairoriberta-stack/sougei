@@ -319,12 +319,21 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.route("https://script.google.com/**", (r) => r.fulfill({ body: calHtml, contentType: "text/html" }));   // 公開URLの代わりに、ここで作ったカレンダーを出す
     await P.pg.click("[data-calside-btn]"); await P.pg.waitForTimeout(400);
     assert.ok(await P.pg.locator("[data-calside]").isVisible(), "右にカレンダー");
-    const src = await P.pg.locator("[data-calside-frame]").getAttribute("src"); assert.ok(/\/exec\?page=calendar&embed=1$/.test(src), src);
+    const src = await P.pg.locator("[data-calside-frame]").getAttribute("src"); assert.ok(/\/exec\?page=calendar&embed=1&d=2026-11-02$/.test(src), "開いた日の送迎表の日付で開く " + src);
     const mr = await P.pg.evaluate(() => getComputedStyle(document.querySelector("#root > div")).marginRight); assert.strictEqual(mr, "440px", "送迎表は右をあける");
     const fr = P.pg.frameLocator("[data-calside-frame]");
     await fr.locator("#sghNo").waitFor({ timeout: 10000 }); await fr.locator("#sghNo").fill("000"); await fr.locator("#sghPin").fill("5829"); await fr.locator("#sghGo").click();
     await fr.locator(".cell").first().waitFor({ timeout: 10000 }); await P.pg.waitForTimeout(1500);
     assert.ok(await fr.locator("#addBtn").isVisible(), "右のカレンダーが動く（狭いのでスマホと同じ形）");
+    // 送迎表の日付で開き、送迎表の日付を変えるとついていく（2026-11-20 依頼者）
+    await fr.locator('[data-pg-day="2026-11-02"]').waitFor({ timeout: 10000 });
+    await P.pg.click("[data-datepop]"); await P.pg.click('[data-day="2026-11-05"]');
+    await fr.locator('[data-pg-day="2026-11-05"]').waitFor({ timeout: 10000 });
+    await P.pg.click("[data-datepop]"); await P.pg.click('[data-day="2026-11-10"]');
+    await fr.locator('[data-pg-day="2026-11-10"]').waitFor({ timeout: 10000 });
+    assert.strictEqual(await P.pg.locator("[data-calside-frame]").getAttribute("src"), src, "読み直さない（アドレスはそのまま）");
+    await P.pg.click("[data-datepop]"); await P.pg.click('[data-day="2026-11-02"]'); await P.pg.waitForTimeout(800);
+    console.log("右のカレンダー：送迎表の日付についていく OK");
     await P.pg.screenshot({ path: "g_calside.png" });
     await P.pg.click("[data-calside-close]"); await P.pg.waitForTimeout(300); assert.strictEqual(await P.pg.locator("[data-calside]").count(), 0, "閉じる");
     console.log("右のカレンダー:", src); }
