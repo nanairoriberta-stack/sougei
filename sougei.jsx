@@ -9863,19 +9863,6 @@ function AppInner() {
   const [calSideW, setCalSideW] = useState(() => { try { return Math.min(800, Math.max(360, Number(localStorage.getItem("sg:calSideW")) || 440)); } catch (e) { return 440; } });
   const [calDrag, setCalDrag] = useState(false);
   const toggleCalSide = () => setCalSide((v) => { try { localStorage.setItem("sg:calSide", v ? "0" : "1"); } catch (e) {} return !v; });
-  // 右のカレンダーは開いたときの送迎表の日付で開き（アドレスの d）、そのあと日付を変えたら中のカレンダーへ知らせてついていかせる（2026-11-20 依頼者）。
-  // 中のカレンダーは Google の画面の入れ子の奥にあるので、入れ子の窓すべてに送る（受け取るのはカレンダーだけ）
-  const calSideD0 = useRef("");
-  if (calSide && !calSideD0.current) calSideD0.current = date;
-  if (!calSide && calSideD0.current) calSideD0.current = "";
-  useEffect(() => {
-    if (!calSide) return;
-    const f = document.querySelector("[data-calside-frame]");
-    if (!f || !f.contentWindow) return;
-    const msg = { sg: "cal-go", d: date };
-    const post = (w, depth) => { try { w.postMessage(msg, "*"); } catch (e) {} if (depth <= 0) return; let n = 0; try { n = w.length; } catch (e) {} for (let i = 0; i < n; i++) { try { post(w[i], depth - 1); } catch (e) {} } };
-    post(f.contentWindow, 4);
-  }, [date, calSide]);
   useEffect(() => {   // 右のカレンダーで保存したら、すぐ読み直して送迎表に反映を出す
     const f = (e) => { if (e && e.data && e.data.sg === "cal-saved") { try { window.SGHost && window.SGHost.refreshCalendar && window.SGHost.refreshCalendar(); window.SGHost && window.SGHost.pollOnce && window.SGHost.pollOnce(); } catch (er) {} } };
     window.addEventListener("message", f); return () => window.removeEventListener("message", f);
@@ -9917,6 +9904,19 @@ function AppInner() {
   });
   const [sheet, setSheet] = useState(null);
   useEffect(() => { window.__sgCurDate = date; }, [date]);   // 版の切替・メニューのリンクに今の日付を付けるため
+  // 右のカレンダーは開いたときの送迎表の日付で開き（アドレスの d）、そのあと日付を変えたら中のカレンダーへ知らせてついていかせる（2026-11-20 依頼者）。
+  // 中のカレンダーは Google の画面の入れ子の奥にあるので、入れ子の窓すべてに送る（受け取るのはカレンダーだけ）
+  const calSideD0 = useRef("");
+  if (calSide && !calSideD0.current) calSideD0.current = date;
+  if (!calSide && calSideD0.current) calSideD0.current = "";
+  useEffect(() => {
+    if (!calSide) return;
+    const f = document.querySelector("[data-calside-frame]");
+    if (!f || !f.contentWindow) return;
+    const msg = { sg: "cal-go", d: date };
+    const post = (w, depth) => { try { w.postMessage(msg, "*"); } catch (e) {} if (depth <= 0) return; let n = 0; try { n = w.length; } catch (e) {} for (let i = 0; i < n; i++) { try { post(w[i], depth - 1); } catch (e) {} } };
+    post(f.contentWindow, 4);
+  }, [date, calSide]);
   // Undo/Redo履歴。日別シートと週間パターンで別々に持つ。
   // past=戻れる過去の状態(古い→新しい)、future=進める未来の状態(新しい→古い)
   const histRef = useRef({ sheet: { past: [], future: [] }, pattern: { past: [], future: [] } });
