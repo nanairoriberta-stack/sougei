@@ -7483,6 +7483,34 @@ function fixedBlockWarn(master, sheetData, wd) {
   return out;
 }
 
+/* 週間パターン・ヘルプ表にあるのに、その日の送迎表に無いヘルプ（2026-11-20 依頼者「ヘルプが入っている人が送迎表から消えててもエラーとして上がらない。黒田の8時のヘルプ」）。
+   以前の確認（必須ヘルプ）は黒田さんのヘルプが1つでも（夕方の分でも）あれば通っていた → 時刻ごとに見る。
+   名前（井上入浴→井上ヘルプ などそろえる）と時刻で比べる。カレンダーのヘルプキャンセルで消したもの・利用開始前の人は出さない。コマだけ消したものは「コマだけ消しています」 */
+function missingHelpWarn(master, sheetData, wd, pattern) {
+  const out = [];
+  if (wd == null) return out;
+  const key = (label, time) => `${canonHelpLabel(String(label || "").trim())}@${toMin(time)}`;
+  const want = new Map();   // key → {label,time,from}
+  const add = (label, time, from) => { if (!label || toMin(time) == null) return; const k = key(label, time); if (!want.has(k)) want.set(k, { label: canonHelpLabel(String(label).trim()), time, from: new Set() }); want.get(k).from.add(from); };
+  ((pattern && pattern.blocks) || []).forEach((b) => { if (b.kind === "help" && !b.noteOnly && !String(b.id || "").startsWith("cal_") && !String(b.id || "").startsWith("lk_")) add(b.label, b.time, "週間パターン"); });
+  (rulesOf(master).helpBase || []).forEach((row) => { if (row && String((row.byDay || {})[wd] || "").trim()) add(row.label, row.time, "ヘルプ表"); });
+  if (!want.size) return out;
+  const have = new Map();
+  (sheetData.blocks || []).forEach((b) => { if (b.kind !== "help") return; const k = key(b.label, b.time); have.set(k, have.get(k) === "on" || !b.noteOnly ? "on" : "note"); });
+  const cancelled = new Set();
+  Object.values(sheetData.calApplied || {}).forEach((rec) => ((rec && rec.cancelled) || []).forEach((b) => cancelled.add(key(b.label, b.time))));
+  const before = (lb) => (master.users || []).some((u) => u.beforeStart && u.name && lb.startsWith(u.name));
+  const list = [];
+  want.forEach((w, k) => {
+    if (cancelled.has(k) || before(w.label)) return;
+    const h = have.get(k);
+    if (h === "on") return;
+    const src = [...w.from].join("・");
+    list.push([toMin(w.time), h === "note" ? `${w.time}の「${w.label}」はコマだけ消しています（${src}にはあります）` : `${w.time}の「${w.label}」が送迎表にありません（${src}にはあります）`]);
+  });
+  return list.sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+}
+
 // 毎週必ず入るヘルプ(ルールで登録)。登録が無ければ警告する。利用開始前の人は対象外
 function requiredHelpWarn(master, sheetData, wd) {
   const out = [];
@@ -7490,6 +7518,7 @@ function requiredHelpWarn(master, sheetData, wd) {
     if (!row || !row.user || !(row.days || []).includes(wd)) return;
     const u = (master.users || []).find((x) => x.name === row.user);
     if (!u || u.beforeStart) return;
+    // 「猪原対応」のような予定も数える（以前から）。時刻ごとに無いヘルプは missingHelpWarn で見る
     const n = (sheetData.blocks || []).filter((b) => String(b.label || "").startsWith(row.user)).length;
     if (n === 0) out.push(`${row.user}のヘルプが入っていません(${"月火水木金"[wd - 1]}曜は必要です)`);
   });
@@ -10826,6 +10855,9 @@ function AppInner() {
     helpNoCarWarn(sheetMaster, sheetData).forEach((x) => vehErr.push(x));
     if (holdCount) critical.push(`保留(担当未定)の予定が ${holdCount} 件残っています`);
     [...requiredHelpWarn(sheetMaster, sheetData, wd), ...fixedBlockWarn(sheetMaster, sheetData, wd), ...blockOverlapWarn(sheetMaster, sheetData), ...helpTwoShortages(sheetMaster, sheetData, wd), ...kubotaPlacementWarn(sheetMaster, sheetData, wd), ...maleOnlyHelpWarn(sheetMaster, sheetData), ...pikaStaffWarn(sheetMaster, sheetData, wd)].forEach((w) => critical.push(w));
+    // 週間パターン・ヘルプ表にあるのに送迎表に無いヘルプ（2026-11-20 依頼者「黒田の8時のヘルプ」）
+    { let pat = null; try { pat = await sGet(`pattern:${wd}`); } catch (e) {}
+      missingHelpWarn(sheetMaster, sheetData, wd, pat).forEach((w) => critical.push(w)); }
 
     const rideMiss = [];
     if (missMeet.length) rideMiss.push(`迎えが未入力(${missMeet.length}名): ${missMeet.join("・")}`);
@@ -12854,6 +12886,7 @@ function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
     helpNoCarWarn(sheetMaster, sheetData).forEach((x) => vehErr.push(x));
     if (holdCount) critical.push(`保留(担当未定)の予定が ${holdCount} 件残っています`);
     [...requiredHelpWarn(sheetMaster, sheetData, wd), ...fixedBlockWarn(sheetMaster, sheetData, wd), ...blockOverlapWarn(sheetMaster, sheetData), ...helpTwoShortages(sheetMaster, sheetData, wd), ...kubotaPlacementWarn(sheetMaster, sheetData, wd), ...maleOnlyHelpWarn(sheetMaster, sheetData), ...pikaStaffWarn(sheetMaster, sheetData, wd)].forEach((w) => critical.push(w));
+    missingHelpWarn(sheetMaster, sheetData, wd, patDayArg).forEach((w) => critical.push(w));   // 週間パターン・ヘルプ表にあるのに送迎表に無いヘルプ（2026-11-20）
 
     const rideMiss = [];
     if (missMeet.length) rideMiss.push(`迎えが未入力(${missMeet.length}名): ${missMeet.join("・")}`);

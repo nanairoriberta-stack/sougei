@@ -31,6 +31,25 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     for (const n of ["送迎表", "送迎表(ヘルプ車なし)", "車両の動き"]) { const ps = b3.getWorksheet(n).pageSetup; assert.strictEqual(ps.paperSize, 8, n + " はA3"); assert.strictEqual(ps.orientation, "landscape"); assert.strictEqual(ps.fitToHeight, 1, n + " 1枚に収める"); }
     assert.ok(E.buildExcelHtml(m, sheet, date, "A3").includes("<x:PaperSizeIndex>8<"), ".xls もA3");
     console.log("用紙 A4／A3 OK"); }
+  { // 週間パターン・ヘルプ表にあるのに送迎表に無いヘルプ（2026-11-20 依頼者「黒田の8時のヘルプが送迎表から消えててもエラーとして上がらない」）
+    const pk = E.resolveSeedPattern(m, E.SEED_PATTERNS.mon), wd = 1;
+    assert.deepStrictEqual(E.missingHelpWarn(m, Object.assign(E.emptySheet(), pk), wd, pk), [], "パターンどおりならなし");
+    const noK = (blocks) => blocks.filter((b) => !(b.label === "黒田ヘルプ" && b.time === "8:00"));
+    const sh0 = Object.assign(E.emptySheet(), { runs: pk.runs, blocks: noK(pk.blocks) });
+    assert.deepStrictEqual(E.missingHelpWarn(m, sh0, wd, pk), ["8:00の「黒田ヘルプ」が送迎表にありません（週間パターンにはあります）"]);
+    assert.deepStrictEqual(E.requiredHelpWarn(m, sh0, wd).filter((x) => /黒田/.test(x)), [], "以前の「必須ヘルプ」は夕方の分があると通っていた（だから時刻ごとに見る）");
+    const ck = E.collectSheetChecks(E.applyDayDept(m, wd, {}, null, null, "2026-11-02"), sh0, "2026-11-02", pk);
+    assert.ok(ck.find((g) => /重大エラー/.test(g.title)).items.some((x) => x.startsWith("8:00の「黒田ヘルプ」が送迎表にありません")), "出力前の確認（Claudeの確認も同じ）の重大エラー");
+    // コマだけ消したもの・カレンダーのヘルプキャンセルで消したもの・ヘルプ表だけにあるもの・時刻の書き方の違い
+    const sh1 = Object.assign(E.emptySheet(), { runs: pk.runs, blocks: pk.blocks.map((b) => b.label === "黒田ヘルプ" && b.time === "8:00" ? { ...b, noteOnly: true } : b) });
+    assert.deepStrictEqual(E.missingHelpWarn(m, sh1, wd, pk), ["8:00の「黒田ヘルプ」はコマだけ消しています（週間パターンにはあります）"]);
+    const sh2 = Object.assign({}, sh0, { calApplied: { ev1: { cancelled: [{ id: "x", kind: "help", label: "黒田ヘルプ", time: "8:00" }] } } });
+    assert.deepStrictEqual(E.missingHelpWarn(m, sh2, wd, pk), [], "ヘルプキャンセルで消したものは出さない");
+    const sh3 = Object.assign(E.emptySheet(), { runs: pk.runs, blocks: pk.blocks.map((b) => b.label === "黒田ヘルプ" && b.time === "8:00" ? { ...b, time: "08:00" } : b) });
+    assert.deepStrictEqual(E.missingHelpWarn(m, sh3, wd, pk), [], "08:00 と 8:00 は同じ");
+    const m3 = JSON.parse(JSON.stringify(m)); m3.rules = Object.assign({}, m3.rules, { helpBase: [{ label: "井上入浴", time: "10:00", byDay: { 1: "日野" } }] });
+    assert.deepStrictEqual(E.missingHelpWarn(m3, Object.assign(E.emptySheet(), pk), wd, null), ["10:00の「井上ヘルプ」が送迎表にありません（ヘルプ表にはあります）"], "ヘルプ表だけにあるもの（名前はそろえる）");
+    console.log("無いヘルプの確認 OK"); }
   { // パートさんの本日だけの部署（2026-11-18 依頼者「パートさんも本日のみ部署変更あるときがある」）：Excelの職員の欄は変えた部署に（曜日ごとの部署があっても当日の変更が先）
     const m2 = JSON.parse(JSON.stringify(m)), mi = m2.staff.find((s) => s.name === "三島"), dY = mi.deptId, dT = m2.departments.find((d) => d.name.startsWith("津田")).id;
     mi.deptByDay = { 1: dY };

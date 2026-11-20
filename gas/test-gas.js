@@ -330,21 +330,21 @@ async function bootstrap() {
     await b.call("push.subscribe", sub("https://web.push.apple.com/HINO1"));   // 同じ宛先をもう一度 → 1行のまま
     await b.call("push.subscribe", sub("https://evil.example.com/x")).then(() => assert.fail("通知のサービス以外"), (e) => assert.strictEqual(e.code, "invalid_argument"));
     assert.strictEqual(g.sheets.get("_push").data.length - 1, 2, "2台");
-    // 八壁が予定を入れる → 日野の端末にだけ
+    // 八壁が予定を入れる → 日野の端末にだけ（日付は今日と重ならない過去の日。2026-11-20 に今日と重なって「今日の予定」が2件になった）
     calls.length = 0;
-    await a.call("cal.apply", { kind: "upsert", opId: "op_push0001", id: "ev_push0001", baseRev: null, ev: evOff("2026-11-20", "日野") });
+    await a.call("cal.apply", { kind: "upsert", opId: "op_push0001", id: "ev_push0001", baseRev: null, ev: evOff("2025-11-20", "日野") });
     const sent = calls.filter((c) => c.u.endsWith("/push/send"));
     assert.strictEqual(sent.length, 1);
     assert.deepStrictEqual(sent[0].body.items.map((x) => x.endpoint), ["https://web.push.apple.com/HINO1"], "入れた本人には送らない");
     assert.strictEqual(sent[0].body.payload.title, "📅 予定が入りました");
-    assert.ok(/11\/20\(金\) 日野 休み（八壁さん）/.test(sent[0].body.payload.body), sent[0].body.payload.body);
-    assert.strictEqual(sent[0].body.payload.url, "/?page=calendar&d=2026-11-20"); assert.strictEqual(sent[0].body.subject, "https://nanairo.example.workers.dev");
-    const r = await a.call("cal.apply", { kind: "upsert", opId: "op_push0002", id: "ev_push0001", baseRev: 1, ev: Object.assign(evOff("2026-11-20", "日野"), { title: "日野 休み（直した）" }) });
+    assert.ok(/11\/20\(木\) 日野 休み（八壁さん）/.test(sent[0].body.payload.body), sent[0].body.payload.body);
+    assert.strictEqual(sent[0].body.payload.url, "/?page=calendar&d=2025-11-20"); assert.strictEqual(sent[0].body.subject, "https://nanairo.example.workers.dev");
+    const r = await a.call("cal.apply", { kind: "upsert", opId: "op_push0002", id: "ev_push0001", baseRev: 1, ev: Object.assign(evOff("2025-11-20", "日野"), { title: "日野 休み（直した）" }) });
     assert.ok(!("_push" in r), "画面への返事には入れない");
     assert.strictEqual(calls.filter((c) => c.u.endsWith("/push/send")).pop().body.payload.title, "✏️ 予定が変わりました");
     // 届かなくなった宛先（410）は消す
     statusOf = () => 410; calls.length = 0;
-    await a.call("cal.apply", { kind: "upsert", opId: "op_push0003", id: "ev_push0003", baseRev: null, ev: evOff("2026-11-21", "日野") });
+    await a.call("cal.apply", { kind: "upsert", opId: "op_push0003", id: "ev_push0003", baseRev: null, ev: evOff("2025-11-21", "日野") });
     assert.strictEqual(g.sheets.get("_push").data.length - 1, 1, "日野の端末は消えた");
     statusOf = () => 201;
     // 毎朝の今日の予定
