@@ -10758,6 +10758,14 @@ function AppInner() {
     updateSheet((prev) => (prev ? { ...prev, exportedAt: new Date().toISOString(), exportSnap: C && C.exportSnapOf ? C.exportSnapOf(prev) : {} } : prev));
     setExpAlerts((cur) => cur.filter((a) => a.date !== date));
   };
+  // 確認なしですぐ出す（2026-11-20 依頼者「エクセル出力をエラーチェックなしで1発出しするボタンも」）。中身は確認つきの出力と同じ
+  const handleExportQuick = () => {
+    if (!sheet || !sheetMaster) { notify("先に送迎表を作成してください(パターンから読込)", "warn"); return; }
+    const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
+      noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
+    notify("確認なしでExcelを出力します");
+    exportExcel(sheetMaster, { ...sheetData, calNotes: calNotesToday }, date); markExported();
+  };
   const handleExport = async () => {
     if (!sheet || !sheetMaster) return;
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
@@ -11155,6 +11163,7 @@ function AppInner() {
               <button className={btnSec} onClick={saveToPattern} title="今表示している日の内容を、この曜日の週間パターンとして保存します(その日限りの休み・時間変更は含みません)">パターンに保存</button>
               <button className={btnSec} onClick={() => setModal({ type: "importDay" })} title="この日の送迎表だけをExcelから直接取り込みます(週間パターンは変更しません)">📥 Excel取込</button>
               <button className={btnSec} onClick={handleExport}>📄 Excel出力</button>
+              <button className={btnSec} onClick={handleExportQuick} data-export-quick title="出力前の確認（エラーチェック）をとばして、すぐExcelを出します">⚡ 確認なしで出力</button>
               <PaperPick />
               <button className={btnPri} onClick={() => {
                 if (!sheet) { notify("先に送迎表を作成してください(パターンから読込)", "warn"); return; }

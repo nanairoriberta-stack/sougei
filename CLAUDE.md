@@ -165,6 +165,9 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 ## 出力前チェックの戻る（2026-11-13 依頼者「エクセル出力するときのエラー画面に戻るボタンも欲しい」）
 Excel出力の前の確認（`exportCheck`）の2つめ以降に「← 前のチェックへ戻る」（`data-check-back`）。上の済んだチェックの印（`data-check-step`）を押してもそこへ戻る。テスト `pw/master_add_ui.js`
 
+## 確認なしで出力（2026-11-20 依頼者「エクセル出力をエラーチェックなしで1発出しするボタンも入れて」）
+送迎表の日の画面の「📄 Excel出力」のとなりに「⚡ 確認なしで出力」（`handleExportQuick`・`data-export-quick`）：出力前の確認（`exportCheck`）をとばして同じExcelを出す（用紙A4/A3・特記事項のカレンダーの行・出力の印 `markExported` も同じ）。テスト `pw/master_add_ui.js`
+
 ## 欠席の人は「迎え不要・送り不要（理由あり）」に出さない（2026-11-17 依頼者「猪原休みが入っているのに、こちらが消えていない」）
 送迎表の右の欄の `NoRideZone`（利用者タブのいつもの家族送り `noRideDefaults` ＋その日の `noRide`）は、その日欠席（`userAbsent`）の人を出さない（`absent`）。データの noRide はそのまま（欠席を戻すとまた出る）。Excel の送迎なしの行は以前から欠席の人を出さない。テスト `pw/gas_ui.js`
 
