@@ -62,7 +62,8 @@ const css = `
 .sgh-chip{transition:opacity .2s} body:has(.fixed.inset-0) .sgh-chip,body:has(.fixed.inset-0) .sgh-chipbox{display:none}
 .sgh-chipbox{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:4000;display:flex;align-items:center;gap:6px}
 .sgh-chipbox .sgh-chip{position:static}
-.sgh-chipbox.in-slot{position:static;display:inline-flex}
+.sgh-chipbox.in-slot{position:static;display:inline-flex;z-index:auto}
+.sgh-chipbox.in-slot .sgh-chip{z-index:auto}   /* 箱の中（flex）では z-index が効くので、入力画面の上に出ないように */
 .sgh-who{font:12px system-ui,sans-serif;color:#18201d;background:rgba(255,255,255,.85);border:1px solid #d6dedb;border-radius:999px;padding:3px 9px;white-space:nowrap;max-width:7em;overflow:hidden;text-overflow:ellipsis}
 .sgh-menu{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:calc(50px + env(safe-area-inset-bottom,0px));z-index:4001;background:#fff;color:#18201d;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);padding:6px;display:flex;flex-direction:column;min-width:220px;font:14px system-ui,sans-serif}
 .sgh-menu button,.sgh-menu a{border:0;background:none;text-align:left;padding:10px 12px;border-radius:8px;color:inherit;text-decoration:none;font:inherit;cursor:pointer}
