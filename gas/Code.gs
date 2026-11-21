@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.21b',
+  VERSION: '2026.11.21c',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -88,10 +88,23 @@ function pushUnsubscribe_(me, endpoint) {
   });
 }
 // 登録した全員（except＝その職員番号の端末は除く）に送る。12件ずつ入口のページへ（いっしょに送る）。届かなくなった宛先（404・410）は消す
-function pushSend_(payload, except, only) {   // only＝この職員番号の人だけ（{番号:1}）
+/* 通知の種類ごとの受け取る・受け取らない（2026-11-21 依頼者「いままで設定した通知をそれぞれ選択できるように」）。人ごと（職員番号）にスクリプト プロパティ pp:<番号> に {種類:false} を持つ。無ければ全部受け取る
+   new=予定が入った chg=変わった del=消された daily=毎朝の今日の予定 tomorrow=毎夕の明日の予定 self=自分で入れた予定も */
+var PUSH_KINDS = ['new', 'chg', 'del', 'daily', 'tomorrow', 'self'];
+function pushPrefsAll_() { var all = {}; try { var p = PropertiesService.getScriptProperties().getProperties(); for (var k in p) if (/^pp:/.test(k)) { try { all[k.slice(3)] = JSON.parse(p[k]); } catch (e) {} } } catch (e) {} return all; }
+function pushPrefs_(no) { var o = pushPrefsAll_()[normNo_(no)] || {}, r = {}; PUSH_KINDS.forEach(function (k) { r[k] = o[k] !== false; }); return r; }
+function pushPrefsSet_(me, prefs) {
+  var o = {}; PUSH_KINDS.forEach(function (k) { if (prefs && prefs[k] === false) o[k] = false; });
+  PropertiesService.getScriptProperties().setProperty('pp:' + me.no, JSON.stringify(o));
+  log_(me, '通知', '通知の設定', PUSH_KINDS.filter(function (k) { return o[k] === false; }).join(',') ? '受け取らない：' + PUSH_KINDS.filter(function (k) { return o[k] === false; }).join(',') : 'すべて受け取る');
+  return pushPrefs_(me.no);
+}
+function pushSend_(payload, except, only, kind, by) {   // only＝この職員番号の人だけ（{番号:1}）。kind＝通知の種類（受け取らない人には送らない）、by＝入れた人の番号（「自分で入れた予定も」を切った人には送らない）
   var entry = entryUrl_(), v = entry ? pushVapid_() : null; if (!v) return { sent: 0 };
   var sh = pushSheet_(), n = sh.getLastRow(); if (n < 2) return { sent: 0 };
-  var rows = sh.getRange(2, 1, n - 1, 4).getValues().filter(function (r) { return r[1] && String(r[0]) !== String(except || '') && (!only || only[normNo_(r[0])]); });
+  var prefs = kind ? pushPrefsAll_() : {};
+  var off = function (no) { var o = prefs[normNo_(no)]; return !!o && ((kind && o[kind] === false) || (by != null && normNo_(by) === normNo_(no) && o.self === false)); };
+  var rows = sh.getRange(2, 1, n - 1, 4).getValues().filter(function (r) { return r[1] && String(r[0]) !== String(except || '') && (!only || only[normNo_(r[0])]) && !off(r[0]); });
   var reqs = [];
   for (var i = 0; i < rows.length; i += 12) reqs.push({ url: entry + '/push/send', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     payload: JSON.stringify({ vapid: v, subject: entry, payload: payload, items: rows.slice(i, i + 12).map(function (r) { return { endpoint: String(r[1]), keys: { p256dh: String(r[2]), auth: String(r[3]) } }; }) }) });
@@ -114,7 +127,7 @@ function pushCal_(me, pu) {
   var head = { 'new': '📅 予定が入りました', chg: '✏️ 予定が変わりました', del: '🗑 予定が消されました' }[pu.kind] || '📅 カレンダー';
   if (pu.mansion) head = head.replace('予定', 'マンションの予定');
   return pushSend_({ title: head, body: (pu.date ? pushMd_(pu.date) + ' ' : '') + pu.title + '（' + me.name + 'さん）', tag: 'ev_' + pu.id,
-    url: '/?page=calendar' + (pu.date ? '&d=' + pu.date : '') }, null, pu.mansion ? mansionNos_() : null);   // 入れた本人にも送る（2026-11-21 依頼者「自分がカレンダーに入れたものが通知で届かない」）。マンションの予定はマンションの人だけに
+    url: '/?page=calendar' + (pu.date ? '&d=' + pu.date : '') }, null, pu.mansion ? mansionNos_() : null, pu.kind, me.no);   // 入れた本人にも送る（2026-11-21 依頼者「自分がカレンダーに入れたものが通知で届かない」）。マンションの予定はマンションの人だけに
 }
 // その日の予定（通知用。マンションの予定は入れない）
 function pushDayList_(day) {
@@ -133,13 +146,13 @@ function pushDaily() {
   if (!entryUrl_()) return null;
   try { ensurePushTomorrow_(); } catch (e) {}   // 前からある所でも「明日の予定」のきっかけを入れる（エディタで実行しなくてよいように）
   var today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-  return pushSend_(pushDayMsg_(today, '今日', 'daily'));
+  return pushSend_(pushDayMsg_(today, '今日', 'daily'), null, null, 'daily');
 }
 // 前の日の夕方の「明日の予定」（2026-11-21 依頼者「前日に明日の予定はこれですみたいな通知」。毎日18時台）
 function pushTomorrow() {
   if (!entryUrl_()) return null;
   var tm = Utilities.formatDate(new Date(Date.now() + 864e5), 'Asia/Tokyo', 'yyyy-MM-dd');
-  return pushSend_(pushDayMsg_(tm, '明日', 'tomorrow'));
+  return pushSend_(pushDayMsg_(tm, '明日', 'tomorrow'), null, null, 'tomorrow');
 }
 function ensurePushTomorrow_() {
   if (ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'pushTomorrow'; })) return;
@@ -408,6 +421,8 @@ var HANDLERS = {
   'mfile.put': function (me, a) { return mfilePut_(me, a[0] || {}); },
   'mfile.del': function (me, a) { return mfileDel_(me, String(a[0] || '')); },
   'push.unsubscribe': function (me, a) { return pushUnsubscribe_(me, a[0]); },
+  'push.prefs': function (me) { return pushPrefs_(me.no); },
+  'push.setPrefs': function (me, a) { return pushPrefsSet_(me, a[0]); },
   'log.list': function (me, a) { if (me.role !== '管理者') throw { code: 'denied', message: '管理者のみ' }; return logList_(a[0] || 200); },
   'ai.messages': function (me, a) { return aiMessages_(me, a[0]); },
   'prop.list': function (me) { if (me.role !== '管理者' && me.role !== '送迎表') return []; return propList_(); },

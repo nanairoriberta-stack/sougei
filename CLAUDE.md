@@ -477,6 +477,7 @@ Excel出力の前の確認（`exportCheck`）の2つめ以降に「← 前のチ
 - 画面：入口のページの中で開いたとき（`SGHost.wrap`）だけ、ログインのあと gashost の `pushAsk` が入口に `push-ask` → 入口の下に「🔔 … 受け取る／あとで」（あとで＝7日出さない）。受け取る＝許可→登録→`push-sub` → `push.subscribe`。メニュー「🔔 通知」（`showPushMenu`）で受け取る／止める。iPhoneは iOS 16.4以上でホーム画面のアイコンから開いたときだけ（Safariのままなら「ホーム画面に追加」の案内）
 - 実機は未確認。テスト `mcp/test-entry.mjs`（RFC 8291 の例と一致）・`gas/test-gas.js`・`pw/entry_ui.js`
 - 2026-11-21 依頼者「自分がカレンダーに入れたものが通知で届かない」→ 入れた本人にも送る（`pushCal_` の除く人なし）。「前日に明日の予定はこれですみたいな通知」→ 毎夕18時台の「📅 明日の予定 11/22(土)（N件）」（`pushTomorrow`・`tag:"tomorrow"`、中身は今日の予定と同じ作り `pushDayMsg_`・`pushDayList_`）。きっかけは `installPushTrigger`（朝7時・夕18時の2つ）・`setup`、前からある所は朝の通知（`pushDaily`）のときに `ensurePushTomorrow_` が入れる（エディタで実行しなくてよい）。テスト `gas/test-gas.js`
+- 通知の種類ごとに受け取る・受け取らない（2026-11-21 依頼者「いままで設定した通知をそれぞれ選択できるように」）：メニュー「🔔 通知の設定」（入口のページの外でも出す）にチェック6つ＝予定が入った（new）・変わった（chg）・消された（del）・毎朝の今日の予定（daily）・毎夕の明日の予定（tomorrow）・自分で入れた・直した予定も（self）（`PUSH_OPTS`・`data-pp`、変えるとすぐ保存）。人ごと（どのスマホでも同じ）にスクリプト プロパティ `pp:<職員番号>` に切った種類だけ `{種類:false}`（`push.prefs`・`push.setPrefs`＝`pushPrefs_`・`pushPrefsSet_`、変更履歴「通知」）。送るとき `pushSend_(payload, except, only, kind, by)` が切った人の端末を外す。受け取る・止める（このスマホ）は入口のページの中だけ。テスト `gas/test-gas.js`・`pw/gas_ui.js`
 - 右下（カレンダーは上の帯）のボタンは「☰ メニュー」（`data-menu-btn`、2026-11-21 依頼者「メニューというタイトルに。番号はいらんから、名字だけ別でどこかに」）。名字はとなりに別の札（`.sgh-who`・`data-me-name`、名前の最初の空白まで `surname`）。2つを `.sgh-chipbox` にまとめる。メニューの中の一番上は今までどおり番号・名前・権限。テスト `pw/gas_ui.js`
 
 ## 電波がないときに最後に見た予定（2026-11-17 依頼者「オフラインでも最終みたカレンダーみれるようにできる？電波ないところでも」）

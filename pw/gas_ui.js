@@ -43,6 +43,14 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(await K.pg.locator(".sgh-chip").count() > 0, "ログインしている");
     assert.strictEqual((await K.pg.locator("[data-menu-btn]").innerText()).trim(), "☰ メニュー", "ボタンの名前は「メニュー」（番号は出さない。2026-11-21 依頼者）");
     assert.strictEqual((await K.pg.locator("[data-me-name]").innerText()).trim(), "管理者", "名字はとなりに別で");
+    { // 通知の設定：種類ごとにチェック（2026-11-21 依頼者）
+      await K.pg.locator(".sgh-chip").first().click(); await K.pg.waitForTimeout(200); await K.pg.click('[data-a="push"]');
+      await K.pg.waitForSelector('[data-pp="tomorrow"]', { timeout: 10000 });
+      assert.strictEqual(await K.pg.locator("[data-pp]").count(), 6, "6つの種類");
+      await K.pg.uncheck('[data-pp="tomorrow"]'); await K.pg.waitForSelector("text=保存しました ✓", { timeout: 10000 });
+      assert.strictEqual(api(key, "push.prefs", []).data.tomorrow, false, "サーバーに覚える");
+      await K.pg.check('[data-pp="tomorrow"]'); await K.pg.waitForTimeout(1500); assert.strictEqual(api(key, "push.prefs", []).data.tomorrow, true);
+      await K.pg.click("#sghClose"); await K.pg.waitForTimeout(200); console.log("通知の設定（種類ごと）OK"); }
     await K.pg.locator(".sgh-chip").first().click(); await K.pg.waitForTimeout(200);
     await K.pg.click('[data-a="keep"]'); await K.pg.waitForTimeout(200); await K.pg.click("#sghKeepGo"); await K.pg.waitForTimeout(1500);
     const link = await K.pg.locator("#sghKeepUrl").inputValue();

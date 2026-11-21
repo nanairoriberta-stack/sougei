@@ -363,6 +363,22 @@ async function bootstrap() {
     const d2 = calls.find((c) => c.u.endsWith("/push/send")).body;
     assert.ok(/^📅 明日の予定 .+（1件）$/.test(d2.payload.title) && d2.payload.body.includes("春日 休み") && !d2.payload.body.includes("白戸"), JSON.stringify(d2.payload));
     assert.strictEqual(d2.payload.tag, "tomorrow"); assert.strictEqual(d2.payload.url, "/?page=calendar&d=" + tmr);
+    { // 通知の種類ごとに選ぶ（2026-11-21 依頼者「いままで設定した通知をそれぞれ選択できるように」）。人ごと
+      assert.deepStrictEqual(await b.call("push.prefs"), { new: true, chg: true, del: true, daily: true, tomorrow: true, self: true }, "はじめは全部受け取る");
+      const p2 = await b.call("push.setPrefs", { new: false, tomorrow: false, daily: true, evil: false });
+      assert.deepStrictEqual(p2, { new: false, chg: true, del: true, daily: true, tomorrow: false, self: true }, "決まった種類だけ覚える");
+      await a.call("push.setPrefs", { self: false });
+      const eps = () => calls.filter((c) => c.u.endsWith("/push/send")).flatMap((c) => c.body.items.map((x) => x.endpoint)).sort();
+      calls.length = 0; await a.call("cal.apply", { kind: "upsert", opId: "op_push0006", id: "ev_push0006", baseRev: null, ev: evOff(tmr, "井川") });
+      assert.deepStrictEqual(eps(), [], "日野は「入った」を切った・八壁は「自分で入れた」を切った → だれにも送らない");
+      calls.length = 0; await a.call("cal.apply", { kind: "upsert", opId: "op_push0007", id: "ev_push0006", baseRev: 1, ev: Object.assign(evOff(tmr, "井川"), { title: "井川 休み（直した）" }) });
+      assert.deepStrictEqual(eps(), ["https://web.push.apple.com/HINO2"], "「変わった」は日野に届く（八壁は自分なので届かない）");
+      calls.length = 0; g.ctx.pushTomorrow();
+      assert.deepStrictEqual(eps(), ["https://web.push.apple.com/YAKABE1"], "明日の予定は切った日野には届かない");
+      calls.length = 0; await b.call("cal.apply", { kind: "upsert", opId: "op_push0008", id: "ev_push0008", baseRev: null, ev: evOff(tmr, "春日") });
+      assert.deepStrictEqual(eps(), ["https://web.push.apple.com/YAKABE1"], "日野が入れた → 八壁に届く（日野は「入った」を切っている）");
+      assert.ok(g.sheets.get("変更履歴").data.some((r) => String(r[3]) === "通知"), "変更履歴に残る");
+    }
     g.ctx.ScriptApp._triggers.length = 0; assert.ok(/明日の予定/.test(g.ctx.installPushTrigger()));
     assert.deepStrictEqual(g.ctx.ScriptApp._triggers.map((t) => t.fn + t.hour).sort(), ["pushDaily7", "pushTomorrow18"], "エディタで入れ直すと2つ");
     return d.payload.title + " / " + sent[0].body.payload.body;

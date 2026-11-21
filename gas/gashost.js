@@ -64,6 +64,7 @@ const css = `
 .sgh-chipbox .sgh-chip{position:static}
 .sgh-chipbox.in-slot{position:static;display:inline-flex;z-index:auto}
 .sgh-chipbox.in-slot .sgh-chip{z-index:auto}   /* 箱の中（flex）では z-index が効くので、入力画面の上に出ないように */
+.sgh-pp{display:flex;align-items:center;gap:8px;padding:8px 2px;font-size:15px;border-bottom:1px solid #eef3f1}.sgh-pp input{width:20px;height:20px}.sgh-pp-msg{font-size:13px;color:#4b5f58;min-height:1.4em;margin-top:6px}
 .sgh-who{font:12px system-ui,sans-serif;color:#18201d;background:rgba(255,255,255,.85);border:1px solid #d6dedb;border-radius:999px;padding:3px 9px;white-space:nowrap;max-width:7em;overflow:hidden;text-overflow:ellipsis}
 .sgh-menu{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:calc(50px + env(safe-area-inset-bottom,0px));z-index:4001;background:#fff;color:#18201d;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);padding:6px;display:flex;flex-direction:column;min-width:220px;font:14px system-ui,sans-serif}
 .sgh-menu button,.sgh-menu a{border:0;background:none;text-align:left;padding:10px 12px;border-radius:8px;color:inherit;text-decoration:none;font:inherit;cursor:pointer}
@@ -136,14 +137,28 @@ if (WRAP) G.addEventListener("message", (e) => {
   if (d.sg === "push-sub" && d.sub && d.sub.endpoint) call("push.subscribe", d.sub).then(() => {}, () => {});
   else if (d.sg === "push-unsub" && d.endpoint) call("push.unsubscribe", d.endpoint).then(() => toastHost("このスマホへの通知を止めました"), () => {});
 });
+// 通知の種類ごとに受け取る・受け取らないを選ぶ（2026-11-21 依頼者「いままで設定した通知をそれぞれ選択できるように」）。人ごとに覚える（どのスマホでも同じ）
+const PUSH_OPTS = [["new", "📅 予定が入ったとき"], ["chg", "✏️ 予定が変わったとき"], ["del", "🗑 予定が消されたとき"], ["daily", "☀️ 毎朝7時ごろ「今日の予定」"], ["tomorrow", "🌙 毎夕18時ごろ「明日の予定」"], ["self", "🙋 自分で入れた・直した予定も知らせる"]];
 function showPushMenu() {
   showOverlay(`<div class="sgh-card" data-push><h1>🔔 通知</h1>
-    <p>カレンダーに予定が入った・変わった・消されたときと、毎朝の「今日の予定」を、このスマホにお知らせします。</p>
+    <p>受け取る通知を選んでください（チェックを外した通知は届きません）。</p>
+    <div id="sghPushPrefs" data-push-prefs>読み込み中…</div>
     <p class="sgh-warn">iPhoneは、ホーム画面に追加した「なないろ」のアイコンから開いたときだけ通知を受け取れます（iOS 16.4 以上）。</p>
-    <button class="go" id="sghPushOn">通知を受け取る</button><button class="go" style="background:#eef3f1;color:#18201d" id="sghPushOff">このスマホへの通知を止める</button><button class="go" style="background:#eef3f1;color:#18201d" id="sghClose">閉じる</button></div>`);
+    ${WRAP ? `<button class="go" id="sghPushOn">このスマホで通知を受け取る</button><button class="go" style="background:#eef3f1;color:#18201d" id="sghPushOff">このスマホへの通知を止める</button>` : ""}<button class="go" style="background:#eef3f1;color:#18201d" id="sghClose">閉じる</button></div>`);
   document.getElementById("sghClose").onclick = hideOverlay;
-  document.getElementById("sghPushOn").onclick = () => { hideOverlay(); pushAsk(true); };
-  document.getElementById("sghPushOff").onclick = () => { hideOverlay(); try { G.top.postMessage({ sg: "push-off" }, WRAP); } catch (e) {} };
+  const on = document.getElementById("sghPushOn"), off = document.getElementById("sghPushOff");
+  if (on) on.onclick = () => { hideOverlay(); pushAsk(true); };
+  if (off) off.onclick = () => { hideOverlay(); try { G.top.postMessage({ sg: "push-off" }, WRAP); } catch (e) {} };
+  const box = document.getElementById("sghPushPrefs");
+  call("push.prefs").then((p) => {
+    if (!box.isConnected) return;
+    box.innerHTML = PUSH_OPTS.map(([k, l]) => `<label class="sgh-pp"><input type="checkbox" data-pp="${k}" ${p[k] !== false ? "checked" : ""}> ${esc(l)}</label>`).join("") + `<div class="sgh-pp-msg" id="sghPpMsg"></div>`;
+    box.onchange = async () => {
+      const prefs = {}; box.querySelectorAll("[data-pp]").forEach((c) => { prefs[c.dataset.pp] = c.checked; });
+      const m = document.getElementById("sghPpMsg"); m.textContent = "保存しています…";
+      try { await call("push.setPrefs", prefs); m.textContent = "保存しました ✓"; } catch (e) { m.textContent = "保存できませんでした：" + ((e && e.message) || "通信を確認してください"); }
+    };
+  }).catch((e) => { box.textContent = "読み込めませんでした：" + ((e && e.message) || "通信を確認してください"); });
 }
 function logout() { const t = token; token = ""; store.del(TK); store.del(MK); me = null; try { if (WRAP) G.top.postMessage({ sg: "cal-snap-clear" }, WRAP); } catch (e) {} rawCall("auth.logout", [t]).catch(() => {}); location.reload(); }   // 入口のページに覚えた「電波がないときの予定」も消す
 
@@ -187,7 +202,7 @@ function toggleMenu() {
   else if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar" + dq))}" target="_top">📅 カレンダー</a>`);
   if (isExec(BASE) && page !== "shift") links.push(`<a href="${esc(url("?page=shift"))}" target="_top">🗓 シフト表（希望休）</a>`);   // マンション職員の早番・遅番（2026-11-02）
   if (isExec(BASE) && (me.canSougei || me.admin)) [["v1", "現体制版"], ["v2", "新体制版"], ["v3", "りんく・ぷれいす版"]].forEach(([e, l]) => { if (!(page === "sougei" && e === ED)) links.push(`<a href="${esc(url("?page=sougei&e=" + e + dq))}" target="_top">🚌 送迎表（${l}）</a>`); });
-  menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}<button data-a="keep">📱 ログインしたままにする（iPhone）</button>${WRAP ? `<button data-a="push">🔔 通知</button>` : ""}${me.canSougei || me.admin ? `<button data-a="att">📋 期間の出欠（Excel）</button>` : ""}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
+  menu.innerHTML = `<small>${esc(me.no)} ${esc(me.name)}（${esc(me.role)}）</small>${links.join("")}<button data-a="keep">📱 ログインしたままにする（iPhone）</button><button data-a="push">🔔 通知の設定</button>${me.canSougei || me.admin ? `<button data-a="att">📋 期間の出欠（Excel）</button>` : ""}${me.admin ? `<button data-a="log">📝 変更履歴</button>` : ""}<button data-a="pin">🔑 暗証番号を変更</button><button data-a="out">ログアウト</button><small>版 ${esc(me.version || "")}</small>`;
   menu.onclick = (e) => {
     const a = e.target.closest("[data-a]"); if (!a) return;
     menu.remove(); menu = null;
