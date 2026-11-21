@@ -33,6 +33,17 @@ assert.ok((h.match(/<script/gi) || []).length === 1 && h.includes('<script src="
 r = await go("/icon-180.png"); const b = new Uint8Array(await r.arrayBuffer());
 assert.strictEqual(r.headers.get("content-type"), "image/png"); assert.deepStrictEqual([...b.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47], "PNGの画像");
 assert.strictEqual((await go("/manifest.webmanifest")).status, 200);
+const h0sougei = await (await go(`/?page=sougei&e=v2&k=${key}`)).text();
+{ // ホーム画面のアイコンから開いても鍵（ログインしたまま）・画面・版が残る（2026-11-21 依頼者「ログイン維持する画面がやはり毎回ログインを求められる」＝以前は start_url が "/" で鍵が落ちていた）
+  const hk = await (await go(`/?page=calendar&k=${key}&d=2026-11-21`)).text();
+  const mh = /<link rel="manifest" href="([^"]+)">/.exec(hk)[1].replace(/&amp;/g, "&");
+  assert.strictEqual(mh, `/manifest.webmanifest?page=calendar&k=${key}`, "manifest のアドレスに鍵（日付は入れない）");
+  const mr = await go(mh), mj = await mr.json();
+  assert.strictEqual(mj.start_url, `/?page=calendar&k=${key}`, "アイコンから開くアドレスに鍵");
+  assert.strictEqual(mr.headers.get("cache-control"), "no-store");
+  assert.strictEqual((await (await go("/manifest.webmanifest?page=calendar&k=zz&evil=1")).json()).start_url, "/?page=calendar", "おかしな値は捨てる");
+  assert.strictEqual((await (await go("/manifest.webmanifest")).json()).start_url, "/", "鍵なしはいままでどおり");
+  assert.ok(/<link rel="manifest" href="\/manifest\.webmanifest\?page=sougei&amp;e=v2&amp;k=/.test(h0sougei), "送迎表も"); }
 assert.strictEqual((await go("/", { method: "POST" })).status, 405);
 assert.strictEqual((await go("/other")).status, 404);
 assert.strictEqual((await go("/", {}, { GAS_URL: "https://evil.example.com/" })).status, 500, "Googleのアドレス以外ははめこまない");

@@ -11,7 +11,10 @@ const store = G.TCCore.makeStore(ls || { getItem() { throw 0; }, setItem() { thr
 const TK = "sg:token", MK = "sg:me", DK = "sg:dir";
 // ログインしたままのアドレス（…&k=鍵）で開いたら、その鍵でログインする（iPhoneのSafariは閉じるとログインの記録が消えることがある。2026-11-10）
 const KEY = /^[0-9a-f]{40,80}$/.test(G.__SG_KEY || "") ? G.__SG_KEY : "";
-let token = store.get(TK) || KEY || "";
+// アドレスに鍵があればそれを先に使う（端末に古いログインが残っていても、鍵のアドレスで開いたら鍵でログイン。2026-11-21 依頼者「毎回ログインを求められる」）
+const OLD_TK = store.get(TK) || "";
+let token = KEY || OLD_TK || "";
+if (KEY && OLD_TK !== KEY) { try { store.del(MK); } catch (e) {} }   // 別のログインの名前を見せない（鍵で聞き直す）
 let me = null; try { me = JSON.parse(store.get(MK) || "null"); } catch (e) {}
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -346,7 +349,11 @@ function boot() {
   if (token && me && !me.mustChange) { done(); call("auth.me").then((m) => setMe(Object.assign({}, m))).catch(() => {}); }
   else if (token && !me && token === KEY) {   // 鍵のアドレスで開いた（端末にログインの記録が無い）：鍵でログインできるか聞く
     call("auth.me").then((m) => { store.set(TK, token); setMe(Object.assign({}, m)); if (m.mustChange) askNewPin(true); else done(); })
-      .catch(() => { token = ""; needLogin("このアドレスのログインは使えなくなっています（ログアウト・暗証番号の変更など）。職員番号と暗証番号でログインしてください。"); });
+      .catch(() => {
+        const msg = "このアドレスのログインは使えなくなっています（ログアウト・暗証番号の変更など）。職員番号と暗証番号でログインしてください。";
+        if (OLD_TK && OLD_TK !== KEY) { token = OLD_TK; call("auth.me").then((m) => { setMe(Object.assign({}, m)); if (m.mustChange) askNewPin(true); else done(); }).catch(() => { token = ""; needLogin(msg); }); }   // 端末に前のログインがあればそれで
+        else { token = ""; needLogin(msg); }
+      });
   }
   else if (token && me && me.mustChange) askNewPin(true);
   else needLogin();

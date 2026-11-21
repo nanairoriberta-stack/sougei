@@ -51,7 +51,18 @@ const D = path.join(__dirname, "../gas/out");
     const K2 = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_KEY="${key}";`, "calendar_key2.html");
     await K2.pg.waitForTimeout(2500);
     assert.ok(await K2.pg.locator("#sghNo").count() > 0, "ログアウトした鍵ではログイン画面");
-    await K2.pg.context().close(); console.log("ログインしたままのアドレス OK"); }
+    await K2.pg.context().close();
+    // 端末に古い（使えなくなった）ログインが残っていても、鍵のアドレスで開けば鍵でログインする（2026-11-21 依頼者「ログイン維持する画面がやはり毎回ログインを求められる」）
+    const kOld = api(t, "auth.deviceLink", []).data.key, kNew = api(t, "auth.deviceLink", []).data.key;
+    const bootK = (k) => `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_KEY="${k}";`;
+    const K3 = await open("calendar.html", { width: 390, height: 844 }, bootK(kOld), "calendar_key3.html");
+    await K3.pg.waitForTimeout(2500); assert.strictEqual(await K3.pg.locator("#sghNo").count(), 0, "前の鍵でログイン");
+    api(kOld, "auth.logout", [kOld]);   // 端末に残っている前のログインは使えなくなる
+    fs.writeFileSync(path.join(__dirname, "g_calendar_key4.html"), fs.readFileSync(path.join(D, "calendar.html"), "utf8").replace("/*__BOOT__*/", bootK(kNew)));
+    await K3.pg.goto("file://" + path.join(__dirname, "g_calendar_key4.html")); await K3.pg.waitForTimeout(2500);
+    assert.strictEqual(await K3.pg.locator("#sghNo").count(), 0, "新しい鍵のアドレスで開くと、古いログインが残っていても鍵でログイン");
+    assert.strictEqual(await K3.pg.evaluate(() => SGHost.store.get("sg:token")), kNew, "端末にも新しい鍵を覚える");
+    await K3.pg.context().close(); console.log("ログインしたままのアドレス OK（古いログインが残っていても）"); }
   { // 入口のページ（Cloudflare）の中で開いたとき：画面どうしのリンクも入口を通す。送迎表の右のカレンダーだけは Google を直接（2026-11-16）
     const W = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_WRAP="https://nanairo.example.workers.dev";`, "calendar_wrap.html");
     await W.pg.waitForTimeout(500);

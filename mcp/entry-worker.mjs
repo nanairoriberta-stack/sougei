@@ -142,6 +142,13 @@ L.innerHTML=h;var f=document.getElementById("d"+(first||days[days.length-1]));if
 
 // アプリに渡してよい値だけを通す（ほかの値は捨てる）
 const PASS = { page: /^(calendar|sougei|shift)$/, e: /^v[123]$/, d: /^\d{4}-\d{2}-\d{2}$/, k: /^[0-9a-f]{40,80}$/, embed: /^1$/ };   // embed=1＝送迎表の右に出すカレンダー
+// ホーム画面に追加したアイコンから開くアドレス（manifest の start_url）。画面・版・ログインしたままの鍵（k）を残す（日付・embed は残さない）。
+// 2026-11-21 依頼者「ログイン維持する画面がやはり毎回ログインを求められる」：以前は start_url が "/" で、ホーム画面のアイコンから開くと鍵が落ちていた
+function startQuery(u) {
+  const q = new URLSearchParams();
+  for (const name of ["page", "e", "k"]) { const v = u.searchParams.get(name); if (v && PASS[name].test(v)) q.set(name, v); }
+  return q.toString();
+}
 
 export function entryPage(reqUrl, appUrl) {
   const u = new URL(reqUrl);
@@ -161,7 +168,7 @@ export function entryPage(reqUrl, appUrl) {
 <title>${esc(title)}</title>
 <link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="icon" type="image/png" href="/icon-192.png">
-<link rel="manifest" href="/manifest.webmanifest">
+<link rel="manifest" href="/manifest.webmanifest${startQuery(u) ? "?" + esc(startQuery(u)) : ""}">
 <style>html,body{margin:0;height:100%;background:#fff}iframe{position:fixed;inset:0;width:100%;height:100%;border:0}
 #pushbar{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));z-index:9;background:#fff;border:1px solid #cbd5e1;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:12px;font:15px/1.5 -apple-system,"Hiragino Sans",sans-serif;color:#1f2937}
 #offchip{position:fixed;left:50%;transform:translateX(-50%);top:calc(6px + env(safe-area-inset-top));z-index:9;background:#1f2937;color:#fff;border-radius:999px;padding:7px 14px;font:14px -apple-system,"Hiragino Sans",sans-serif;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
@@ -194,9 +201,9 @@ export default {
     if (url.pathname === "/icon-192.png" || url.pathname === "/favicon.ico")
       return new Response(b64bytes(ICON192), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
     if (url.pathname === "/manifest.webmanifest")
-      return new Response(JSON.stringify({ name: "なないろ", short_name: "なないろ", start_url: "/", display: "standalone", background_color: "#ffffff", theme_color: "#ffffff",
+      return new Response(JSON.stringify({ name: "なないろ", short_name: "なないろ", start_url: "/" + (startQuery(url) ? "?" + startQuery(url) : ""), scope: "/", display: "standalone", background_color: "#ffffff", theme_color: "#ffffff",
         icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }, { src: "/icon-180.png", sizes: "180x180", type: "image/png" }] }),
-        { headers: { "content-type": "application/manifest+json" } });
+        { headers: { "content-type": "application/manifest+json", "cache-control": "no-store", "referrer-policy": "no-referrer" } });
     if (url.pathname !== "/") return new Response("Not found", { status: 404 });
     if (!EXEC_RE.test(appUrl)) return new Response("APP_URL（Googleのウェブアプリのアドレス …/exec）が入っていません", { status: 500, headers: { "content-type": "text/plain; charset=utf-8" } });
     // 送迎表の右に出すカレンダー（embed=1）だけは、なないろの送迎表（Googleの画面）の中にはめこめる。ほかはどこにもはめこませない
