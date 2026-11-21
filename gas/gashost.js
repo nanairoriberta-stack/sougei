@@ -59,7 +59,11 @@ const css = `
 .sgh-card button.go:disabled{opacity:.5}
 .sgh-err{color:#c23a32;font-size:13px;min-height:1em}
 .sgh-chip{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:4000;background:#18201d;color:#fff;border:0;border-radius:999px;padding:7px 14px;font:12px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2)}
-.sgh-chip{transition:opacity .2s} body:has(.fixed.inset-0) .sgh-chip{display:none}
+.sgh-chip{transition:opacity .2s} body:has(.fixed.inset-0) .sgh-chip,body:has(.fixed.inset-0) .sgh-chipbox{display:none}
+.sgh-chipbox{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:4000;display:flex;align-items:center;gap:6px}
+.sgh-chipbox .sgh-chip{position:static}
+.sgh-chipbox.in-slot{position:static;display:inline-flex}
+.sgh-who{font:12px system-ui,sans-serif;color:#18201d;background:rgba(255,255,255,.85);border:1px solid #d6dedb;border-radius:999px;padding:3px 9px;white-space:nowrap;max-width:7em;overflow:hidden;text-overflow:ellipsis}
 .sgh-menu{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:calc(50px + env(safe-area-inset-bottom,0px));z-index:4001;background:#fff;color:#18201d;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);padding:6px;display:flex;flex-direction:column;min-width:220px;font:14px system-ui,sans-serif}
 .sgh-menu button,.sgh-menu a{border:0;background:none;text-align:left;padding:10px 12px;border-radius:8px;color:inherit;text-decoration:none;font:inherit;cursor:pointer}
 .sgh-menu button:hover,.sgh-menu a:hover{background:#eef3f1}
@@ -155,14 +159,21 @@ function learnBase() { call("app.base").then((b) => { if (isExec(b)) { BASE = b;
 function url(q) { const kq = KEY && token === KEY && q ? (q.includes("?") ? "&" : "?") + "k=" + KEY : "";
   if (WRAP && q) return WRAP + "/" + q + kq;
   return isExec(BASE) ? BASE + q + kq : ""; }   // 鍵で開いた画面から移るときも鍵を付ける
+// 右下（カレンダーは上の帯）のボタンは「メニュー」。番号は出さず、名字だけ別にとなりへ（2026-11-21 依頼者「メニューというタイトルに。番号はいらんから、名字だけ別でどこかに」）
+const surname = (n) => String(n || "").trim().split(/[\s　]+/)[0];
+let chipBox = null, who = null;
 function renderChip() {
-  if (!me) { if (chip) chip.remove(); chip = null; return; }
+  if (!me) { if (chipBox) chipBox.remove(); chipBox = null; chip = null; who = null; return; }
   if (!chip) {
-    chip = document.createElement("button"); chip.className = "sgh-chip"; chip.onclick = toggleMenu;
+    chipBox = document.createElement("div"); chipBox.className = "sgh-chipbox";
+    who = document.createElement("span"); who.className = "sgh-who"; who.setAttribute("data-me-name", "");
+    chip = document.createElement("button"); chip.className = "sgh-chip"; chip.onclick = toggleMenu; chip.setAttribute("data-menu-btn", "");
+    chipBox.append(who, chip);
     const slot = document.getElementById("sghChipSlot");   // カレンダーは上の帯の中に置く
-    if (slot) { chip.classList.add("in-slot"); slot.appendChild(chip); } else document.body.appendChild(chip);
+    if (slot) { chip.classList.add("in-slot"); chipBox.classList.add("in-slot"); slot.appendChild(chipBox); } else document.body.appendChild(chipBox);
   }
-  chip.textContent = `${me.no} ${me.name}`;
+  chip.textContent = "☰ メニュー";
+  who.textContent = surname(me.name); who.title = me.name + "（" + me.role + "）でログイン中";
 }
 function toggleMenu() {
   if (menu) { menu.remove(); menu = null; return; }

@@ -41,6 +41,8 @@ const D = path.join(__dirname, "../gas/out");
     await K.pg.waitForTimeout(2500);
     assert.strictEqual(await K.pg.locator("#sghNo").count(), 0, "鍵のアドレスならログイン画面を出さない");
     assert.ok(await K.pg.locator(".sgh-chip").count() > 0, "ログインしている");
+    assert.strictEqual((await K.pg.locator("[data-menu-btn]").innerText()).trim(), "☰ メニュー", "ボタンの名前は「メニュー」（番号は出さない。2026-11-21 依頼者）");
+    assert.strictEqual((await K.pg.locator("[data-me-name]").innerText()).trim(), "管理者", "名字はとなりに別で");
     await K.pg.locator(".sgh-chip").first().click(); await K.pg.waitForTimeout(200);
     await K.pg.click('[data-a="keep"]'); await K.pg.waitForTimeout(200); await K.pg.click("#sghKeepGo"); await K.pg.waitForTimeout(1500);
     const link = await K.pg.locator("#sghKeepUrl").inputValue();

@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.21a',
+  VERSION: '2026.11.21b',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -114,24 +114,43 @@ function pushCal_(me, pu) {
   var head = { 'new': '📅 予定が入りました', chg: '✏️ 予定が変わりました', del: '🗑 予定が消されました' }[pu.kind] || '📅 カレンダー';
   if (pu.mansion) head = head.replace('予定', 'マンションの予定');
   return pushSend_({ title: head, body: (pu.date ? pushMd_(pu.date) + ' ' : '') + pu.title + '（' + me.name + 'さん）', tag: 'ev_' + pu.id,
-    url: '/?page=calendar' + (pu.date ? '&d=' + pu.date : '') }, me.no, pu.mansion ? mansionNos_() : null);   // マンションの予定はマンションの人だけに
+    url: '/?page=calendar' + (pu.date ? '&d=' + pu.date : '') }, null, pu.mansion ? mansionNos_() : null);   // 入れた本人にも送る（2026-11-21 依頼者「自分がカレンダーに入れたものが通知で届かない」）。マンションの予定はマンションの人だけに
+}
+// その日の予定（通知用。マンションの予定は入れない）
+function pushDayList_(day) {
+  var evMap = TCCore.mergeDays(docsQuery_({ col: 'days', from: day, to: day }));
+  return Object.keys(evMap).map(function (k) { return evMap[k]; }).filter(function (e) { return e && !e.deleted && e.biz !== 'mansion' && e.date <= day && (e.endDate || e.date) >= day && e.title; })
+    .sort(function (a, b) { return (a.allDay ? 0 : 1) - (b.allDay ? 0 : 1) || String(a.start || '').localeCompare(String(b.start || '')) || String(a.title).localeCompare(String(b.title)); });
+}
+function pushDayMsg_(day, word, tag) {
+  var list = pushDayList_(day);
+  if (!list.length) return { title: '📅 ' + word + 'の予定 ' + pushMd_(day), body: word + 'の予定はありません', tag: tag, url: '/?page=calendar&d=' + day };
+  var lines = list.slice(0, 8).map(function (e) { return (e.allDay || !e.start ? '' : String(e.start).replace(/^0/, '') + ' ') + e.title; });
+  return { title: '📅 ' + word + 'の予定 ' + pushMd_(day) + '（' + list.length + '件）', body: lines.join('\n') + (list.length > 8 ? '\nほか' + (list.length - 8) + '件' : ''), tag: tag, url: '/?page=calendar&d=' + day };
 }
 // 毎朝の「今日の予定」（時間で動くきっかけ。setup・installPushTrigger で毎日7時台に入れる）
 function pushDaily() {
   if (!entryUrl_()) return null;
+  try { ensurePushTomorrow_(); } catch (e) {}   // 前からある所でも「明日の予定」のきっかけを入れる（エディタで実行しなくてよいように）
   var today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-  var evMap = TCCore.mergeDays(docsQuery_({ col: 'days', from: today, to: today }));
-  var list = Object.keys(evMap).map(function (k) { return evMap[k]; }).filter(function (e) { return e && !e.deleted && e.biz !== 'mansion' && e.date <= today && (e.endDate || e.date) >= today && e.title; })   // マンションの予定は朝のまとめに入れない
-    .sort(function (a, b) { return (a.allDay ? 0 : 1) - (b.allDay ? 0 : 1) || String(a.start || '').localeCompare(String(b.start || '')) || String(a.title).localeCompare(String(b.title)); });
-  if (!list.length) return pushSend_({ title: '📅 今日の予定 ' + pushMd_(today), body: '今日の予定はありません', tag: 'daily', url: '/?page=calendar&d=' + today });
-  var lines = list.slice(0, 8).map(function (e) { return (e.allDay || !e.start ? '' : String(e.start).replace(/^0/, '') + ' ') + e.title; });
-  return pushSend_({ title: '📅 今日の予定 ' + pushMd_(today) + '（' + list.length + '件）', body: lines.join('\n') + (list.length > 8 ? '\nほか' + (list.length - 8) + '件' : ''), tag: 'daily', url: '/?page=calendar&d=' + today });
+  return pushSend_(pushDayMsg_(today, '今日', 'daily'));
 }
-// 毎朝の通知のきっかけを入れ直す（エディタで実行してもよい。setup でも入る）
+// 前の日の夕方の「明日の予定」（2026-11-21 依頼者「前日に明日の予定はこれですみたいな通知」。毎日18時台）
+function pushTomorrow() {
+  if (!entryUrl_()) return null;
+  var tm = Utilities.formatDate(new Date(Date.now() + 864e5), 'Asia/Tokyo', 'yyyy-MM-dd');
+  return pushSend_(pushDayMsg_(tm, '明日', 'tomorrow'));
+}
+function ensurePushTomorrow_() {
+  if (ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'pushTomorrow'; })) return;
+  ScriptApp.newTrigger('pushTomorrow').timeBased().atHour(18).everyDays(1).inTimezone('Asia/Tokyo').create();
+}
+// 毎朝・毎夕の通知のきっかけを入れ直す（エディタで実行してもよい。setup でも入る）
 function installPushTrigger() {
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'pushDaily') ScriptApp.deleteTrigger(t); });
+  ScriptApp.getProjectTriggers().forEach(function (t) { var f = t.getHandlerFunction(); if (f === 'pushDaily' || f === 'pushTomorrow') ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('pushDaily').timeBased().atHour(7).everyDays(1).inTimezone('Asia/Tokyo').create();
-  return '毎朝7時台に「今日の予定」を通知します';
+  ScriptApp.newTrigger('pushTomorrow').timeBased().atHour(18).everyDays(1).inTimezone('Asia/Tokyo').create();
+  return '毎朝7時台に「今日の予定」、毎夕18時台に「明日の予定」を通知します';
 }
 /* 入口のページのアドレス（https://〜 だけ。後ろに / や ? は付かない） */
 var WRAP_RE = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/;

@@ -335,7 +335,7 @@ async function bootstrap() {
     await a.call("cal.apply", { kind: "upsert", opId: "op_push0001", id: "ev_push0001", baseRev: null, ev: evOff("2025-11-20", "日野") });
     const sent = calls.filter((c) => c.u.endsWith("/push/send"));
     assert.strictEqual(sent.length, 1);
-    assert.deepStrictEqual(sent[0].body.items.map((x) => x.endpoint), ["https://web.push.apple.com/HINO1"], "入れた本人には送らない");
+    assert.deepStrictEqual(sent[0].body.items.map((x) => x.endpoint).sort(), ["https://web.push.apple.com/HINO1", "https://web.push.apple.com/YAKABE1"], "入れた本人にも送る（2026-11-21 依頼者「自分がカレンダーに入れたものが通知で届かない」）");
     assert.strictEqual(sent[0].body.payload.title, "📅 予定が入りました");
     assert.ok(/11\/20\(木\) 日野 休み（八壁さん）/.test(sent[0].body.payload.body), sent[0].body.payload.body);
     assert.strictEqual(sent[0].body.payload.url, "/?page=calendar&d=2025-11-20"); assert.strictEqual(sent[0].body.subject, "https://nanairo.example.workers.dev");
@@ -343,7 +343,7 @@ async function bootstrap() {
     assert.ok(!("_push" in r), "画面への返事には入れない");
     assert.strictEqual(calls.filter((c) => c.u.endsWith("/push/send")).pop().body.payload.title, "✏️ 予定が変わりました");
     // 届かなくなった宛先（410）は消す
-    statusOf = () => 410; calls.length = 0;
+    statusOf = (ep) => (/HINO/.test(ep) ? 410 : 201); calls.length = 0;
     await a.call("cal.apply", { kind: "upsert", opId: "op_push0003", id: "ev_push0003", baseRev: null, ev: evOff("2025-11-21", "日野") });
     assert.strictEqual(g.sheets.get("_push").data.length - 1, 1, "日野の端末は消えた");
     statusOf = () => 201;
@@ -355,6 +355,16 @@ async function bootstrap() {
     const d = calls.find((c) => c.u.endsWith("/push/send")).body;
     assert.ok(/^📅 今日の予定 .+（1件）$/.test(d.payload.title) && d.payload.body.includes("白戸 休み"), JSON.stringify(d.payload));
     assert.strictEqual(d.items.length, 2, "毎朝は全員（入れた人も）");
+    // 前の日の夕方の「明日の予定」（2026-11-21 依頼者）。前からある所でも、朝の通知のときにきっかけが入る
+    assert.ok(g.ctx.ScriptApp._triggers.some((t) => t.fn === "pushTomorrow" && t.hour === 18), "毎夕18時台のきっかけ");
+    const tmr = g.ctx.Utilities.formatDate(new Date(Date.now() + 864e5), "Asia/Tokyo", "yyyy-MM-dd");
+    await a.call("cal.apply", { kind: "upsert", opId: "op_push0005", id: "ev_push0005", baseRev: null, ev: evOff(tmr, "春日") }); calls.length = 0;
+    g.ctx.pushTomorrow();
+    const d2 = calls.find((c) => c.u.endsWith("/push/send")).body;
+    assert.ok(/^📅 明日の予定 .+（1件）$/.test(d2.payload.title) && d2.payload.body.includes("春日 休み") && !d2.payload.body.includes("白戸"), JSON.stringify(d2.payload));
+    assert.strictEqual(d2.payload.tag, "tomorrow"); assert.strictEqual(d2.payload.url, "/?page=calendar&d=" + tmr);
+    g.ctx.ScriptApp._triggers.length = 0; assert.ok(/明日の予定/.test(g.ctx.installPushTrigger()));
+    assert.deepStrictEqual(g.ctx.ScriptApp._triggers.map((t) => t.fn + t.hour).sort(), ["pushDaily7", "pushTomorrow18"], "エディタで入れ直すと2つ");
     return d.payload.title + " / " + sent[0].body.payload.body;
   });
   await test("アイコン・題名：「設定」シートB6のGoogleドライブの画像をアイコンに、題名は「なないろ…」（2026-11-16 依頼者のアイコン）", async () => {
