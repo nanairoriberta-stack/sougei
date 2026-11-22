@@ -121,11 +121,15 @@ function askNewPin(first, oldPin) {
   };
 }
 function setMe(m) { me = m; store.set(MK, JSON.stringify(m)); renderChip(); }
-function done() { hideOverlay(); renderChip(); readyResolve(me); for (const f of listeners) { try { f(me); } catch (e) {} } loadDirectory(); learnBase(); pushAsk(false); }
+function done() { keepTok(); hideOverlay(); renderChip(); readyResolve(me); for (const f of listeners) { try { f(me); } catch (e) {} } loadDirectory(); learnBase(); pushAsk(false); }
 // ---- スマホの通知（入口のページの中で開いているときだけ。2026-11-16 依頼者「通知機能・全員・予定が入った時と今日の予定」） ----
 // 入口のページに「通知を受け取りますか」と頼み、登録できたら（push-sub）サーバーに覚えてもらう。止めたら（push-unsub）消してもらう
 let pushKey = "";
 const WRAP = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(G.__SG_WRAP || "") ? G.__SG_WRAP : "";
+// 入口のページ（なないろのアイコン）にもログインを覚えてもらう（2026-11-22 依頼者「ログイン維持したままにならない」）。
+// iPhoneのホーム画面から開くと、この画面（Googleの別のアドレス）の端末の保存は開くたびに消えることがあるが、入口のページの保存は残る
+function keepTok() { if (WRAP && token) try { G.top.postMessage({ sg: "keep-token", t: token }, WRAP); } catch (e) {} }
+let tokWait = null;   // 入口のページに覚えたログインを聞いている間の返事待ち
 async function pushAsk(force) {
   if (!WRAP || !me || !token || G.__SG_EMBED) return;   // 送迎表の右のカレンダーでは聞かない
   try { if (!pushKey) { const r = await call("push.key"); pushKey = (r && r.key) || ""; } } catch (e) { return; }
@@ -134,6 +138,7 @@ async function pushAsk(force) {
 }
 if (WRAP) G.addEventListener("message", (e) => {
   const d = e.data; if (e.origin !== WRAP || !d || typeof d !== "object") return;
+  if (d.sg === "token") { if (tokWait) { const f = tokWait; tokWait = null; f(/^[0-9a-f-]{40,90}$/.test(d.t || "") ? d.t : ""); } return; }
   if (d.sg === "push-sub" && d.sub && d.sub.endpoint) call("push.subscribe", d.sub).then(() => {}, () => {});
   else if (d.sg === "push-unsub" && d.endpoint) call("push.unsubscribe", d.endpoint).then(() => toastHost("このスマホへの通知を止めました"), () => {});
 });
@@ -160,7 +165,7 @@ function showPushMenu() {
     };
   }).catch((e) => { box.textContent = "読み込めませんでした：" + ((e && e.message) || "通信を確認してください"); });
 }
-function logout() { const t = token; token = ""; store.del(TK); store.del(MK); me = null; try { if (WRAP) G.top.postMessage({ sg: "cal-snap-clear" }, WRAP); } catch (e) {} rawCall("auth.logout", [t]).catch(() => {}); location.reload(); }   // 入口のページに覚えた「電波がないときの予定」も消す
+function logout() { const t = token; token = ""; store.del(TK); store.del(MK); me = null; try { if (WRAP) { G.top.postMessage({ sg: "cal-snap-clear" }, WRAP); G.top.postMessage({ sg: "keep-token-clear" }, WRAP); } } catch (e) {} rawCall("auth.logout", [t]).catch(() => {}); location.reload(); }   // 入口のページに覚えた「電波がないときの予定」も消す
 
 /* ---------- 右下の「ログイン中」 ---------- */
 let chip = null, menu = null;
@@ -383,6 +388,15 @@ function boot() {
       });
   }
   else if (token && me && me.mustChange) askNewPin(true);
+  else if (!token && WRAP) {   // 入口のページに覚えたログインがあれば、それで（1.5秒待って返事が無ければふつうのログイン）
+    new Promise((res) => { tokWait = res; try { G.top.postMessage({ sg: "need-token" }, WRAP); } catch (e) { res(""); } setTimeout(() => { if (tokWait === res) { tokWait = null; res(""); } }, 1500); })
+      .then((t) => {
+        if (!t) return needLogin();
+        token = t;
+        call("auth.me").then((m) => { store.set(TK, token); setMe(Object.assign({}, m)); if (m.mustChange) askNewPin(true); else done(); })
+          .catch(() => { token = ""; try { G.top.postMessage({ sg: "keep-token-clear" }, WRAP); } catch (e) {} needLogin(); });
+      });
+  }
   else needLogin();
 }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();

@@ -34,6 +34,7 @@ const path = require("path"), fs = require("fs"), os = require("os");
   await b.close(); console.log("入口のページの通知の案内 OK");
   await offlineTest(W);
   await embedTest(W);
+  await keepTest(W);
 })().catch((e) => { console.error(e); process.exit(1); });
 
 /* 電波がないときに最後に見た予定（2026-11-17 依頼者「オフラインでも最終みたカレンダーみれるように」）：
@@ -121,4 +122,51 @@ async function embedTest(W) {
   const pg2 = await ctx.newPage(); await pg2.goto("https://evil.example.com/x"); await pg2.waitForTimeout(1500);
   assert.ok(!pg2.frames().some((f) => /page=calendar/.test(f.url()) && f.url().startsWith("https://script.google.com")), "ほかのサイトでは開かない");
   await b.close(); console.log("送迎表の右のカレンダー（入口のページ経由）OK");
+}
+
+/* ログインしたまま（2026-11-22 依頼者「ログイン維持したままにならない」）：iPhoneのホーム画面から開くと中のGoogleの画面の端末の保存が消えることがある。
+   入口のページにもログインを覚え、中の画面の保存が消えていてもそれでログインする。ログアウトで消える。ほかのサイトには渡さない */
+async function keepTest(W) {
+  const { makeGas } = require("../gas/fakegas.js"), D = path.join(__dirname, "../gas/out");
+  const g = makeGas(["Lib1_calcore.gs", "Lib2_merge.gs", "Lib3_calsync.gs", "Lib5_shift.gs", "Code.gs"].map((f) => path.join(D, f))); g.ctx.setup();
+  const api = (t, m, a) => JSON.parse(JSON.stringify(g.ctx.api(t, m, JSON.parse(JSON.stringify(a)))));
+  const rows = g.sheets.get("職員ID").data.slice(1).filter((r) => r[0] !== "" && r[0] !== undefined), pin0 = String(rows[0][3]);
+  const t0 = api("", "auth.login", ["000", pin0, "node"]).data.token; api(t0, "auth.changePin", [pin0, "5829"]);
+  const ORIGIN = "https://nanairo.example.workers.dev";
+  const html = fs.readFileSync(path.join(D, "calendar.html"), "utf8").replace("/*__BOOT__*/", `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_WRAP="${ORIGIN}";`);
+  const b = await chromium.launch(), ctx = await b.newContext({ viewport: { width: 390, height: 844 } }), pg = await ctx.newPage();
+  const errs = []; pg.on("pageerror", (e) => errs.push(String(e)));
+  await ctx.exposeFunction("__gasApi", (tk, m, a) => api(tk, m, a));
+  await ctx.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { setTimeout(() => window.__gasApi(tk, m, a).then((r) => s && s(r), (e) => f && f(e)), 20); } }; })() } }; });
+  await ctx.route(ORIGIN + "/**", async (route) => { const q = await W.fetch(new Request(route.request().url(), { method: route.request().method() }), {});
+    route.fulfill({ status: q.status, headers: Object.fromEntries(q.headers), body: Buffer.from(await q.arrayBuffer()) }); });
+  await ctx.route("https://script.google.com/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: html }));
+  await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
+  const frame = () => pg.frames().find((f) => f.url().startsWith("https://script.google.com"));
+  await pg.goto(ORIGIN + "/?page=calendar"); await pg.waitForTimeout(500);
+  let fr = frame(); await fr.waitForSelector("#sghNo", { timeout: 8000 });
+  await fr.fill("#sghNo", "000"); await fr.fill("#sghPin", "5829"); await fr.click("#sghGo");
+  await fr.waitForSelector(".sgh-chip", { timeout: 8000 });
+  await pg.waitForFunction(() => /^[0-9a-f-]{40,90}$/.test(localStorage.getItem("sgTok") || ""), null, { timeout: 5000 });
+  // 中の画面の端末の保存が消えた（iPhoneのホーム画面から開き直したとき）→ ログインの画面を出さずに開く
+  await fr.evaluate(() => localStorage.clear());
+  await pg.reload(); await pg.waitForTimeout(500); fr = frame();
+  await fr.waitForSelector(".sgh-chip", { timeout: 8000 });
+  assert.strictEqual(await fr.locator("#sghNo").count(), 0, "ログインの画面を出さない");
+  assert.ok(await fr.evaluate(() => !!localStorage.getItem("sg:token")), "中の画面にもまた覚える");
+  // ほかのサイト（入口のページの中でない画面）が聞いても渡さない
+  const got = await pg.evaluate(() => new Promise((res) => { const w = window.open("about:blank"); let r = "none"; window.addEventListener("message", (e) => { if (e.data && e.data.sg === "token") r = e.data.t; }); window.postMessage({ sg: "need-token" }, "*"); setTimeout(() => { try { w.close(); } catch (e) {} res(r); }, 500); }));
+  assert.strictEqual(got, "none", "入口の外には渡さない");
+  // ログアウトすると入口のページの分も消える
+  await fr.evaluate(() => { window.location.reload = () => {}; });
+  await fr.locator(".sgh-chip").first().click(); await fr.waitForTimeout(200);
+  pg.once("dialog", (d) => d.accept()); await fr.click('[data-a="out"]'); await pg.waitForTimeout(800);
+  assert.strictEqual(await pg.evaluate(() => localStorage.getItem("sgTok")), null, "ログアウトで消える");
+  // 使えなくなったログイン（暗証番号の変更など）を覚えていたら、ふつうのログインの画面
+  await pg.evaluate(() => localStorage.setItem("sgTok", "0123456789abcdef0123456789abcdef0123456789abcdef"));
+  await pg.reload(); await pg.waitForTimeout(500); fr = frame();
+  await fr.waitForSelector("#sghNo", { timeout: 8000 });
+  await pg.waitForFunction(() => localStorage.getItem("sgTok") === null, null, { timeout: 5000 });
+  assert.deepStrictEqual(errs.filter((e) => !/fonts|ERR_/.test(e)), [], "画面エラーなし");
+  await b.close(); console.log("入口のページでログインしたまま OK");
 }

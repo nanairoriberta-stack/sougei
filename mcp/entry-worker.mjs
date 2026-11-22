@@ -90,7 +90,10 @@ e.waitUntil(self.registration.showNotification(d.title||"なないろ",{body:d.b
 self.addEventListener("notificationclick",e=>{e.notification.close();const u=new URL((e.notification.data&&e.notification.data.url)||"/",self.location.origin).href;
 e.waitUntil(self.clients.matchAll({type:"window",includeUncontrolled:true}).then(l=>{for(const c of l){if("navigate"in c){c.focus();return c.navigate(u)}}return self.clients.openWindow(u)}))});`;
 // 入口のページの中の小さなプログラム：アプリ（中のGoogleの画面）から「通知を受け取りますか」と頼まれたら、下に案内を出し、押されたら通知を登録してアプリに返す
-const ENTRY_JS = `(function(){var bar=null,ask=null,app=null;
+// ログインを入口のページ（端末に残る）にも覚えておき、中のGoogleの画面の保存が消えても渡す（2026-11-22 依頼者「ログイン維持したままにならない」。
+// iPhoneのホーム画面のアイコンから開くと、中のGoogleの画面（別のアドレス）の端末の保存は開くたびに消えることがある）。入口の中の画面にだけ渡す（mine）
+const ENTRY_JS = `(function(){var bar=null,ask=null,app=null,TOK=/^[0-9a-f-]{40,90}$/;
+function mine(w){var f=document.querySelector("iframe");if(!f||!w)return false;var ok=false;(function walk(x,d){if(ok||!x||d>6)return;if(x===w){ok=true;return}var n=0;try{n=x.length}catch(e){}for(var i=0;i<n;i++){try{walk(x[i],d+1)}catch(e){}}})(f.contentWindow,0);return ok}
 function standalone(){return window.navigator.standalone===true||window.matchMedia("(display-mode: standalone)").matches}
 function ios(){return /iPhone|iPad|iPod/.test(navigator.userAgent)}
 function ok(){return "serviceWorker"in navigator&&"PushManager"in window&&"Notification"in window}
@@ -111,7 +114,10 @@ function chip(){if(navigator.onLine!==false||document.getElementById("offchip"))
 window.addEventListener("offline",chip);window.addEventListener("online",function(){var c=document.getElementById("offchip");if(c)c.remove()});setTimeout(chip,3000);
 try{if("serviceWorker"in navigator)navigator.serviceWorker.register("/sw.js").catch(function(){})}catch(e){}
 window.addEventListener("message",function(e){var d=e.data;if(!d||typeof d!=="object"||!/^https:\\/\\/([a-z0-9-]+\\.)*(google\\.com|googleusercontent\\.com)$/.test(e.origin))return;app=e.source;
-if(d.sg==="push-ask"&&typeof d.key==="string"&&d.key.length>60){ask=d;check()}else if(d.sg==="push-off")off();else if(d.sg==="cal-saved"){if(window.parent!==window)try{window.parent.postMessage({sg:"cal-saved"},"*")}catch(x){}}else if(d.sg==="cal-snap")snap(d);else if(d.sg==="cal-snap-clear"){try{localStorage.removeItem("calSnap")}catch(x){}}});})();`;
+if(d.sg==="push-ask"&&typeof d.key==="string"&&d.key.length>60){ask=d;check()}else if(d.sg==="push-off")off();else if(d.sg==="cal-saved"){if(window.parent!==window)try{window.parent.postMessage({sg:"cal-saved"},"*")}catch(x){}}else if(d.sg==="cal-snap")snap(d);else if(d.sg==="cal-snap-clear"){try{localStorage.removeItem("calSnap")}catch(x){}}
+else if(d.sg==="keep-token"&&TOK.test(d.t||"")&&mine(e.source)){try{localStorage.setItem("sgTok",d.t)}catch(x){}}
+else if(d.sg==="keep-token-clear"&&mine(e.source)){try{localStorage.removeItem("sgTok")}catch(x){}}
+else if(d.sg==="need-token"&&mine(e.source)){var t="";try{t=localStorage.getItem("sgTok")||""}catch(x){}try{e.source.postMessage({sg:"token",t:TOK.test(t)?t:""},e.origin)}catch(x){}}});})();`;
 
 // 電波がないときの画面（最後に見た予定・見るだけ）
 const OFFLINE_HTML = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>なないろカレンダー（電波なし）</title>
