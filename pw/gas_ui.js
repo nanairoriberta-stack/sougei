@@ -917,7 +917,7 @@ const D = path.join(__dirname, "../gas/out");
     await pick("staff", "日野"); await A.pg.waitForTimeout(200);
     await A.pg.locator('label:has(input[name="w-ws"][value="time"])').click(); await A.pg.waitForTimeout(200); await A.pg.fill("#w-wst", "10:00");
     await A.pg.check("#w-libonly"); await A.pg.waitForTimeout(300);
-    assert.match(await A.pg.locator("#sgArea").innerText(), /下の部署の職員の欄には出ません/, "ﾘﾍﾞﾙﾀのみの説明");
+    assert.match(await A.pg.locator("#sgArea").innerText(), /下の部署の職員の欄にも出ません/, "ﾘﾍﾞﾙﾀのみの説明");
     assert.match(await A.pg.locator("#sgArea").innerText(), /送迎（便）には入りません/, "ﾘﾍﾞﾙﾀ＝ﾏﾝｼｮﾝなので送迎なし");
     await A.pg.locator('label:has(input[name="w-kinmu"][value="早ﾏﾝｼｮﾝのみ"])').click(); await A.pg.waitForTimeout(300);
     assert.strictEqual(await A.pg.locator("#w-libonly").count(), 0, "勤務がﾏﾝｼｮﾝのみならチェックは出さない（それでﾘﾍﾞﾙﾀのみ）");
