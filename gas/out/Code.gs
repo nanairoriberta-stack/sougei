@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.22a',
+  VERSION: '2026.11.23a',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -631,7 +631,7 @@ function namesList_() {
   // 職員がどちらの事業か（staffBiz：名前→["seikatsu"]/["houkago"]/両方）。カレンダーで最初に開くタブと、事業の取り違えの確認に使う
   var staffBiz = {}, staffDept = {};
   var users = [], kids = [], seenK = {}, seen = {}, idx = docIndex_(), depts = [], seenD = {}, places = ['自宅', 'ﾘﾍﾞ'], seenP = { '自宅': 1, 'ﾘﾍﾞ': 1 };
-  ['v1', 'v2', 'v3'].forEach(function (ed) {
+  ['v1', 'v2', 'v3'].forEach(function (ed) { try {   // 1つの版でつまずいても、ほかの版の名前は出す（2026-11-23 依頼者「ヘルプで利用者の候補が出ない」）
     var d = docGet_(kvPath_(APP.EDITIONS[ed] + 'master'), idx); var m = d ? d.value.v : null; if (!m) return;
     m = SGCal.peopleWithPast(m);   // 日付の区切りにだけいる人（このあといなくなる人など）も候補に（2026-11-14）
     var dn = function (id) { var x = (m.departments || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name : ''; };
@@ -672,7 +672,7 @@ function namesList_() {
     // 迎え先・送り先の候補：利用者タブの「いつもの迎え先・送り先」（家族送り・家族迎えは別の選択肢なので除く）
     (m.users || []).forEach(function (u) { [u && u.meetPlace, u && u.sendPlace].forEach(function (v) { v = String(v || '').trim(); if (/^(リベルタ|リベ|ﾘﾍﾞﾙﾀ|ﾘﾍﾞ)$/.test(v)) v = 'ﾘﾍﾞ'; if (v && !/^(家族|母|父)/.test(v) && !seenP[v]) { seenP[v] = 1; places.push(v); } }); });
     (m.departments || []).forEach(function (d) { if (d && d.name && !seenD[d.name]) { seenD[d.name] = 1; depts.push(d.name); } });
-  });
+  } catch (e) { console.error(e && e.stack || e); try { log_({}, 'エラー', 'names.list', ed + '：' + String(e && e.message || e) + ' ' + String(e && e.stack || '').slice(0, 300)); } catch (e2) {} } });
   // 送迎の「迎えなし・送りなし」の理由（送迎表のルール「家族送り・家族迎えなど」。どの版も変えていなければ初期の3つ）。2026-11-05 依頼者
   var noRide = { meet: [], send: [] }, anyNr = false;
   ['v2', 'v1', 'v3'].forEach(function (ed) {

@@ -27,7 +27,7 @@ const D = path.join(__dirname, "../gas/out");
     const ctx = await b.newContext({ viewport: vp, colorScheme: "light" }); const pg = await ctx.newPage();
     const errs = []; pg.on("pageerror", (e) => errs.push(String(e))); pg.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errs.push(m.text().slice(0, 200)); });
     await pg.exposeFunction("__gasApi", (tk, m, a) => api(tk, m, a));
-    await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { const h = m === "docs.query" && window.__HOLDQ; if (h) window.__QN = (window.__QN || 0) + 1; setTimeout(() => window.__gasApi(tk, m, a).then((r) => setTimeout(() => s && s(r), h || 0), (e) => f && f(e)), 30); } }; })() } }; });
+    await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { if (m === "names.list" && window.__failNames) { setTimeout(() => f && f(new Error("テストの失敗")), 30); return; } const h = m === "docs.query" && window.__HOLDQ; if (h) window.__QN = (window.__QN || 0) + 1; setTimeout(() => window.__gasApi(tk, m, a).then((r) => setTimeout(() => s && s(r), h || 0), (e) => f && f(e)), 30); } }; })() } }; });
     if (extraInit) await pg.addInitScript(extraInit);
     await pg.route("https://**/*", async (r) => { const u = r.request().url(); for (const k in LOC) if (u.endsWith(k)) return r.fulfill({ path: LOC[k], contentType: "application/javascript" }); return r.abort(); });
     const html = fs.readFileSync(path.join(D, file), "utf8").replace("/*__BOOT__*/", boot);
@@ -695,6 +695,23 @@ const D = path.join(__dirname, "../gas/out");
   const ys = g.sheets.get("よみがな"); assert.ok(ys && ys.data.some((r) => r[0] === "中村" && r[2] === "利用者"), "よみがなシートに利用者が並ぶ");
   ys.data.forEach((r) => { if (r[0] === "中村") r[1] = "なかむら"; if (r[0] === "日野") r[1] = "ひの"; });
   for (const k of [...g.cache.keys()]) if (k === "names8") g.cache.delete(k);
+  { // ヘルプで利用者の候補が出ない（2026-11-23 依頼者）：名前の一覧が読めないときは理由と「もう一度読む」。一度読めた一覧は端末に覚えて、読めないときに使う
+    const key = api(t, "auth.deviceLink", []).data.key;
+    const N = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_KEY="${key}";`, "calendar_names.html", () => { window.__failNames = 1; });
+    await N.pg.waitForSelector("#addBtn", { timeout: 10000 }); await N.pg.waitForTimeout(6000);
+    await N.pg.click("#addBtn"); await N.pg.waitForTimeout(400);
+    assert.strictEqual(await N.pg.evaluate(() => { const c = document.querySelector('input[name="f-label"]:checked'); return c && c.value; }), "help", "ヘルプ");
+    await N.pg.focus("#f-sgq-users"); await N.pg.waitForTimeout(400);
+    assert.match(await N.pg.locator("#sghits-users").innerText(), /利用者の名前の一覧を読み込めませんでした（テストの失敗）/, "読めないときは「見つかりません」でなく理由");
+    await N.pg.evaluate(() => { window.__failNames = 0; }); await N.pg.click("[data-names-retry]"); await N.pg.waitForTimeout(1500);
+    assert.ok(await N.pg.locator('#sghits-users [data-sgpick="users"][data-name="中村"]').count(), "もう一度読むと候補が出る");
+    assert.ok(await N.pg.evaluate(() => !!localStorage.getItem("sg:names1")), "読めた一覧を端末に覚える");
+    await N.pg.reload(); await N.pg.waitForSelector("#addBtn", { timeout: 10000 }); await N.pg.waitForTimeout(6000);   // また読めない（__failNames=1）
+    await N.pg.click("#addBtn"); await N.pg.waitForTimeout(400); await N.pg.focus("#f-sgq-users"); await N.pg.fill("#f-sgq-users", "中村"); await N.pg.waitForTimeout(400);
+    assert.ok(await N.pg.locator('#sghits-users [data-sgpick="users"][data-name="中村"]').count(), "読めなくても前に読んだ一覧で候補が出る");
+    assert.deepStrictEqual(N.errs.filter((e) => !/fonts|ERR_|テストの失敗/.test(e)), [], "画面エラーなし");
+    await N.pg.context().close(); console.log("名前の一覧が読めないとき OK");
+  }
   const A = await open("calendar.html", { width: 390, height: 844 }, boot);
   await A.pg.waitForTimeout(500); await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); await A.pg.waitForTimeout(2500);
   const pick = async (kind, name) => { await A.pg.fill("#f-sgq-" + kind, name); await A.pg.click(`[data-sgpick="${kind}"][data-name="${name}"]`); };

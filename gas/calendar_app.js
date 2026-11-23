@@ -532,9 +532,15 @@ let SGN={staff:[],users:[],depts:[],places:[],yomi:{},staffDept:{},noRide:null,l
 function usualDept(name,date,biz){if(!name)return"";const sd=SGN.staffDept||{};
   const eds=biz==="houkago"?["v3","v2","v1"]:String(date)>="2026-11-01"?["v2","v1","v3"]:["v1","v2","v3"];
   for(const e of eds){const x=(sd[e]||{})[name];if(x){const wd=date?String(parse(date).getDay()):"";return(x.w&&x.w[wd])||x.d||""}}return""}
+/* 名前の一覧（利用者など）。2026-11-23 依頼者「ヘルプで利用者が選択できない。候補が出ない」：以前は読めなかったとき利用者を空のまま「見つかりません」と出していた。
+   → 3回まで読み直す。読めた一覧は端末にも覚え（sg:names1）、読めないときはそれを使う。それも無ければ理由と「もう一度読む」を出す（namesErr） */
+let namesErr="";
 async function loadNames(){
   const H=window.SGHost;if(!H)return;
-  let r=null;try{r=await H.call("names.list")}catch{}
+  let r=null,why="";
+  for(let i=0;i<3&&!r;i++){try{r=await H.call("names.list");if(!r||!Array.isArray(r.users)){r=null;why="中身が空でした"}}catch(e){why=(e&&(e.message||e.code))||"通信できませんでした";if(i<2)await new Promise(f=>setTimeout(f,1500*(i+1)))}}
+  if(r){try{localStorage.setItem("sg:names1",JSON.stringify(r))}catch{}namesErr=""}
+  else{try{const o=JSON.parse(localStorage.getItem("sg:names1")||"null");if(o&&Array.isArray(o.users))r=o}catch{}namesErr=r?"":why||"読み込めませんでした"}
   if(!H.directory().length)await H.loadDirectory();
   SGN={staff:H.directory().filter(d=>d.no!=="000").map(d=>({name:d.name,dept:d.no})),users:r?r.users||[]:SGN.users,kids:r?r.kids||[]:(SGN.kids||[]),staffBiz:r?r.staffBiz||{}:(SGN.staffBiz||{}),staffDept:r?r.staffDept||{}:(SGN.staffDept||{}),depts:r?r.depts||[]:SGN.depts,places:r?r.places||[]:SGN.places,noRide:r&&r.noRide?r.noRide:SGN.noRide,yomi:r?r.yomi||{}:SGN.yomi,loaded:true};
 }
@@ -710,7 +716,7 @@ function sgHits(kind,q){
   const groups=[];for(const x of list){const d=dOf(x);let g=groups.find(g=>g.d===d);if(!g)groups.push(g={d,xs:[]});g.xs.push(x)}
   const rank=d=>{const i=DEPT_ORDER.findIndex(n=>String(d).includes(n));return i<0?(d==="そのほか"?99:50):i};
   if(!qn||noHit)groups.sort((a,b)=>rank(a.d)-rank(b.d)||String(a.d).localeCompare(String(b.d),"ja"));   // 入力中は合うものが多い部署から（並びは予測の順）
-  h.innerHTML=(noHit?`<div class="by" data-sg-nohit style="padding:6px 10px">「${esc(qq)}」に合う名前がありません。漢字で打つか、下の一覧から押してください。</div>`:"")+(list.length?groups.map(g=>`<div class="sghd" data-sghd="${esc(g.d)}">${esc(g.d)}</div>`+g.xs.map(x=>`<button type="button" class="sgin" data-sgpick="${kind}" data-name="${esc(x.name)}"><span>${esc(x.name)}${Y[x.name]?` <small>${esc(Y[x.name])}</small>`:""}</span></button>`).join("")).join(""):`<div class="by" style="padding:6px 10px">${!SGN.loaded?"読み込み中…":kidsMode&&!(SGN.kids||[]).length?"放課後デイ（りんく・ぷれいす）の利用者がまだいません。送迎表の「りんく・ぷれいす版」の利用者タブで登録すると、ここに出ます。":"見つかりません"}</div>`);h.hidden=false;
+  h.innerHTML=(noHit?`<div class="by" data-sg-nohit style="padding:6px 10px">「${esc(qq)}」に合う名前がありません。漢字で打つか、下の一覧から押してください。</div>`:"")+(list.length?groups.map(g=>`<div class="sghd" data-sghd="${esc(g.d)}">${esc(g.d)}</div>`+g.xs.map(x=>`<button type="button" class="sgin" data-sgpick="${kind}" data-name="${esc(x.name)}"><span>${esc(x.name)}${Y[x.name]?` <small>${esc(Y[x.name])}</small>`:""}</span></button>`).join("")).join(""):`<div class="by" style="padding:6px 10px">${!SGN.loaded?"読み込み中…":kind!=="staff"&&namesErr&&!src.length?`利用者の名前の一覧を読み込めませんでした（${esc(namesErr)}）。<button type="button" class="btn" data-names-retry>もう一度読む</button>`:kidsMode&&!(SGN.kids||[]).length?"放課後デイ（りんく・ぷれいす）の利用者がまだいません。送迎表の「りんく・ぷれいす版」の利用者タブで登録すると、ここに出ます。":"見つかりません"}</div>`);h.hidden=false;
 }
 /* 名前の欄に打った文字が、候補の名前（またはよみがな）とそのまま同じなら、選ばなくても入れる（2026-11-07 依頼者「打った内容がリストにあるなら選択不要に」）。
    ラベルを変える・保存する・ほかの項目を変えるとき（readSg）に入る。同じよみの人が2人以上いるときは入れない（選んでもらう） */
@@ -1063,6 +1069,7 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-do-del]")){core.remove(ed.base);closeEditor();toast("ゴミ箱に移しました（30日間は元に戻せます）");return}
   if(t.closest("[data-revert]")){const p=ed.base.prev;core.save({title:p.title,date:p.date,endDate:p.endDate,allDay:p.allDay,start:p.start,end:p.end,label:p.label,biz:bizOf(p),place:p.place,memo:p.memo,members:p.members,tanto:p.tanto||[],sg:p.sg||null},ed.base);closeEditor();toast("1つ前の内容に戻しました");return}
   const fl=t.closest("[data-fill]");if(fl){const i=$(fl.dataset.fill);if(i){i.value=i.value===fl.dataset.v?"":fl.dataset.v;readSg();drawSg();draftSave()}return}
+  if(t.closest("[data-names-retry]")){const k=$("f-sgq-users")?"users":"staff";$("sghits-"+k).innerHTML=`<div class="by" style="padding:6px 10px">読み込み中…</div>`;loadNames().then(()=>{const i=$("f-sgq-"+k);if(i)sgHits(k,i.value)});return}
   const sgp=t.closest("[data-sgpick]");if(sgp){readSg();const k=sgp.dataset.sgpick;const w=ed.d.w;w["q_"+k]="";if(oneOnly(ed.d.label,k))w[k]=[sgp.dataset.name];else if(!w[k].includes(sgp.dataset.name))w[k].push(sgp.dataset.name);if(ed.d.label==="shift"&&k==="staff"&&w.kinmu)applyKinmu(w,ed.d);drawSg();setTimeout(()=>{const i=$("f-sgq-"+k);if(i){i.focus();sgHits(k,"")}},0);draftSave();return}
   const sgr=t.closest("[data-sgrm]");if(sgr){readSg();const k=sgr.dataset.sgrm;ed.d.w[k]=ed.d.w[k].filter(n=>n!==sgr.dataset.name);drawSg();draftSave();return}
   if(!t.closest(".sgsub")){for(const k of["staff","users"]){const h=$("sghits-"+k);if(h)h.hidden=true}}
