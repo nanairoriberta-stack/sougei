@@ -277,3 +277,16 @@ console.log("shift extra ok");
   assert.deepStrictEqual(S.overflow(m, "2026-12-01"), { e: ["横田"], l: ["宮永"] }, "枠に入っていない早番・遅番の希望の人");
   assert.deepStrictEqual(S.overflow(m, "2026-12-02"), { e: [], l: [] });
   console.log("早番・遅番の超過 OK"); }
+{ // 配置未定（2026-11-23 依頼者）：基本では出る日なのにどの枠にも入っていない人は休みではなく配置未定。休みの希望なら休み。確定した月は今までどおり
+  const c = S.cfgOf("m", null), ym = "2026-12", r = S.autoShift({ days: {} }, c, ym), m0 = r.month || r;
+  assert.deepStrictEqual(S.unplacedAll(m0, c, ym), [], "自動で作った月は配置未定なし");
+  const date = S.daysOfMonth(ym).find((d) => Object.values((m0.days[d] || {}).e || {}).length);
+  const m = JSON.parse(JSON.stringify(m0)), k = Object.keys(m.days[date].e)[0], n = S.slotName(m.days[date].e[k]); delete m.days[date].e[k];
+  if (!S.workers(m, date).has(n)) {
+    assert.deepStrictEqual(S.unplaced(m, c, date), [n], "枠から外した人は配置未定");
+    assert.ok(!S.offList(m, c, date).includes(n), "休みの行には出ない");
+    assert.deepStrictEqual(S.unplacedAll(m, c, ym), [{ date, names: [n] }]);
+    m.wish = { [n]: { [date]: "休" } }; assert.deepStrictEqual(S.unplaced(m, c, date), [], "休みの希望なら休み"); assert.ok(S.offList(m, c, date).includes(n));
+    m.wish = {}; m.fixed = { at: "x" }; assert.deepStrictEqual(S.unplaced(m, c, date), [], "確定した月は出さない");
+  }
+  console.log("配置未定 OK"); }

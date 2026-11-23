@@ -74,3 +74,6 @@ label.opt{flex-direction:row;align-items:center;gap:6px;padding:6px;border:1px s
 
 /* 希望の文字の色（2026-11-23）：早番＝赤橙・遅番＝青・日勤＝緑（休みは .woff の赤） */
 .wE{color:#c2410c;font-weight:700}.wL{color:#1d4ed8;font-weight:700}.wD{color:#15803d;font-weight:700}
+
+/* 配置未定（基本では出る日なのにどの枠にも入っていない人。2026-11-23） */
+.line.unp{color:#92400e;background:#fef3c7;border:1.5px dashed #f59e0b;border-radius:6px;padding:1px 4px;font-weight:700}

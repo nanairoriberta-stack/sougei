@@ -163,7 +163,19 @@
   const workers = (month, date) => new Set(entries(month, date).map((e) => e.n));
   const wishOf = (month, name, date) => (((month && month.wish) || {})[name] || {})[date] || "";
   // 休み＝その日どこにも入っていない人。ただし早番・遅番・日勤など「出る」希望の人は休みに出さない（2026-11-07 依頼者「希望を早番にしたのに休みにも入っている」）
-  const offList = (month, cfg, date) => (cfg.members || []).map((m) => m.name).filter((n) => !workers(month, date).has(n) && !(wishOf(month, n, date) && !OFF_WISH[wishOf(month, n, date)]));
+  /* 配置未定（2026-11-23 依頼者「本来入っていた人を外してもその人はお休みになるのはおかしい。勤務だから配置未定みたいな枠で残して。その状態でシフト決定するとエラー」）：
+     基本シフトでその日に出る人（早・遅・日勤）と、出る希望（日勤・時刻）の人で、どの枠・日勤にも入っていない人。休みの希望（休・AM休・PM休）は休み。
+     早番・遅番の希望の人は「超過」（overflow）に出すのでここには入れない。確定した月（11月までの紙の表も）は出さない（今までどおり休みの行） */
+  const baseNames = (cfg, date) => { const b = baseFor(cfg, date) || {}; return new Set([...(b.e || []), ...(b.l || []), ...(b.d || [])].map((x) => splitName(x).n).filter(Boolean)); };
+  function unplaced(month, cfg, date) {
+    if (isFixed(month, String(date).slice(0, 7))) return [];
+    const w = workers(month, date), base = baseNames(cfg, date);
+    return (cfg.members || []).map((m) => m.name).filter((n) => { if (w.has(n)) return false; const wi = wishOf(month, n, date);
+      if (OFF_WISH[wi]) return false; if (WISH_KIND[wi] === "e" || WISH_KIND[wi] === "l") return false; return base.has(n) || !!wi; });
+  }
+  const offList = (month, cfg, date) => { const un = new Set(unplaced(month, cfg, date)); return (cfg.members || []).map((m) => m.name).filter((n) => !workers(month, date).has(n) && !un.has(n) && !(wishOf(month, n, date) && !OFF_WISH[wishOf(month, n, date)])); };
+  // 確定する前の確かめ：配置未定の人がいる日（[{date, names}]）
+  const unplacedAll = (month, cfg, ym) => daysOfMonth(ym).map((date) => ({ date, names: unplaced(month, cfg, date) })).filter((x) => x.names.length);
   /* 自動でシフトを作る（2026-11-07 依頼者「希望が完了したらシフト作成を行ってほしい。そのボタン」）：
      基本パターンで下書き → 決まりどおりに並べ替え → 遅番の次の日の早番を替える → 残った空きに入れられる人（その日の日勤の人・空いている人）を入れる → もう一度決まりどおりに。
      手で入れた枠はそのまま（空いている枠だけ埋める）。希望休の人・遅番の次の日の早番は入れない */
@@ -446,7 +458,7 @@
           cell(r0 + i, c, { richText: [{ text: `${KIND[k]}${MARK[i] || i}：`, font: { name: "Meiryo UI", size: 10, bold: true, color: { argb: k === "e" ? RED : BLUE } } }, { text: n ? n + (sl && sl.t ? `(${sl.t})` : "") : "空き", font: { name: "Meiryo UI", size: 10, bold: !n, color: { argb: n ? "FF18201D" : "FF92400E" } } }] }, Object.assign({ align: { shrinkToFit: true } }, n ? {} : { fill: HOLE }));   // 長い名前・時間は文字を小さくして枠に収める
         }
         ws.mergeCells(r0 + rows + 1, c1, r0 + rows + 1, c2); cell(r0 + rows + 1, c1, `日勤：${(d.d || []).join("、")}`, { font: { size: 9 }, align: { wrapText: true, vertical: "top" } });
-        ws.mergeCells(rEnd, c1, rEnd, c2); cell(rEnd, c1, `休み：${offList(month, cfg, date).join("、")}`, { font: { size: 9 }, align: { wrapText: true, vertical: "top" } });
+        ws.mergeCells(rEnd, c1, rEnd, c2); cell(rEnd, c1, `休み：${offList(month, cfg, date).join("、")}${unplaced(month, cfg, date).length ? `　配置未定：${unplaced(month, cfg, date).join("、")}` : ""}`, { font: { size: 9 }, align: { wrapText: true, vertical: "top" } });
         box(r0, c1, rEnd, c2);
       });
       for (let rr = r0; rr <= rEnd; rr++) ws.getRow(rr).height = 16;
@@ -509,5 +521,5 @@
       if (!Object.values(d[k] || {}).some((s) => slotName(s) === n)) out[k].push(n); }
     return out;
   }
-  return { overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  return { unplaced, unplacedAll, overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

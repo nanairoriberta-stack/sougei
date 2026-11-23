@@ -615,6 +615,18 @@ const D = path.join(__dirname, "../gas/out");
       if (await T.pg.locator('[data-pick="秋山"]').count()) { await T.pg.click('[data-pick="秋山"]'); await T.pg.waitForTimeout(300); }
       if (await T.pg.locator("[data-close-pick]").count()) { await T.pg.click("button[data-close-pick]").catch(() => {}); await T.pg.waitForTimeout(200); }
       assert.ok(await inE(), "早番に戻した");
+      { // 配置未定（2026-11-23 依頼者「本来入っていた人を外しても休みになるのはおかしい。配置未定の枠で残して、その状態で確定するとエラー」）
+        const un = await T.pg.$$eval("[data-unplaced]", (l) => l.map((x) => [x.dataset.unplaced, [...x.querySelectorAll("span")].map((s) => s.textContent)]));
+        assert.ok(un.length > 0, "確定を取り消した11月（紙の表）は、基本では出る日なのに入っていない人が配置未定に出る");
+        for (const [dt, ns] of un) { const off = (await T.pg.locator(`td[data-day="${dt}"] .line.off`).innerText()); for (const n of ns) assert.ok(!off.includes(n), `${dt} ${n} は休みの行に出ない ` + off); }
+        let msg = ""; T.pg.once("dialog", (d) => { msg = d.message(); d.accept(); }); await T.pg.click("[data-fix-btn]"); await T.pg.waitForTimeout(500);
+        assert.ok(msg.includes("配置未定の人がいるので確定できません") && msg.includes(un[0][1][0]), "確定するとエラー " + msg);
+        assert.ok(await T.pg.locator('[data-fix="off"]').isVisible(), "確定されない");
+        await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200);
+        for (const [dt, ns] of un) for (const n of ns) { await T.pg.selectOption("#shWho", n); await wp(dt, "休"); }   // 休みにすると配置未定から外れる
+        assert.strictEqual(await T.pg.locator("[data-unplaced]").count(), 0, "休みにすると配置未定は消える");
+        await T.pg.click('[data-mode="shift"]'); await T.pg.waitForTimeout(200);
+        console.log("配置未定 OK", JSON.stringify(un)); }
       T.pg.once("dialog", (d) => d.accept()); await T.pg.click("[data-fix-btn]"); await T.pg.waitForTimeout(800);   // 確定し直す
       assert.ok(await T.pg.locator('[data-fix="on"]').isVisible(), "確定し直した");
       await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", "秋山"); }

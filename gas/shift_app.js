@@ -183,6 +183,7 @@
         const wd = X.wdOf(date);
         return `<td class="day${wd === 0 ? " su" : wd === 6 ? " sa" : ""}${S.mode === "wish" ? " wishmode" : ""}" data-day="${date}"><div class="dnum">${Number(date.slice(8))}${d.note ? `<span class="dnote">${esc(d.note)}</span>` : ""}</div><div class="slots">${grid}</div>
           ${hidden ? "" : `<div class="line"><button class="dk" data-dk="${date}" ${S.mode === "wish" ? "tabindex=-1" : ""}>日勤：${esc((d.d || []).join("、"))}</button></div>
+          ${(() => { const un = X.unplaced(S.month, c, date); return un.length ? `<div class="line unp" data-unplaced="${date}">配置未定：${un.map((n) => `<span>${esc(n)}</span>`).join("、")}</div>` : ""; })()}
           <div class="line off">休み：${off.map((n) => `<span class="${X.wishOf(S.month, n, date) ? "w" : ""}">${esc(n)}</span>`).join("、")}</div>`}
           ${wishes.length ? `<div class="line wish">希望：${wishes.map(([n, w]) => `<span class="${wcls(w)}" data-wcls="${wcls(w)}">${esc(n)} ${esc(w)}</span>`).join("、")}</div>` : ""}</td>`;
       }).join("") + "</tr>";
@@ -310,6 +311,9 @@
       toast(`遅番の次の日の早番を替えました：${r.fixed.map((x) => x.late ? `${X.label(x.late.date)} 遅${X.MARK[x.late.slot]}→${x.late.to}` : `${X.label(x.date)} 早${X.MARK[x.slot]}→${x.to}`).join("、")}`); return; }
     if (act === "fixrules") { const n = X.ruleIssues(S.month, cfg(), S.ym).length; S.month = X.fixRules(S.month, cfg(), S.ym); changed("month"); toast(`決まりどおりに並べ替えました（${n}件）`); return; }
     if (act === "fix") {
+      // 配置未定の人がいるうちは確定しない（2026-11-23 依頼者「その状態でシフト決定するとエラー出る」）
+      const un = X.unplacedAll(S.month, cfg(), S.ym);
+      if (un.length) { alert(`配置未定の人がいるので確定できません。\n${un.slice(0, 12).map((x) => `${X.label(x.date)} ${x.names.join("・")}`).join("\n")}${un.length > 12 ? `\nほか${un.length - 12}日` : ""}\n\n早番・遅番・日勤の枠に入れるか、休みにする（希望で「休み」）と確定できます。`); toast("配置未定の人がいるので確定できません", 6000); return; }
       const hn = X.holes(S.month, cfg(), S.ym).length;
       if (!confirm(`${S.ym.replace("-", "年")}月のシフトを確定します。${hn ? `\n※まだ空きが ${hn}枠 あります。` : ""}\n確定すると、表の職員にも見え、職場カレンダーにも出ます。よろしいですか？`)) return;
       S.month = S.month || {}; S.month.fixed = { at: new Date().toISOString(), by: me().name || "" }; changed("month"); toast("確定しました。職員にも見え、カレンダーにも出ます"); return; }
