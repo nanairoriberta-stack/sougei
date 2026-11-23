@@ -124,6 +124,8 @@
     changed("month");
   }
   // かんたん入力：職員・日にち・希望を選んで「入れる」（2026-11-07 依頼者「職員、何日、どの休みか出勤形態かをシンプルに選択だけで」）
+  // 希望の文字の色（2026-11-23 依頼者「早番・遅番・日勤も希望に入ったら文字の色を変えて分かりやすく」）：休み＝赤（以前から）、早番＝赤橙、遅番＝青、日勤＝緑
+  const wcls = (w) => /休/.test(w || "") ? "woff" : /^早/.test(w || "") ? "wE" : /^遅/.test(w || "") ? "wL" : w === "日" ? "wD" : "";
   const wishText = (v) => ({ "休": "休み", "早": "早番", "遅": "遅番", "日": "日勤", "早ﾏﾝのみ": "早ﾏﾝｼｮﾝのみ", "遅ﾏﾝのみ": "遅ﾏﾝｼｮﾝのみ" })[v] || v;
 
   /* ---------- 描く ---------- */
@@ -144,7 +146,7 @@
     if (S.mode === "wish") html += `<div class="sh-wishbar">希望を入れる人：${S.canEdit ? `<select id="shWho">${c.members.map((x) => `<option ${x.name === S.wishWho ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>` : `<b>${esc(S.wishWho)}</b>`}
       <span class="note">日付のマスを押すと、休み・早番などを選べます</span>
       <div class="wlist" data-wish-list>${(() => { const w = ((S.month && S.month.wish) || {})[S.wishWho] || {}, ds = Object.keys(w).sort();
-        return ds.length ? ds.map((d) => `<span class="wi">${esc(X.label(d))} ${esc(wishText(w[d]))}${S.canEdit || S.wishWho === S.myName ? `<button type="button" data-wish-del="${d}" aria-label="消す">×</button>` : ""}</span>`).join("") : `<span class="note">${esc(S.wishWho)}さんの今月の希望はまだありません</span>`; })()}</div>
+        return ds.length ? ds.map((d) => `<span class="wi ${wcls(w[d])}">${esc(X.label(d))} ${esc(wishText(w[d]))}${S.canEdit || S.wishWho === S.myName ? `<button type="button" data-wish-del="${d}" aria-label="消す">×</button>` : ""}</span>`).join("") : `<span class="note">${esc(S.wishWho)}さんの今月の希望はまだありません</span>`; })()}</div>
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
     // シフトの確定（2026-11-07 依頼者「管理者以外は確定までは見えないように。最終確定ボタン」）
     // 男性の表は、表の職員には希望を入れる画面だけ（2026-11-10 依頼者「男性の希望休のカレンダーは希望を入れる画面のみに」）。勤務は職場カレンダーで見る
@@ -182,7 +184,7 @@
         return `<td class="day${wd === 0 ? " su" : wd === 6 ? " sa" : ""}${S.mode === "wish" ? " wishmode" : ""}" data-day="${date}"><div class="dnum">${Number(date.slice(8))}${d.note ? `<span class="dnote">${esc(d.note)}</span>` : ""}</div><div class="slots">${grid}</div>
           ${hidden ? "" : `<div class="line"><button class="dk" data-dk="${date}" ${S.mode === "wish" ? "tabindex=-1" : ""}>日勤：${esc((d.d || []).join("、"))}</button></div>
           <div class="line off">休み：${off.map((n) => `<span class="${X.wishOf(S.month, n, date) ? "w" : ""}">${esc(n)}</span>`).join("、")}</div>`}
-          ${wishes.length ? `<div class="line wish">希望：${wishes.map(([n, w]) => `<span class="${/休/.test(w) ? "woff" : ""}">${esc(n)} ${esc(w)}</span>`).join("、")}</div>` : ""}</td>`;
+          ${wishes.length ? `<div class="line wish">希望：${wishes.map(([n, w]) => `<span class="${wcls(w)}" data-wcls="${wcls(w)}">${esc(n)} ${esc(w)}</span>`).join("、")}</div>` : ""}</td>`;
       }).join("") + "</tr>";
     }
     html += `</tbody></table>`;
@@ -240,14 +242,14 @@
     const busy = X.workers(S.month, p.date);
     if (p.k === "d") {
       const cur = new Set((d.d || []).map((x) => X.splitName(x).n));
-      el.innerHTML = `<div class="ov" data-close-pick><div class="pk"><h3>${X.label(p.date)} 日勤</h3>${c.members.map((x) => { const w = X.wishOf(S.month, x.name, p.date); return `<label class="opt"><input type="checkbox" data-dkn="${esc(x.name)}" ${cur.has(x.name) ? "checked" : ""}>${esc(x.name)}${w ? `<em class="${/休/.test(w) ? "woff" : ""}">希望：${esc(w)}</em>` : ""}${!cur.has(x.name) && busy.has(x.name) ? `<em>ほかの枠に入っています</em>` : ""}</label>`; }).join("")}
+      el.innerHTML = `<div class="ov" data-close-pick><div class="pk"><h3>${X.label(p.date)} 日勤</h3>${c.members.map((x) => { const w = X.wishOf(S.month, x.name, p.date); return `<label class="opt"><input type="checkbox" data-dkn="${esc(x.name)}" ${cur.has(x.name) ? "checked" : ""}>${esc(x.name)}${w ? `<em class="${wcls(w)}">希望：${esc(w)}</em>` : ""}${!cur.has(x.name) && busy.has(x.name) ? `<em>ほかの枠に入っています</em>` : ""}</label>`; }).join("")}
         <div class="acts"><button data-close-pick>閉じる</button><button class="primary" data-dk-save>決定</button></div></div></div>`;
       return;
     }
     const s = (d[p.k] || {})[p.i], curN = X.slotName(s);
     el.innerHTML = `<div class="ov" data-close-pick><div class="pk"><h3>${X.label(p.date)} ${X.KIND[p.k]}${X.MARK[p.i] || p.i}</h3>
       <div class="opts">${c.members.map((x) => { const w = X.wishOf(S.month, x.name, p.date), sameK = Object.keys(d[p.k] || {}).find((j) => Number(j) !== p.i && X.slotName(d[p.k][j]) === x.name), inDay = !sameK && busy.has(x.name) && x.name !== curN;
-        return `<button class="opt${x.name === curN ? " on" : ""}" data-pick="${esc(x.name)}">${esc(x.name)}${w ? `<em class="${/休/.test(w) ? "woff" : ""}">希望：${esc(w)}</em>` : ""}${inDay ? `<em>この日ほかに入っています</em>` : ""}${sameK ? `<em class="swap" data-swap>${X.KIND[p.k]}${X.MARK[sameK] || sameK}に入っています（押すと入れ替え）</em>` : ""}</button>`; }).join("")}</div>
+        return `<button class="opt${x.name === curN ? " on" : ""}" data-pick="${esc(x.name)}">${esc(x.name)}${w ? `<em class="${wcls(w)}">希望：${esc(w)}</em>` : ""}${inDay ? `<em>この日ほかに入っています</em>` : ""}${sameK ? `<em class="swap" data-swap>${X.KIND[p.k]}${X.MARK[sameK] || sameK}に入っています（押すと入れ替え）</em>` : ""}</button>`; }).join("")}</div>
       <p class="note">同じ日の${X.KIND[p.k]}番のほかの枠の人を押すと、この枠と入れ替わります</p>
       <label class="tm">時間（通しなら空欄。例：6~9、16~22）<input id="shTime" maxlength="12" value="${esc((s && s.t) || "")}"></label>
       <div class="acts"><button data-pick-clear>空きにする</button><button data-close-pick>閉じる</button></div></div></div>`;

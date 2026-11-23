@@ -573,6 +573,11 @@ const D = path.join(__dirname, "../gas/out");
       const ov = T.pg.locator(`[data-over="${D}|e"]`);
       assert.ok((await ov.innerText()).includes("早超過") && (await ov.innerText()).includes(who), "超過に出る " + (await ov.innerText()));
       assert.strictEqual(await ov.evaluate((el) => !!el.previousElementSibling && el.previousElementSibling.classList.contains("pair")), true, "枠のすぐ下");
+      { const col = (c) => T.pg.$eval(`td[data-day="${D}"] .line.wish [data-wcls="${c}"]`, (el) => getComputedStyle(el).color);   // 希望の文字の色（2026-11-23 依頼者）
+        assert.strictEqual(await col("wE"), "rgb(194, 65, 12)", "早番の希望は赤橙");
+        await wp(D, "遅"); assert.strictEqual(await col("wL"), "rgb(29, 78, 216)", "遅番の希望は青");
+        await wp(D, "日"); assert.strictEqual(await col("wD"), "rgb(21, 128, 61)", "日勤の希望は緑");
+        await wp(D, "早"); }
       await T.pg.locator(`td[data-day="${D}"]`).screenshot({ path: "g_shift_over.png" });
       await wp(D, ""); assert.strictEqual(await T.pg.locator(`[data-over="${D}|e"]`).count(), 0, "希望を消すと消える");
       await T.pg.selectOption("#shWho", "秋山"); console.log("早番の超過 OK", who); }
