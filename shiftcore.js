@@ -484,5 +484,22 @@
       for (const v of d.d || []) { const n = splitName(v).n; if (ngOf(cfg, n, date, "d")) out.push({ date, name: n, kind: "d", slot: 0 }); } }
     return out;
   }
-  return { NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  /* 希望休のあとの調整：日勤の人を早番・遅番に振り分ける（2026-11-23 依頼者「早番に入れたら日勤からは消える、日勤に入れたら早か遅から消える」）。
+     day＝その日の {e,l,d}。早番・遅番の枠に入れた人はその日の日勤から外す（moveToSlot）、日勤に入れた人は早番・遅番の枠から外す（moveToDay）。
+     時間を添えたもの（早番「秋山(6~9)」・日勤「近藤(~13)」）は時間の一部だけなので外さない。返すのは外した場所（お知らせ用） */
+  function moveToSlot(day, k, name, t) {
+    if (!day || !name || (k !== "e" && k !== "l") || t) return [];
+    const before = (day.d || []).length;
+    day.d = (day.d || []).filter((x) => { const e = splitName(x); return e.n !== name || !!e.t; });
+    return day.d.length < before ? ["日勤"] : [];
+  }
+  function moveToDay(day, names) {
+    const out = [];
+    const plain = new Set((names || []).filter((x) => !splitName(x).t).map((x) => splitName(x).n));
+    for (const k of ["e", "l"]) if (day && day[k]) { const o = Object.assign({}, day[k]);
+      for (const i of Object.keys(o)) { const n = slotName(o[i]), tt = o[i] && typeof o[i] === "object" ? o[i].t : ""; if (n && plain.has(n) && !tt) { delete o[i]; out.push(`${n}（${KIND[k]}${MARK[i] || i}）`); } }
+      day[k] = o; }
+    return out;
+  }
+  return { moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

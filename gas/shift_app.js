@@ -96,11 +96,19 @@
     const other = name ? Object.keys(d[k]).find((j) => Number(j) !== Number(i) && X.slotName(d[k][j]) === name) : null;
     if (other) { const mine = d[k][i], theirs = d[k][other]; d[k][i] = theirs; if (X.slotName(mine)) d[k][other] = mine; else delete d[k][other]; changed("month"); toast(`${X.KIND[k]}${X.MARK[i] || i}と${X.KIND[k]}${X.MARK[other] || other}を入れ替えました`); return; }
     if (name) d[k][i] = t ? { n: name, t } : { n: name }; else delete d[k][i];
+    const moved = name ? X.moveToSlot(d, k, name, t) : [];   // 早番・遅番に入れた人はその日の日勤から外す（2026-11-23 依頼者）
     changed("month");
+    if (moved.length) toast(`${name}さんを日勤から${X.KIND[k]}${X.MARK[i] || i}へ移しました`);
   }
   // 基本シフトを変える（設定に保存。曜日ごと）
   function setBase(wd, fn) { const c = clone(cfg()); c.base = Object.assign({}, c.base); const b = Object.assign({ e: [], l: [], d: [] }, c.base[wd]); fn(b); c.base[wd] = b; S.cfg = c; changed("cfg"); }
-  function setDayWorkers(date, names) { dayObj(date).d = names; changed("month"); }
+  function setDayWorkers(date, names) {
+    const d = dayObj(date), was = new Set((d.d || []).map((x) => X.splitName(x).n));
+    d.d = names;
+    const moved = X.moveToDay(d, names.filter((x) => !was.has(X.splitName(x).n)));   // 新しく日勤に入れた人は早番・遅番の枠から外す（2026-11-23 依頼者）。枠は空きになる
+    changed("month");
+    if (moved.length) toast(`日勤に移したので、早番・遅番の枠を空けました：${moved.join("、")}`);
+  }
   // 希望はボタンで選んでから日付を押す（2026-11-07 依頼者「休みや勤務をボタン式に。早番・遅番・マンション早のみなど＋その他で任意の時間」）。
   // 同じ希望の日をもう一度押すと消える。「消す」を選んで押しても消える。その他は「9:00~15:00」のように時刻で持つ
   const WISH_BTNS = [["休", "休み"], ["AM休", "AM休"], ["PM休", "PM休"], ["早", "早番"], ["遅", "遅番"], ["日", "日勤"], ["早ﾏﾝのみ", "早ﾏﾝｼｮﾝのみ"], ["遅ﾏﾝのみ", "遅ﾏﾝｼｮﾝのみ"], ["time", "その他(時刻)"], ["", "消す"]];

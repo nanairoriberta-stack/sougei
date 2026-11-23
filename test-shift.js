@@ -259,3 +259,15 @@ console.log("shift extra ok");
   assert.strictEqual(S.ngText(c.ng[1]), "近藤さんは毎日の出勤はNG");
   assert.deepStrictEqual(S.ngIssues(man, S.cfgOf("m", null), ym), [], "条件が無ければ何も出ない");
   console.log("ng conditions OK"); }
+{ // 希望休のあとの調整：日勤の人を早番・遅番に振り分ける（2026-11-23 依頼者「早番に入れたら日勤からは消える、日勤に入れたら早か遅から消える」）
+  const d = { e: { 1: { n: "秋山" } }, l: { 1: { n: "橋本" }, 2: { n: "宮永", t: "17~22" } }, d: ["近藤", "青木(9~18)", "野津"] };
+  d.e[2] = { n: "近藤" }; assert.deepStrictEqual(S.moveToSlot(d, "e", "近藤", ""), ["日勤"]);
+  assert.deepStrictEqual(d.d, ["青木(9~18)", "野津"], "早番に入れたら日勤から消える");
+  d.l[3] = { n: "青木" }; assert.deepStrictEqual(S.moveToSlot(d, "l", "青木", ""), [], "時間を添えた日勤は残す");
+  assert.deepStrictEqual(S.moveToSlot(d, "e", "野津", "6~9"), [], "時間を添えて早番に入れたときは日勤のまま");
+  assert.deepStrictEqual(d.d, ["青木(9~18)", "野津"]);
+  d.d = [...d.d, "秋山", "宮永"];
+  assert.deepStrictEqual(S.moveToDay(d, ["秋山", "宮永"]), ["秋山（早①）"], "日勤に入れたら早番から消える（時間を添えた遅番の宮永は残す）");
+  assert.ok(!d.e[1] && d.l[2] && d.l[2].n === "宮永", "枠は空きになる");
+  assert.deepStrictEqual(S.moveToDay(d, ["青木(9~18)"]), [], "時間を添えた日勤は早番・遅番から外さない");
+  console.log("日勤⇔早番・遅番の振り分け OK"); }

@@ -521,6 +521,21 @@ const D = path.join(__dirname, "../gas/out");
     await T.pg.click('[data-slot="2026-11-02|l|3"]'); await T.pg.waitForTimeout(200); await T.pg.click('[data-pick="野津"]'); await T.pg.waitForTimeout(2500);   // 元に戻す
     { const fv = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.days["2026-11-02"].l;
       assert.deepStrictEqual([fv[1].n, fv[2].n, fv[3].n], ["橋本", "宮永", "野津"], "もう一度で元に戻る"); }
+    { // 日勤の人を早番・遅番に振り分ける（2026-11-23 依頼者「早番に入れたら日勤からは消える、日勤に入れたら早か遅から消える」）
+      const D = "2026-11-02", day = () => api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.days[D];
+      const d0 = day(), orig = d0.e[1] && d0.e[1].n, x = (d0.d || []).find((v) => !/\(/.test(v) && !Object.values(d0.e).concat(Object.values(d0.l)).some((o) => o && o.n === v));
+      assert.ok(orig && x, "試す人 " + JSON.stringify(d0));
+      await T.pg.click(`[data-slot="${D}|e|1"]`); await T.pg.waitForTimeout(200); await T.pg.click(`[data-pick="${x}"]`); await T.pg.waitForTimeout(400);
+      assert.ok((await T.pg.locator("#shToast").innerText()).includes(`${x}さんを日勤から早①へ移しました`), "お知らせ");
+      await T.pg.waitForTimeout(2200);
+      assert.ok(day().e[1].n === x && !(day().d || []).includes(x), "早番に入れたら日勤から消える " + JSON.stringify(day()));
+      await T.pg.click(`[data-dk="${D}"]`); await T.pg.waitForTimeout(200); await T.pg.check(`[data-dkn="${x}"]`); await T.pg.click("[data-dk-save]"); await T.pg.waitForTimeout(400);
+      assert.ok((await T.pg.locator("#shToast").innerText()).includes("早番・遅番の枠を空けました"), "お知らせ");
+      await T.pg.waitForTimeout(2200);
+      assert.ok(!day().e[1] && (day().d || []).includes(x), "日勤に入れたら早番から消える（枠は空き） " + JSON.stringify(day()));
+      await T.pg.click(`[data-slot="${D}|e|1"]`); await T.pg.waitForTimeout(200); await T.pg.click(`[data-pick="${orig}"]`); await T.pg.waitForTimeout(2500);   // 元に戻す
+      assert.strictEqual(day().e[1].n, orig, "元に戻す");
+      console.log("日勤⇔早番・遅番の振り分け（画面）OK", x); }
     await T.pg.click('[data-act="settings"]'); await T.pg.waitForTimeout(200);
     assert.strictEqual(await T.pg.locator('[data-rn="0"]').inputValue(), "橋本"); assert.strictEqual(await T.pg.locator('[data-rc="0"]').inputValue(), "2"); assert.strictEqual(await T.pg.locator('[data-rs="0"]').inputValue(), "1");
     await T.pg.locator(".pk.wide").screenshot({ path: "g_shiftpage_rules.png" }); await T.pg.click("[data-set-close]"); await T.pg.waitForTimeout(200);
