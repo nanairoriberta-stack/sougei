@@ -147,7 +147,7 @@ function renderGrid(vis){
 }
 function evRow(e,ps){
   const av=e.members.slice(0,6).map(id=>ps[id]?`<img src="${esc(ps[id].avatarUrl)}" alt="${esc(ps[id].name||"メンバー")}" title="${esc(ps[id].name||"メンバー")}">`:"").join("");
-  return`<li><button class="ev-row g-${grpOf(e.label).k}" data-grp="${grpOf(e.label).k}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(ttl(e))}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${(e.users||[]).length?`<span>利用者：${esc(e.users.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
+  return`<li><button class="ev-row g-${grpOf(e.label).k}" data-grp="${grpOf(e.label).k}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(ttl(e))}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${(e.users||[]).length?`<span>利用者：${esc(e.users.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${workTimeHtml(e)}${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
 /* ---------- マンションの活動計画書（2026-11-17 依頼者「日付を開いて、ワードやエクセルをドロップすると活動計画書ができるように」→「その日に貼り付けて見られる」） ----------
    マンションのタブで日付を開くと「📄 活動計画書」の欄。パソコンはファイルをドロップ、スマホは「ファイルを選ぶ」。サーバー mfile.put（_docs の mfile/）。
    見る：Excel（ExcelJS で表に）・Word .docx（mammoth で文に）・PDF・画像・CSV/文字。古い .xls/.doc は保存して開く。貼る・消すのはマンションの人と管理者 */
@@ -245,10 +245,21 @@ function fitGrid(){
   CELLH=Math.max(48,Math.floor((vh-Math.max(0,top)-10)/6));
   g.style.setProperty("--cellh",CELLH+"px");
 }
+/* 時間変更・遅刻・早退・休日出勤の、その日の出勤〜退勤（2026-11-23 依頼者「時間変更した場合は、カレンダーのラベルの下部に変更した出勤時間を出して」）。
+   変えていない方はいつもの時刻（送迎表の職員のタブ）。予定の一覧の行のラベルの下に出す（data-worktime） */
+function workTimeText(e){
+  const sg=e&&e.sg;if(!sg||(sg.type!=="shift"&&sg.type!=="hwork"))return"";
+  const si=staffInfo((sg.staff||[])[0],e.date,bizOf(e)),u=si.t||[];
+  let a,b;if(sg.type==="hwork"){a=e.allDay?u[0]:e.start;b=e.allDay?u[1]:e.end}else{a=sg.wstart||u[0];b=sg.wend||u[1]}
+  const t=sg.tbd?`出勤時刻未定${sg.wstart?`（${hm1(sg.wstart)}頃）`:""}${b?`〜${hm1(b)}`:""}`:a||b?`${a?hm1(a):"いつもの出勤"}〜${b?hm1(b):"いつもの退勤"}`:"";
+  const x=[t&&`勤務 ${t}`,sg.afrom&&sg.ato&&`中抜け${hm1(sg.afrom)}〜${hm1(sg.ato)}`,sg.libOnly&&"ﾘﾍﾞﾙﾀのみ"].filter(Boolean).join("・");
+  return x;
+}
+const workTimeHtml=(e,cls)=>{const t=workTimeText(e);return t?`<div class="${cls||"wt"}" data-worktime>${esc(t)}</div>`:""};
 function dsRow(e){
   const tm=e.allDay||e.date!==e.endDate&&!(e.date===S.sel&&e.start)?`<span class="ds-time">終日</span>`:`<span class="ds-time">${esc(e.start)}<small>${esc(e.end)}</small></span>`;
   const sub=[LMAP[e.label]?.n||"その他",e.place,(e.tanto||[]).length?"担当："+e.tanto.join("・"):"",(e.users||[]).length?"利用者："+e.users.join("・"):""].filter(Boolean).map(esc).join(" ・ ");
-  return`<li><button class="ds-row g-${grpOf(e.label).k}" data-grp="${grpOf(e.label).k}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${misTag(e)}${bizTag(e)}${esc(ttl(e))}</b><small>${sub}</small></span></button></li>`;
+  return`<li><button class="ds-row g-${grpOf(e.label).k}" data-grp="${grpOf(e.label).k}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})">${tm}<span class="ds-bar"></span><span class="ds-body"><b>${misTag(e)}${bizTag(e)}${esc(ttl(e))}</b><small>${sub}</small>${workTimeHtml(e,"ds-wt")}</span></button></li>`;
 }
 /* 日の一覧。作り直すのは中身（.ds-page）だけ（2026-11-17 依頼者「左右のスワイプで目がちかちかする」＝毎回、下から出てくる動きをやり直していた）。
    高さはいつも同じ（日によって予定の数が違っても画面の大きさを変えない。同じ日の依頼者「余白を作って、同じ画面サイズに」） */
@@ -559,7 +570,7 @@ function workOf(d){
     lt:sg.type==="shift"?sg.wstart||"":"",ltm:sg.type==="shift"&&sg.tbd?"tbd":"time",ltr:sg.type==="shift"&&sg.tbd?sg.note||"":"",et:sg.type==="shift"?sg.wend||"":"",
     nrmt:nrSplit(sg.noMeet)[1],nrst:nrSplit(sg.noSend)[1],
     awM:sg.afrom?"time":sg.noAway?"none":"same",afrom:sg.afrom||"",ato:sg.ato||"",
-    plan:sg.type==="staff_plan",wsM:sg.wstart?"time":"same",weM:sg.wend?"time":"same",wstart:sg.wstart||"",wend:sg.wend||"",
+    plan:sg.type==="staff_plan",libOnly:!!sg.libOnly,wsM:sg.wstart?"time":"same",weM:sg.wend?"time":"same",wstart:sg.wstart||"",wend:sg.wend||"",
     ...helpDurOf(sg,d)};   // ヘルプの時間（分）。決まった長さでなければ「終わりの時刻で」（2026-11-19 依頼者「2時間までしか入れられない。制限とって」）
 }
 const HELP_DURS=["30","60","90","120","180","240"];
@@ -583,9 +594,9 @@ function sgOf(label,w,d){
   if(label==="liberta")return Object.assign(base,{type:"liberta",staff:[],lib:w.lib==="on"?"on":"off",lfrom:w.lf==="pm"?"pm":"am",lto:w.lto==="am"?"am":"pm"});
   if(label==="hcancel")return Object.assign(base,{type:"help_cancel",staff:[]},w.hcM==="time"&&w.hct?{at:w.hct}:{});
   if(label==="hwork")return Object.assign(base,{type:"hwork",users:[],dept:w.dept},   // 休日出勤の中抜け（2026-11-10 依頼者「6:00〜9:00と17:00〜22:00のときは9:00〜17:00が不在の網掛けに」）
-    w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{});
+    w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{},w.libOnly?{libOnly:true}:{});
   if(label==="shift")return Object.assign(base,{type:"shift",users:[],dept:w.dept,reason:[w.kinmu,w.reason].filter(Boolean).join("・"),wstart:w.wsM==="time"?w.wstart:"",wend:w.weM==="time"?w.wend:""},KINMU_NORIDE.has(w.kinmu)?{noRide:true}:{},
-    w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{});
+    w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{},w.libOnly?{libOnly:true}:{});
   if(PLAN_LABELS.includes(label))return Object.assign(base,{type:"staff_plan"});
   if((label==="other"||label==="sother")&&w.plan)return Object.assign(base,{type:"staff_plan",users:[]});
   return null;
@@ -672,14 +683,14 @@ function drawSg(){
     +hint("週間パターンから入っている、いつものヘルプをその日だけなしにします（送迎表のその日のヘルプのコマが消えます）。予定を消すと元に戻ります。何日も続くときは終了日を変えてください。")
   else if(L==="user")h=who("users","利用者","利用者の名前で検索")+text("w-reason",w.reason,"例：通院",PICK.user,"理由（任意）")
     +hint("送迎表でその日は欠席になります。何日も続くときは終了日を変えてください。迎え・送りだけ変わるときは「送迎」のラベルを使ってください。");
-  else if(L==="hwork")h=(staffSelf(d)?self:who("staff","出勤する職員","職員の名前で検索"))+dept()+awayRow(d,w)
+  else if(L==="hwork")h=(staffSelf(d)?self:who("staff","出勤する職員","職員の名前で検索"))+dept()+awayRow(d,w)+`<label class="check"><input type="checkbox" id="w-libonly" data-libonly ${w.libOnly?"checked":""} ${dis}>この日は ﾘﾍﾞﾙﾀのみ</label>`+(w.libOnly?hint("送迎表のこの職員の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、下の部署の職員の欄には出ません。"):"")
     +hint("下の開始・終了の時刻で、送迎表のその日の出勤者に入ります（固定休の日でも）。");
   else if(L==="shift")h=(staffSelf(d)?self:who("staff","職員","職員の名前で検索"))
     +`<div class="sgsub"><span class="lbl2">勤務</span>${radios("w-kinmu",w.kinmu||"",[["","時刻で変える"],...KINMU.map(k=>[k,k])])}</div>`
     +(KINMU_NORIDE.has(w.kinmu)?hint("ﾏﾝｼｮﾝの日は、送迎表には載りますが送迎（便）には入りません。この職員に入っている便は保留へ移ります。"):w.kinmu==="中抜け"?hint((w.staff||[]).length?"いつもの勤務時間と中抜けの時間を入れました。この日だけ違うときは直してください。":"職員を選ぶと、いつもの勤務時間と中抜けの時間が入ります。"):w.kinmu&&!kinmuTimes(w.kinmu)?hint(`${w.kinmu}の出勤・退勤の時刻を入れてください。`):"")
     +tm("w-ws",w.wsM,"w-wst",w.wstart,"出勤",[["same","いつもどおり"],["time","時刻を変える"]])+tm("w-we",w.weM,"w-wet",w.wend,"退勤",[["same","いつもどおり"],["time","時刻を変える"]])
     +awayRow(d,w)
-    +dept()+text("w-reason",w.reason,"例：送迎の応援",PICK.shift,"理由（任意）")
+    +dept()+`<label class="check"><input type="checkbox" id="w-libonly" data-libonly ${w.libOnly?"checked":""} ${dis}>この日は ﾘﾍﾞﾙﾀのみ</label>`+(w.libOnly?hint("送迎表のこの職員の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、下の部署の職員の欄には出ません。"):"")+text("w-reason",w.reason,"例：送迎の応援",PICK.shift,"理由（任意）")
     +hint("送迎表のその日の勤務時間（出勤・退勤）が変わります。何日も続くときは終了日を変えてください。");
   else if(PLAN_LABELS.includes(L))h=who("users","利用者","利用者の名前で検索")+who("staff","対応者（決まっていなければ空けておく）","職員の名前で検索")
     +`<div class="sgsub"><label class="lbl2" for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="例：自宅・事業所・○○病院" ${ro?"readonly":""}></div>`
@@ -740,6 +751,7 @@ function readSg(pick){
   for(const[n,k]of[["w-kinmu","kinmu"],["w-leave","leave"],["w-meet","meetM"],["w-send","sendM"],["w-ws","wsM"],["w-we","weM"],["w-hdur","hdur"],["w-aw","awM"],["w-hc","hcM"],["w-lib","lib"],["w-lf","lf"],["w-lto","lto"],["w-ltm","ltm"]]){const v=rv(n);if(v!=null)w[k]=v}
   for(const[id,k]of[["w-dest","dest"],["w-mplace","mplace"],["w-splace","splace"],["w-reason","reason"],["w-meett","meet"],["w-sendt","send"],["w-dept","dept"],["w-wst","wstart"],["w-wet","wend"],["w-awf","afrom"],["w-awt","ato"],["w-lt","lt"],["w-ltr","ltr"],["w-et","et"],["w-nrmt","nrmt"],["w-nrst","nrst"],["w-nrmo","nrmo"],["w-nrso","nrso"],["w-hct","hct"],["w-hend","hend"]]){const v=iv(id);if(v!=null)w[k]=v}
   if($("w-plan"))w.plan=$("w-plan").checked;
+  if($("w-libonly"))w.libOnly=$("w-libonly").checked;
   if($("w-dept")&&w.dept&&w.dept===usualDept((w.staff||[])[0],ed.d.date,bizOf(ed.d)))w.dept="";   // いつもの部署のままなら「変更なし」
   if($("f-place"))ed.d.place=$("f-place").value.trim();   // 場所が項目の中にあるラベル（モニタリング・支援会議）でも書きかけを残す
 }
@@ -1091,7 +1103,7 @@ document.addEventListener("change",e=>{if(ed&&e.target.name==="f-biz"){ed.d.biz=
   // ラベル・休みの形などを変えたら、入力欄を作り直す（入力済みの値は残す）
   if(e.target.name==="w-kinmu"){readForm();ed.d.w.kinmu=e.target.value;applyKinmu(ed.d.w,ed.d);drawSheet();draftSave();return}   // 勤務を選ぶと出勤・退勤の時刻が入る
   if(e.target.name==="f-grp"){readForm();const g=GRP.find(x=>x.k===e.target.value);if(g&&grpOf(ed.d.label).k!==g.k){ed.lastIn=ed.lastIn||{};ed.lastIn[grpOf(ed.d.label).k]=ed.d.label;ed.d.label=ed.lastIn[g.k]||g.ls[0][0];fixTimes(ed.d)}drawSheet();draftSave();return}   // 1段目：その中で前に選んだラベル（無ければ最初）
-  if(e.target.name==="f-label"||e.target.id==="w-plan"||["w-leave","w-meet","w-send","w-ws","w-we","w-hdur","w-aw","w-hc","w-lib","w-lf","w-lto","w-ltm"].includes(e.target.name)){
+  if(e.target.name==="f-label"||e.target.id==="w-plan"||e.target.id==="w-libonly"||["w-leave","w-meet","w-send","w-ws","w-we","w-hdur","w-aw","w-hc","w-lib","w-lf","w-lto","w-ltm"].includes(e.target.name)){
     readForm();drawSheet();draftSave();return}
   if(e.target.id==="f-allday"){$("w-start").hidden=$("w-end").hidden=e.target.checked}
   if(e.target.id==="f-date"){const x=$("f-enddate");if(!x.value||x.value<e.target.value)x.value=e.target.value}

@@ -1261,7 +1261,7 @@ function mergeSeedMaster(oldMaster, seed) {
     ...seed,
     departments,
     staff: repair(mergeSeedList(oldMaster.staff, seedStaff,
-      editedKeys(["name", "deptId", "position", "emp", "start", "end", "canDrive", "isMale", "hasOwnCar", "ownCarCap", "offDays", "memo", "shiftByDay", "deptByDay", "subDeptId", "noGrid", "hideInStaffList", "hideInPartList", "helpOnly", "sortLast", "retireDate"]), delStaff), seedStaff),
+      editedKeys(["name", "deptId", "position", "emp", "start", "end", "canDrive", "isMale", "hasOwnCar", "ownCarCap", "offDays", "memo", "shiftByDay", "deptByDay", "subDeptId", "noGrid", "hideInStaffList", "hideInPartList", "helpOnly", "sortLast", "retireDate", "libOnly"]), delStaff), seedStaff),
     vehicles: mergeSeedList(oldMaster.vehicles, (seed.vehicles || []).map(fixDept),
       editedKeys(["name", "deptId", "cap", "wc", "memo"]), delVeh),
     users: repair(mergeSeedList(oldMaster.users, seedUsers,
@@ -2698,6 +2698,7 @@ function buildExcelHtml(master, sheet, date, paper) {
   sheet.blocks.filter((b) => !b.noteOnly).forEach((b) => putIt(b.staffId, b.time, itemText(b, false)));
   master.staff.forEach((s) => { const ov = (sheet.staffOv || {})[s.id], sl = earlyLeaveSlot(s, ov, sheet.blocks); if (sl == null) return;
     const k = `${colKey(s.id)}:${Math.max(GRID_START, Math.min(GRID_END - SLOT, sl))}`, a = (cellMap[k] = cellMap[k] || []); a.splice(leavePosOf(ov, a.length), 0, "退勤"); });   // 画面で動かした位置（無ければいちばん下）
+  master.staff.forEach((s) => { const sl = libOnlySlot(s, (sheet.staffOv || {})[s.id], wd); if (sl == null) return; const k = `${colKey(s.id)}:${sl}`; (cellMap[k] = cellMap[k] || []).unshift("ﾘﾍﾞﾙﾀのみ"); });   // ﾘﾍﾞﾙﾀのみ（出勤のマスのいちばん上。2026-11-23）
 
   const usedSlots = [];
   for (let m = GRID_START; m < GRID_END; m += SLOT) {
@@ -3638,6 +3639,14 @@ function earlyLeaveSlot(s, ov, blocks) {
   if ((blocks || []).some((b) => b && b.staffId === s.id && !b.noteOnly && /退勤/.test(String(b.label || "")))) return null;
   return Math.floor((en - 1) / SLOT) * SLOT;
 }
+// ﾘﾍﾞﾙﾀのみの職員（職員のタブの「ﾘﾍﾞﾙﾀのみ」＝いつも、カレンダーの時間変更・休日出勤の「この日は ﾘﾍﾞﾙﾀのみ」＝その日の staffOv.libOnly。2026-11-23 依頼者）：
+// 送迎表のその人の出勤の時刻のマスのいちばん上に「ﾘﾍﾞﾙﾀのみ」のコマ（表示だけ・データには足さない）、Excelの下の部署の職員の欄に出さない
+function libOnlyOf(s, ov) { return !!(s && (s.libOnly || (ov && ov.libOnly))) && !(ov && ov.off); }
+function libOnlySlot(s, ov, wd) {
+  if (!libOnlyOf(s, ov)) return null;
+  const st = toMin(wd != null ? staffTimeOf(s, wd, ov).start : ((ov && ov.start) || (s && s.start)));
+  return st == null ? null : Math.max(GRID_START, Math.min(GRID_END - SLOT, Math.floor(st / SLOT) * SLOT));
+}
 // 「退勤」をそのマスの何番目に出すか（上にあるコマの数）。staffOv.leaveAt が無ければいちばん下（2026-11-17 依頼者「同一マス内で上下動かせるように」）
 function leavePosOf(ov, n) { const v = ov && ov.leaveAt; return Number.isFinite(v) ? Math.max(0, Math.min(n, Math.round(v))) : n; }
 // AM休・PM休・遅刻・早退などで勤務時間を変えた職員の、勤務時間の外のコマ（休みと同じ灰色にする）
@@ -3831,6 +3840,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   }));
   sheet.blocks.filter((b) => !b.noteOnly && !(isAwayBlock(b) && workingSet.has(b.staffId))).forEach((b) => put(b.staffId, b.time, itemText(b, false), b.kind === "help" ? RANK.help : RANK.block, b.ord, ownCarRankOf(b)));   // 中抜け・時間休みの「不在」は灰色だけ
   cols.forEach((s) => { const sl = earlyLeaveSlot(s, (sheet.staffOv || {})[s.id], sheet.blocks); if (sl != null) put(s.id, toStr(sl), "退勤", RANK.block + 0.9, 9999, 1, (((sheet.staffOv || {})[s.id] || {}).leaveAt)); });   // PM休・早退の「退勤」（lv＝画面で動かした位置）
+  cols.forEach((s) => { const ov1 = (sheet.staffOv || {})[s.id], sl = libOnlySlot(s, ov1, wd); if (sl != null) put(s.id, toStr(sl), "ﾘﾍﾞﾙﾀのみ", -1, -99999, -1); });   // ﾘﾍﾞﾙﾀのみ（出勤のマスのいちばん上。2026-11-23）   // PM休・早退の「退勤」（lv＝画面で動かした位置）
   // 予定がある時間の範囲を求め、その範囲を30分刻みで全て行にする(8:00と8:30は別の行)
   const HOUR = 60;
   let minT = null, maxT = null;
@@ -4329,7 +4339,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   const offNames = new Set(offs.map((s) => s.name));
   const calStaffLines = (calN.staff || []).filter((l) => !(calN.wholeOff || []).some((w) => w.line === l && w.staff.length && w.staff.every((n) => offNames.has(n))));
   // ---- 職員 / 連絡事項+訓練 ----
-  const allStaffToday = master.staff.filter((s) => !s.hideInStaffList && (!fxOff(s) || wToday(s)));
+  const allStaffToday = master.staff.filter((s) => !s.hideInStaffList && !libOnlyOf(s, ov[s.id]) && (!fxOff(s) || wToday(s)));   // ﾘﾍﾞﾙﾀのみの人は部署の職員の欄に出さない（2026-11-23 依頼者）
   const deptMembers = (deptId) => allStaffToday.filter((s) =>
     (s.deptId === deptId || belongDeptOf(master, s, wd) === deptId) && !((ov[s.id] || {}).off));
   const effShiftRank = (s) => {
@@ -7369,6 +7379,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                     onDragLeave={() => { if (overKey === cKey) setOverKey(null); }}
                     onDrop={cellDrop(s.id, m)}
                     className={`border border-stone-200 align-top p-0.5 ${emptyCell} ${offGrid ? "bg-stone-100/80" : "bg-white"} group ${overKey === cKey ? "outline outline-2 outline-sky-500 bg-sky-50" : ""}`}>
+                    {m === libOnlySlot(s, ov) && <div className="text-[10px] font-bold text-teal-800 bg-teal-100 border border-teal-300 rounded px-1 mb-0.5" data-libonly-koma={s.id} title="ﾘﾍﾞﾙﾀのみの日（職員のタブの「ﾘﾍﾞﾙﾀのみ」かカレンダーの時間変更・休日出勤）。下の部署の職員の欄には出ません">ﾘﾍﾞﾙﾀのみ</div>}
                     {m === earlyLeaveSlot(s, ov, data.blocks) ? (() => {
                       // 「退勤」は同じマスの中で上下に動かせる（2026-11-17 依頼者「そのコマに他にコマが入る場合もあるので、何時退勤を同一マス内で上下動かせるように」）。
                       // 位置はその日の staffOv.leaveAt（上にあるコマの数。無ければいちばん下）。Excel も同じ位置
@@ -8752,7 +8763,7 @@ function StaffTab({ master, update }) {
         <thead>
           <tr className="text-xs text-stone-500 text-left bg-stone-200">
             <th className="p-1 w-4"></th><th className="p-1">氏名</th><th className="p-1">基本部署</th><th className="p-1">兼務先</th><th className="p-1">曜日別部署</th><th className="p-1">固定休</th><th className="p-1">形態</th><th className="p-1">職位</th>
-            <th className="p-1">勤務時間</th><th className="p-1"></th><th className="p-1"></th><th className="p-1"></th><th className="p-1"></th>
+            <th className="p-1">勤務時間</th><th className="p-1"></th><th className="p-1"></th><th className="p-1"></th><th className="p-1"></th><th className="p-1"></th>
           </tr>
         </thead>
         <tbody>
@@ -8828,6 +8839,11 @@ function StaffTab({ master, update }) {
                 {/* ヘルプに行ける人（2026-11-11 依頼者「職員の所にヘルプ可のチェックボックス」）。送迎表の「表示：」の「ヘルプ可」でこの人たちだけの列にできる */}
                 <div className="text-[10px] text-stone-400 leading-none mb-0.5">ヘルプ可</div>
                 <input type="checkbox" data-help-ok={s.id} checked={!!s.helpOk} onChange={(e) => upd(s.id, { helpOk: e.target.checked })} />
+              </td>
+              <td className="p-1 w-px whitespace-nowrap text-center px-2">
+                {/* ﾘﾍﾞﾙﾀのみの人（2026-11-23 依頼者）：送迎表の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマ・Excelの下の部署の職員の欄に出さない。その日だけはカレンダーの時間変更・休日出勤で */}
+                <div className="text-[10px] text-stone-400 leading-none mb-0.5">ﾘﾍﾞﾙﾀのみ</div>
+                <input type="checkbox" data-lib-only={s.id} checked={!!s.libOnly} onChange={(e) => upd(s.id, { libOnly: e.target.checked })} />
               </td>
               <td className="p-1 text-center"><button className="text-rose-500 text-xs hover:underline" onClick={() => del(s.id)}>削除</button></td>
             </tr>

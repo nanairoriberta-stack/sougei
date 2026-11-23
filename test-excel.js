@@ -65,6 +65,27 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     let t0 = ""; ws0.getRow(hr).eachCell((c) => { if (!t0 && String(c.value).startsWith("津田")) t0 = String(c.value); });
     assert.notStrictEqual(cnt("津田"), t0, "津田の人数が変わる " + t0 + " → " + cnt("津田"));
     console.log("パートの本日の部署 OK", t0, "→", cnt("津田")); }
+  { // ﾘﾍﾞﾙﾀのみ（2026-11-23 依頼者）：出勤の時刻のマスのいちばん上に「ﾘﾍﾞﾙﾀのみ」、下の部署の職員の欄に出さない。職員のタブ（いつも）・その日の staffOv.libOnly（カレンダー）
+    const hrOf = (ws) => { let hr = 0; ws.eachRow((r, ri) => { if (!hr && r.getCell(1).value === "職員" && /^嫁島\(/.test(String(r.getCell(2).value))) hr = ri; }); return hr; };
+    const deptText = (ws) => { const hr = hrOf(ws); let t = ""; ws.getRow(hr + 1).eachCell((c) => { t += "|" + String(c.value || ""); }); return t; };
+    const cellsOf = (ws) => { const out = []; ws.eachRow((r) => r.eachCell((c) => { if (c.isMerged && c.master && c.master.address !== c.address) return; out.push(String(c.value || "")); })); return out; };
+    const m4 = JSON.parse(JSON.stringify(m)), yk = m4.staff.find((s) => s.name === "八壁");
+    const ws0 = E.buildWorkbook(ExcelJS, E.applyDayDept(m4, 1, {}, null, null, date), sheet, date).getWorksheet("送迎表");
+    assert.ok(deptText(ws0).split(/[|\n･・]/).includes("八壁"), "いつもは部署の欄にいる");
+    assert.ok(!cellsOf(ws0).some((v) => v.includes("ﾘﾍﾞﾙﾀのみ")), "いつもは出ない");
+    for (const [why, mm, sh] of [["職員のタブ", (() => { const x = JSON.parse(JSON.stringify(m4)); x.staff.find((s) => s.id === yk.id).libOnly = true; return x; })(), sheet],
+      ["その日だけ", m4, Object.assign({}, sheet, { staffOv: { [yk.id]: { libOnly: true } } })]]) {
+      const ws = E.buildWorkbook(ExcelJS, E.applyDayDept(mm, 1, sh.staffOv || {}, null, null, date), sh, date).getWorksheet("送迎表");
+      assert.ok(!deptText(ws).split(/[|\n･・]/).includes("八壁"), why + "：部署の欄に出さない " + deptText(ws).slice(0, 200));
+      const hit = cellsOf(ws).filter((v) => v.includes("ﾘﾍﾞﾙﾀのみ"));
+      assert.strictEqual(hit.length, 1, why + "：ﾘﾍﾞﾙﾀのみのコマが1つ " + JSON.stringify(hit));
+      assert.ok(hit[0].startsWith("ﾘﾍﾞﾙﾀのみ"), why + "：マスのいちばん上 " + hit[0]);
+      assert.ok(E.buildExcelHtml(E.applyDayDept(mm, 1, sh.staffOv || {}, null, null, date), sh, date).includes("ﾘﾍﾞﾙﾀのみ"), why + "：.xls にも");
+    }
+    assert.strictEqual(E.libOnlySlot({ start: "8:30", libOnly: true }, null), 8 * 60 + 30, "出勤のマス");
+    assert.strictEqual(E.libOnlySlot({ start: "8:30", libOnly: true }, { start: "10:10" }), 10 * 60, "時間を変えた日はその出勤のマス");
+    assert.strictEqual(E.libOnlySlot({ start: "8:30", libOnly: true }, { off: true }), null, "休みの日は出さない");
+    console.log("ﾘﾍﾞﾙﾀのみ OK"); }
   // 予備の簡易形式(.xls)
   assert.ok(E.buildExcelHtml(m, sheet, date).includes(ver), ".xls の見出しにも");
   // ファイル名に使う文字（Windowsで使えない文字が入らない）

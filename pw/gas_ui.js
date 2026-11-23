@@ -895,6 +895,26 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(ev && ev.title === "新見 中抜け" && ev.sg.afrom === "13:00" && ev.sg.ato === "15:30" && ev.sg.wstart === "09:30", "中抜けの予定 " + JSON.stringify(ev && { t: ev.title, sg: ev.sg }));
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
     console.log("中抜け:", ev.title, ev.sg.wstart, ev.sg.afrom + "〜" + ev.sg.ato, ev.sg.wend); }
+  { // 時間変更の出勤〜退勤を一覧の行のラベルの下に・「この日は ﾘﾍﾞﾙﾀのみ」（2026-11-23 依頼者）
+    const D27 = "2026-11-27";
+    await add("shift"); await A.pg.fill("#f-date", D27); await A.pg.fill("#f-enddate", D27);
+    if (await A.pg.locator('.sgbox [data-sgrm="staff"]').count()) { await A.pg.click('.sgbox [data-sgrm="staff"]'); await A.pg.waitForTimeout(200); }
+    await pick("staff", "日野"); await A.pg.waitForTimeout(200);
+    await A.pg.locator('label:has(input[name="w-ws"][value="time"])').click(); await A.pg.waitForTimeout(200); await A.pg.fill("#w-wst", "10:00");
+    await A.pg.check("#w-libonly"); await A.pg.waitForTimeout(300);
+    assert.match(await A.pg.locator("#sgArea").innerText(), /下の部署の職員の欄には出ません/, "ﾘﾍﾞﾙﾀのみの説明");
+    await save(2000);
+    const ev = Object.values(api(t, "docs.query", [{ col: "days", from: D27, to: D27 }]).data.reduce((a, d) => Object.assign(a, d.events), {})).find((e) => e.label === "shift" && (e.sg.staff || [])[0] === "日野");
+    assert.ok(ev && ev.sg.libOnly === true && ev.sg.wstart === "10:00", "ﾘﾍﾞﾙﾀのみの予定 " + JSON.stringify(ev && ev.sg));
+    await A.pg.click(`.cell[data-day="${D27}"]`); await A.pg.waitForTimeout(500);
+    const wt = await A.pg.locator(`#dayRoot [data-ev="${ev.id}"] [data-worktime]`).innerText();
+    assert.match(wt, /^勤務 10:00〜\d{1,2}:\d{2}・ﾘﾍﾞﾙﾀのみ$/, "ラベルの下に勤務の時刻 " + wt);
+    await A.pg.locator(`#dayRoot [data-ev="${ev.id}"]`).click(); await A.pg.waitForTimeout(400);
+    assert.ok(await A.pg.isChecked("#w-libonly"), "開き直してもﾘﾍﾞﾙﾀのみ");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+    if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
+    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
+    console.log("時間変更の勤務の時刻・ﾘﾍﾞﾙﾀのみ:", wt); }
   { // 遅刻（○時出勤）・早退（○時早退）・家族迎えの時刻（2026-11-06 依頼者「春日15:30早退」「森 家族迎え16:30」）
     const D23 = "2026-11-25", setDay = async () => { await A.pg.fill("#f-date", D23); await A.pg.fill("#f-enddate", D23); };
     const clr = async () => { if (await A.pg.locator('.sgbox [data-sgrm="staff"]').count()) { await A.pg.click('.sgbox [data-sgrm="staff"]'); await A.pg.waitForTimeout(200); } };

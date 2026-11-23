@@ -122,6 +122,17 @@ console.log('half OK');
  assert.ok(C.summary(m2,x,mz,D)[0].time.includes('送迎なし'),'反映中に送迎なし');
  y=C.reconcile(m2,x,[],D); assert.ok(!(y.staffOv||{})[busy.id],'消すと時刻・送迎なしも外れる'); assert.strictEqual(y.runs.filter(r=>r.staffId===busy.id).length,runsB.length,'便も戻る');
  {const w=E.runWarnings(Object.assign({},sheet.runs.find(r=>r.id===runsB[0]),{staffId:busy.id}),m2,x,wd); assert.ok(w.some(t=>t.includes('送迎なし')),'送迎なしの人に便を入れると注意 '+w.join(','));}
+ // ﾘﾍﾞﾙﾀのみ（2026-11-23 依頼者）：時間変更・休日出勤の「この日は ﾘﾍﾞﾙﾀのみ」→ staffOv.libOnly。予定を消すと外れる
+ {const T=require('./calcore.js');
+  assert.strictEqual(T.normEvent({id:'ev_lo00001',title:'x',date:D,endDate:D,allDay:true,label:'shift',sg:{type:'shift',staff:[busy.name],wstart:'06:00',libOnly:true}},'ev_lo00001',0).sg.libOnly,true,'時間変更に残る');
+  assert.strictEqual(T.normEvent({id:'ev_lo00002',title:'x',date:D,endDate:D,allDay:true,label:'hwork',sg:{type:'hwork',staff:[busy.name],libOnly:true}},'ev_lo00002',0).sg.libOnly,true,'休日出勤に残る');
+  assert.ok(!('libOnly' in T.normEvent({id:'ev_lo00003',title:'x',date:D,endDate:D,allDay:true,label:'leave',sg:{type:'staff_off',staff:[busy.name],libOnly:true}},'ev_lo00003',0).sg),'ほかの種類には付かない');
+  const lo=ev({id:'lo1',title:'ﾘﾍﾞﾙﾀのみ',sg:{type:'shift',staff:[busy.name],wstart:'06:00',libOnly:true}});
+  const xl=C.reconcile(m2,sheet,lo,D); assert.deepStrictEqual(xl.staffOv[busy.id],{start:'6:00',libOnly:true},'その日の印');
+  assert.ok(C.summary(m2,xl,lo,D)[0].time.includes('ﾘﾍﾞﾙﾀのみ'),'反映中に出る');
+  assert.ok(!(C.reconcile(m2,xl,[],D).staffOv||{})[busy.id],'消すと外れる');
+  const hw=ev({id:'lo2',title:'休日出勤',sg:{type:'hwork',staff:[busy.name],libOnly:true}});
+  assert.strictEqual(C.reconcile(m2,sheet,hw,D).staffOv[busy.id].libOnly,true,'休日出勤でも');}
  console.log('hold OK', busy.name, '予定', all.length, '件 / AM休で保留', amHeld.length, '件');
 }
 // ===== ラベルごとの項目：ヘルプ（開始時刻・行き先）・送迎（迎え・送りの変更）・休日出勤（時間） =====

@@ -184,6 +184,19 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(/基本部署：/.test(await P.pg.textContent("[data-base-dept]")), "基本部署は表示だけ");
     assert.strictEqual(await P.pg.locator('text=基本部署の変更').count(), 0, "基本部署の変更の選択はない");
     await P.pg.click('button:text-is("キャンセル")'); await P.pg.waitForTimeout(300);
+    { // ﾘﾍﾞﾙﾀのみ（2026-11-23 依頼者）：職員のタブのチェック → 送迎表のその人の出勤の時刻のマスのいちばん上に「ﾘﾍﾞﾙﾀのみ」のコマ
+      await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(500);
+      await P.pg.check(`[data-lib-only="${hi.id}"]`); await P.pg.waitForTimeout(3000);
+      assert.strictEqual(api(t, "kv.get", ["v2:master"]).data.value.staff.find((x) => x.id === hi.id).libOnly, true, "ﾘﾍﾞﾙﾀのみが保存される");
+      await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
+      const ko = P.pg.locator(`[data-libonly-koma="${hi.id}"]`);
+      assert.strictEqual(await ko.count(), 1, "ﾘﾍﾞﾙﾀのみのコマが1つ");
+      assert.strictEqual(await ko.evaluate((el) => el.parentElement.firstElementChild === el), true, "マスのいちばん上");
+      await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(500);
+      await P.pg.uncheck(`[data-lib-only="${hi.id}"]`); await P.pg.waitForTimeout(3000);
+      await P.pg.click('button:text-is("送迎表(日別)")'); await P.pg.waitForTimeout(1500);
+      assert.strictEqual(await P.pg.locator(`[data-libonly-koma="${hi.id}"]`).count(), 0, "外すと消える");
+      console.log("ﾘﾍﾞﾙﾀのみ（職員のタブ）OK"); }
     console.log("職員の変更の画面：基本部署は表示だけ OK");
     // 出力前チェックの「戻る」（2026-11-13 依頼者「エクセル出力するときのエラー画面に戻るボタンも欲しい」）
     await P.pg.click('button:text-is("📄 Excel出力")'); await P.pg.waitForTimeout(800);

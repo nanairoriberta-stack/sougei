@@ -439,3 +439,6 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 .ds-page .ds-mf{flex:none}
 #panel{overflow:hidden;touch-action:pan-y}
 .pn-page{display:flex;flex-direction:column;gap:12px;will-change:transform}
+
+/* 時間変更・休日出勤の出勤〜退勤（ラベルの下。2026-11-23） */
+.ev-row .wt,.ds-row .ds-wt{display:block;font-size:12px;font-weight:700;color:#1d4ed8;margin-top:2px}
