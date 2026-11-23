@@ -256,7 +256,7 @@ function workTimeText(e){
   return x;
 }
 /* 「この日は ﾘﾍﾞﾙﾀのみ」（ﾘﾍﾞﾙﾀ＝ﾏﾝｼｮﾝ。2026-11-23 依頼者）。勤務が「早ﾏﾝｼｮﾝのみ」などのときはそれでﾘﾍﾞﾙﾀのみなので出さない */
-const libOnlyRow=(w,dis)=>KINMU_NORIDE.has(w.kinmu)?hint("ﾏﾝｼｮﾝ（ﾘﾍﾞﾙﾀ）のみの日です。送迎表の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、下の部署の職員の欄には出ません。"):`<label class="check"><input type="checkbox" id="w-libonly" data-libonly ${w.libOnly?"checked":""} ${dis}>この日は ﾘﾍﾞﾙﾀ（ﾏﾝｼｮﾝ）のみ</label>`+(w.libOnly?hint("送迎表のこの職員の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、送迎（便）には入りません（入っている便は保留へ）。下の部署の職員の欄にも出ません。"):"");
+const libOnlyRow=(w,dis,hint=t=>`<p class="by sghint">${t}</p>`)=>KINMU_NORIDE.has(w.kinmu)?hint("ﾏﾝｼｮﾝ（ﾘﾍﾞﾙﾀ）のみの日です。送迎表の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、下の部署の職員の欄には出ません。"):`<label class="check"><input type="checkbox" id="w-libonly" data-libonly ${w.libOnly?"checked":""} ${dis}>この日は ﾘﾍﾞﾙﾀ（ﾏﾝｼｮﾝ）のみ</label>`+(w.libOnly?hint("送迎表のこの職員の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、送迎（便）には入りません（入っている便は保留へ）。下の部署の職員の欄にも出ません。"):"");
 const workTimeHtml=(e,cls)=>{const t=workTimeText(e);return t?`<div class="${cls||"wt"}" data-worktime>${esc(t)}</div>`:""};
 function dsRow(e){
   const tm=e.allDay||e.date!==e.endDate&&!(e.date===S.sel&&e.start)?`<span class="ds-time">終日</span>`:`<span class="ds-time">${esc(e.start)}<small>${esc(e.end)}</small></span>`;
