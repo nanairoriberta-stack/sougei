@@ -252,9 +252,11 @@ function workTimeText(e){
   const si=staffInfo((sg.staff||[])[0],e.date,bizOf(e)),u=si.t||[];
   let a,b;if(sg.type==="hwork"){a=e.allDay?u[0]:e.start;b=e.allDay?u[1]:e.end}else{a=sg.wstart||u[0];b=sg.wend||u[1]}
   const t=sg.tbd?`出勤時刻未定${sg.wstart?`（${hm1(sg.wstart)}頃）`:""}${b?`〜${hm1(b)}`:""}`:a||b?`${a?hm1(a):"いつもの出勤"}〜${b?hm1(b):"いつもの退勤"}`:"";
-  const x=[t&&`勤務 ${t}`,sg.afrom&&sg.ato&&`中抜け${hm1(sg.afrom)}〜${hm1(sg.ato)}`,sg.libOnly&&"ﾘﾍﾞﾙﾀのみ"].filter(Boolean).join("・");
+  const x=[t&&`勤務 ${t}`,sg.afrom&&sg.ato&&`中抜け${hm1(sg.afrom)}〜${hm1(sg.ato)}`,(sg.libOnly||sg.noRide)&&"ﾘﾍﾞﾙﾀのみ"].filter(Boolean).join("・");
   return x;
 }
+/* 「この日は ﾘﾍﾞﾙﾀのみ」（ﾘﾍﾞﾙﾀ＝ﾏﾝｼｮﾝ。2026-11-23 依頼者）。勤務が「早ﾏﾝｼｮﾝのみ」などのときはそれでﾘﾍﾞﾙﾀのみなので出さない */
+const libOnlyRow=(w,dis)=>KINMU_NORIDE.has(w.kinmu)?hint("ﾏﾝｼｮﾝ（ﾘﾍﾞﾙﾀ）のみの日です。送迎表の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、下の部署の職員の欄には出ません。"):`<label class="check"><input type="checkbox" id="w-libonly" data-libonly ${w.libOnly?"checked":""} ${dis}>この日は ﾘﾍﾞﾙﾀ（ﾏﾝｼｮﾝ）のみ</label>`+(w.libOnly?hint("送迎表のこの職員の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、送迎（便）には入りません（入っている便は保留へ）。下の部署の職員の欄にも出ません。"):"");
 const workTimeHtml=(e,cls)=>{const t=workTimeText(e);return t?`<div class="${cls||"wt"}" data-worktime>${esc(t)}</div>`:""};
 function dsRow(e){
   const tm=e.allDay||e.date!==e.endDate&&!(e.date===S.sel&&e.start)?`<span class="ds-time">終日</span>`:`<span class="ds-time">${esc(e.start)}<small>${esc(e.end)}</small></span>`;
@@ -596,7 +598,7 @@ function sgOf(label,w,d){
   if(label==="hwork")return Object.assign(base,{type:"hwork",users:[],dept:w.dept},   // 休日出勤の中抜け（2026-11-10 依頼者「6:00〜9:00と17:00〜22:00のときは9:00〜17:00が不在の網掛けに」）
     w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{},w.libOnly?{libOnly:true}:{});
   if(label==="shift")return Object.assign(base,{type:"shift",users:[],dept:w.dept,reason:[w.kinmu,w.reason].filter(Boolean).join("・"),wstart:w.wsM==="time"?w.wstart:"",wend:w.weM==="time"?w.wend:""},KINMU_NORIDE.has(w.kinmu)?{noRide:true}:{},
-    w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{},w.libOnly?{libOnly:true}:{});
+    w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{},w.libOnly&&!KINMU_NORIDE.has(w.kinmu)?{libOnly:true}:{});
   if(PLAN_LABELS.includes(label))return Object.assign(base,{type:"staff_plan"});
   if((label==="other"||label==="sother")&&w.plan)return Object.assign(base,{type:"staff_plan",users:[]});
   return null;
@@ -683,14 +685,14 @@ function drawSg(){
     +hint("週間パターンから入っている、いつものヘルプをその日だけなしにします（送迎表のその日のヘルプのコマが消えます）。予定を消すと元に戻ります。何日も続くときは終了日を変えてください。")
   else if(L==="user")h=who("users","利用者","利用者の名前で検索")+text("w-reason",w.reason,"例：通院",PICK.user,"理由（任意）")
     +hint("送迎表でその日は欠席になります。何日も続くときは終了日を変えてください。迎え・送りだけ変わるときは「送迎」のラベルを使ってください。");
-  else if(L==="hwork")h=(staffSelf(d)?self:who("staff","出勤する職員","職員の名前で検索"))+dept()+awayRow(d,w)+`<label class="check"><input type="checkbox" id="w-libonly" data-libonly ${w.libOnly?"checked":""} ${dis}>この日は ﾘﾍﾞﾙﾀのみ</label>`+(w.libOnly?hint("送迎表のこの職員の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、下の部署の職員の欄には出ません。"):"")
+  else if(L==="hwork")h=(staffSelf(d)?self:who("staff","出勤する職員","職員の名前で検索"))+dept()+awayRow(d,w)+libOnlyRow(w,dis)
     +hint("下の開始・終了の時刻で、送迎表のその日の出勤者に入ります（固定休の日でも）。");
   else if(L==="shift")h=(staffSelf(d)?self:who("staff","職員","職員の名前で検索"))
     +`<div class="sgsub"><span class="lbl2">勤務</span>${radios("w-kinmu",w.kinmu||"",[["","時刻で変える"],...KINMU.map(k=>[k,k])])}</div>`
     +(KINMU_NORIDE.has(w.kinmu)?hint("ﾏﾝｼｮﾝの日は、送迎表には載りますが送迎（便）には入りません。この職員に入っている便は保留へ移ります。"):w.kinmu==="中抜け"?hint((w.staff||[]).length?"いつもの勤務時間と中抜けの時間を入れました。この日だけ違うときは直してください。":"職員を選ぶと、いつもの勤務時間と中抜けの時間が入ります。"):w.kinmu&&!kinmuTimes(w.kinmu)?hint(`${w.kinmu}の出勤・退勤の時刻を入れてください。`):"")
     +tm("w-ws",w.wsM,"w-wst",w.wstart,"出勤",[["same","いつもどおり"],["time","時刻を変える"]])+tm("w-we",w.weM,"w-wet",w.wend,"退勤",[["same","いつもどおり"],["time","時刻を変える"]])
     +awayRow(d,w)
-    +dept()+`<label class="check"><input type="checkbox" id="w-libonly" data-libonly ${w.libOnly?"checked":""} ${dis}>この日は ﾘﾍﾞﾙﾀのみ</label>`+(w.libOnly?hint("送迎表のこの職員の出勤の時刻のマスに「ﾘﾍﾞﾙﾀのみ」のコマが入り、下の部署の職員の欄には出ません。"):"")+text("w-reason",w.reason,"例：送迎の応援",PICK.shift,"理由（任意）")
+    +dept()+libOnlyRow(w,dis)+text("w-reason",w.reason,"例：送迎の応援",PICK.shift,"理由（任意）")
     +hint("送迎表のその日の勤務時間（出勤・退勤）が変わります。何日も続くときは終了日を変えてください。");
   else if(PLAN_LABELS.includes(L))h=who("users","利用者","利用者の名前で検索")+who("staff","対応者（決まっていなければ空けておく）","職員の名前で検索")
     +`<div class="sgsub"><label class="lbl2" for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="例：自宅・事業所・○○病院" ${ro?"readonly":""}></div>`

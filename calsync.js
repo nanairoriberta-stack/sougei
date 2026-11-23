@@ -244,7 +244,7 @@ function applySpec(next, spec, keepStaff) {
   });
   // 休み・半休・不在・勤務時間変更で、勤務していない時間にかかるその職員の便・予定（ヘルプなど）は保留へ移す。
   // 移したものは記録し、予定を消したら（まだ保留のままなら）元の担当に戻す。反映した時だけ動かす（その後に手で戻したものは触らない）
-  if (spec.type === "staff_off" || spec.type === "shift") spec.staff.forEach((s) => {
+  if (spec.type === "staff_off" || spec.type === "shift" || (spec.type === "hwork" && spec.libOnly)) spec.staff.forEach((s) => {   // ﾘﾍﾞﾙﾀのみ＝ﾏﾝｼｮﾝ（送迎なし）の休日出勤も便は保留へ
     for (const [t2, it] of offItems(next, spec, s)) { it.staffId = HOLD_ID; (rec.held = rec.held || []).push({ t: t2, id: it.id, staff: s.id }); }
   });
   if (spec.type === "help_cancel") {
@@ -311,7 +311,7 @@ function offItems(sheet, spec, s) {
   const out = [];
   for (const t2 of ["runs", "blocks"]) for (const it of sheet[t2] || []) {
     if (it.staffId !== s.id || String(it.id || "").startsWith("cal_")) continue;
-    if ((spec.noRide && t2 === "runs") || off(toMinX(it.time), Number(it.durMin) || 30) || inAway(toMinX(it.time), Number(it.durMin) || 30)) out.push([t2, it]);   // 送迎なしの日は便をすべて保留へ
+    if (((spec.noRide || spec.libOnly) && t2 === "runs") || off(toMinX(it.time), Number(it.durMin) || 30) || inAway(toMinX(it.time), Number(it.durMin) || 30)) out.push([t2, it]);   // 送迎なしの日は便をすべて保留へ
   }
   return out;
 }

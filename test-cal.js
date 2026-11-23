@@ -129,6 +129,8 @@ console.log('half OK');
   assert.ok(!('libOnly' in T.normEvent({id:'ev_lo00003',title:'x',date:D,endDate:D,allDay:true,label:'leave',sg:{type:'staff_off',staff:[busy.name],libOnly:true}},'ev_lo00003',0).sg),'ほかの種類には付かない');
   const lo=ev({id:'lo1',title:'ﾘﾍﾞﾙﾀのみ',sg:{type:'shift',staff:[busy.name],wstart:'06:00',libOnly:true}});
   const xl=C.reconcile(m2,sheet,lo,D); assert.deepStrictEqual(xl.staffOv[busy.id],{start:'6:00',libOnly:true},'その日の印');
+  assert.strictEqual(xl.runs.filter(r=>r.staffId===busy.id).length,0,'ﾘﾍﾞﾙﾀ＝ﾏﾝｼｮﾝなので便はすべて保留へ');
+  assert.strictEqual(C.reconcile(m2,xl,[],D).runs.filter(r=>r.staffId===busy.id).length,runsB.length,'消すと便も戻る');
   assert.ok(C.summary(m2,xl,lo,D)[0].time.includes('ﾘﾍﾞﾙﾀのみ'),'反映中に出る');
   assert.ok(!(C.reconcile(m2,xl,[],D).staffOv||{})[busy.id],'消すと外れる');
   const hw=ev({id:'lo2',title:'休日出勤',sg:{type:'hwork',staff:[busy.name],libOnly:true}});

@@ -74,7 +74,8 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     assert.ok(deptText(ws0).split(/[|\n･・]/).includes("八壁"), "いつもは部署の欄にいる");
     assert.ok(!cellsOf(ws0).some((v) => v.includes("ﾘﾍﾞﾙﾀのみ")), "いつもは出ない");
     for (const [why, mm, sh] of [["職員のタブ", (() => { const x = JSON.parse(JSON.stringify(m4)); x.staff.find((s) => s.id === yk.id).libOnly = true; return x; })(), sheet],
-      ["その日だけ", m4, Object.assign({}, sheet, { staffOv: { [yk.id]: { libOnly: true } } })]]) {
+      ["その日だけ", m4, Object.assign({}, sheet, { staffOv: { [yk.id]: { libOnly: true } } })],
+      ["勤務「早ﾏﾝｼｮﾝのみ」（ﾘﾍﾞﾙﾀ＝ﾏﾝｼｮﾝ）", m4, Object.assign({}, sheet, { staffOv: { [yk.id]: { start: "6:00", end: "14:00", noRide: true } } })]]) {
       const ws = E.buildWorkbook(ExcelJS, E.applyDayDept(mm, 1, sh.staffOv || {}, null, null, date), sh, date).getWorksheet("送迎表");
       assert.ok(!deptText(ws).split(/[|\n･・]/).includes("八壁"), why + "：部署の欄に出さない " + deptText(ws).slice(0, 200));
       const hit = cellsOf(ws).filter((v) => v.includes("ﾘﾍﾞﾙﾀのみ"));
@@ -85,6 +86,9 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     assert.strictEqual(E.libOnlySlot({ start: "8:30", libOnly: true }, null), 8 * 60 + 30, "出勤のマス");
     assert.strictEqual(E.libOnlySlot({ start: "8:30", libOnly: true }, { start: "10:10" }), 10 * 60, "時間を変えた日はその出勤のマス");
     assert.strictEqual(E.libOnlySlot({ start: "8:30", libOnly: true }, { off: true }), null, "休みの日は出さない");
+    { const st = m4.staff.find((s) => s.id === yk.id), r0 = sheet.runs.find((r) => r.kind === "meet") || sheet.runs[0];
+      assert.ok(E.runWarnings(Object.assign({}, r0, { staffId: yk.id }), Object.assign({}, m4, { staff: m4.staff.map((s) => s.id === yk.id ? { ...s, libOnly: true } : s) }), sheet, 1).some((t) => t.includes("送迎なし")), "ﾘﾍﾞﾙﾀのみの人に便を入れると注意");
+      assert.ok(st, "八壁"); }
     console.log("ﾘﾍﾞﾙﾀのみ OK"); }
   // 予備の簡易形式(.xls)
   assert.ok(E.buildExcelHtml(m, sheet, date).includes(ver), ".xls の見出しにも");

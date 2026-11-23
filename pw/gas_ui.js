@@ -903,6 +903,12 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.locator('label:has(input[name="w-ws"][value="time"])').click(); await A.pg.waitForTimeout(200); await A.pg.fill("#w-wst", "10:00");
     await A.pg.check("#w-libonly"); await A.pg.waitForTimeout(300);
     assert.match(await A.pg.locator("#sgArea").innerText(), /下の部署の職員の欄には出ません/, "ﾘﾍﾞﾙﾀのみの説明");
+    assert.match(await A.pg.locator("#sgArea").innerText(), /送迎（便）には入りません/, "ﾘﾍﾞﾙﾀ＝ﾏﾝｼｮﾝなので送迎なし");
+    await A.pg.locator('label:has(input[name="w-kinmu"][value="早ﾏﾝｼｮﾝのみ"])').click(); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await A.pg.locator("#w-libonly").count(), 0, "勤務がﾏﾝｼｮﾝのみならチェックは出さない（それでﾘﾍﾞﾙﾀのみ）");
+    await A.pg.locator('label:has(input[name="w-kinmu"][value=""])').click(); await A.pg.waitForTimeout(300);
+    if (!(await A.pg.isChecked('input[name="w-ws"][value="time"]'))) { await A.pg.locator('label:has(input[name="w-ws"][value="time"])').click(); await A.pg.waitForTimeout(200); }
+    await A.pg.fill("#w-wst", "10:00"); if (!(await A.pg.isChecked("#w-libonly"))) await A.pg.check("#w-libonly"); await A.pg.waitForTimeout(300);
     await save(2000);
     const ev = Object.values(api(t, "docs.query", [{ col: "days", from: D27, to: D27 }]).data.reduce((a, d) => Object.assign(a, d.events), {})).find((e) => e.label === "shift" && (e.sg.staff || [])[0] === "日野");
     assert.ok(ev && ev.sg.libOnly === true && ev.sg.wstart === "10:00", "ﾘﾍﾞﾙﾀのみの予定 " + JSON.stringify(ev && ev.sg));

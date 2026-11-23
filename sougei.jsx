@@ -2365,7 +2365,7 @@ function runWarnings(run, master, data, wd) {
   if (stf) {
     if (run.mode !== "walk" && !stf.canDrive && !(veh && veh.ownerOnly)) w.push("運転不可の職員");
     const ov = ovAll[stf.id] || {};
-    if (ov.noRide) w.push("この日は送迎なしの職員(ﾏﾝｼｮﾝなど)");   // カレンダーの職員時間変更「ﾏﾝｼｮﾝのみ」：送迎表には載るが送迎はしない
+    if (noRideOf(stf, ov)) w.push("この日は送迎なしの職員(ﾏﾝｼｮﾝ・ﾘﾍﾞﾙﾀのみ)");   // カレンダーの職員時間変更「ﾏﾝｼｮﾝのみ」：送迎表には載るが送迎はしない
     if (ov.off) w.push("休みの職員");
     if (wd != null && (stf.offDays || []).includes(wd) && !ov.workToday) w.push("固定休の職員");
     const eff0 = staffTimeOf(stf, wd, ov);
@@ -2495,7 +2495,7 @@ function computeSuggestion({ deptId, time, userIds, includeOtherDept, master, da
     .filter((s) => {
       if (!s.canDrive) return false;
       const ov = (data.staffOv || {})[s.id] || {};
-      if (ov.off || ov.noRide) return false;
+      if (ov.off || noRideOf(s, ov)) return false;
       if (weekday != null && (s.offDays || []).includes(weekday) && !ov.workToday) return false;
       const eff0 = staffTimeOf(s, weekday, ov);
       const st = toMin(eff0.start), en = toMin(eff0.end);
@@ -3641,7 +3641,9 @@ function earlyLeaveSlot(s, ov, blocks) {
 }
 // ﾘﾍﾞﾙﾀのみの職員（職員のタブの「ﾘﾍﾞﾙﾀのみ」＝いつも、カレンダーの時間変更・休日出勤の「この日は ﾘﾍﾞﾙﾀのみ」＝その日の staffOv.libOnly。2026-11-23 依頼者）：
 // 送迎表のその人の出勤の時刻のマスのいちばん上に「ﾘﾍﾞﾙﾀのみ」のコマ（表示だけ・データには足さない）、Excelの下の部署の職員の欄に出さない
-function libOnlyOf(s, ov) { return !!(s && (s.libOnly || (ov && ov.libOnly))) && !(ov && ov.off); }
+// ﾘﾍﾞﾙﾀ＝ﾏﾝｼｮﾝ（2026-11-23 依頼者）：カレンダーの勤務「早ﾏﾝｼｮﾝのみ」など（staffOv.noRide）もﾘﾍﾞﾙﾀのみ。ﾘﾍﾞﾙﾀのみの人は送迎（便）もしない（noRideOf）
+function libOnlyOf(s, ov) { return !!((s && s.libOnly) || (ov && (ov.libOnly || ov.noRide))) && !(ov && ov.off); }
+function noRideOf(s, ov) { return !!((ov && (ov.noRide || ov.libOnly)) || (s && s.libOnly)); }
 function libOnlySlot(s, ov, wd) {
   if (!libOnlyOf(s, ov)) return null;
   const st = toMin(wd != null ? staffTimeOf(s, wd, ov).start : ((ov && ov.start) || (s && s.start)));
@@ -5790,7 +5792,7 @@ function autoAssignSheet(master, data, wd) {
       }
       if (!isHelp && s.helpOnly) return false; // 久保田等は送迎不可
       if (needDrive && !s.canDrive) return false;
-      if (!isHelp && (ovAll[s.id] || {}).noRide) return false;   // この日は送迎なし（ﾏﾝｼｮﾝなど）
+      if (!isHelp && noRideOf(s, ovAll[s.id] || {})) return false;   // この日は送迎なし（ﾏﾝｼｮﾝなど）
       if (!inWork(s, t0, dur)) return false;
       if (staffBusy(s.id, t0, dur, exceptId)) return false;
       const [aw0, aw1] = awayMin(s, ovAll[s.id] || {});
@@ -7305,7 +7307,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                       {!ov.off && ov.end && toMin(ov.end) < toMin(s.end) ? "早" : ""}
                     </div>
                     {!ov.off && awayMin(s, ov)[0] != null && <div className={`text-[9px] leading-tight ${ov.awayFrom ? "text-amber-700 font-bold" : "text-stone-500"}`} data-away={s.id}>中抜け{awayOf(s, ov).from}-{awayOf(s, ov).to}</div>}
-                    {ov.noRide && !ov.off && <div className="text-[10px] font-bold text-violet-700" data-noride={s.id}>送迎なし(ﾏﾝｼｮﾝ)</div>}
+                    {noRideOf(s, ov) && !ov.off && <div className="text-[10px] font-bold text-violet-700" data-noride={s.id}>送迎なし(ﾏﾝｼｮﾝ)</div>}
                     {ov.lateTbd && !ov.off && <div className="text-[10px] font-bold text-orange-700" data-late-tbd={s.id} title={`${ov.lateTbd}が済み次第出勤（時刻未定）`}>出勤時刻未定{ov.start ? `(${ov.start}頃)` : ""}</div>}
                     {ov.note && <div className="text-[10px] text-amber-700">{ov.note}</div>}
                   </div>
