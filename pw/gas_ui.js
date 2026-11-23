@@ -566,6 +566,16 @@ const D = path.join(__dirname, "../gas/out");
     // 希望を入れる：秋山 11/12(木) 休 → 早③に入っているので「希望とちがう」
     await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", "秋山");
     const wp = async (date, v) => { await T.pg.click(`td[data-day="${date}"] .dnum`); await T.pg.waitForTimeout(200); await T.pg.click(`[data-wpick="${v}"]`); await T.pg.waitForTimeout(250); };
+    { // 早番の枠が埋まっていて早番の希望が出たら、枠のすぐ下に「超過」（2026-11-23 依頼者）
+      const D = "2026-11-19", inE = await T.pg.$$eval(`[data-slot^="${D}|e|"]`, (l) => l.map((x) => x.innerText).join(" "));
+      const who = (await T.pg.$$eval("#shWho option", (o) => o.map((x) => x.value))).find((n) => n && !inE.includes(n));
+      await T.pg.selectOption("#shWho", who); await wp(D, "早");
+      const ov = T.pg.locator(`[data-over="${D}|e"]`);
+      assert.ok((await ov.innerText()).includes("早超過") && (await ov.innerText()).includes(who), "超過に出る " + (await ov.innerText()));
+      assert.strictEqual(await ov.evaluate((el) => !!el.previousElementSibling && el.previousElementSibling.classList.contains("pair")), true, "枠のすぐ下");
+      await T.pg.locator(`td[data-day="${D}"]`).screenshot({ path: "g_shift_over.png" });
+      await wp(D, ""); assert.strictEqual(await T.pg.locator(`[data-over="${D}|e"]`).count(), 0, "希望を消すと消える");
+      await T.pg.selectOption("#shWho", "秋山"); console.log("早番の超過 OK", who); }
     await wp("2026-11-12", "休");
     assert.ok((await T.pg.locator(".sh-pat").innerText()).includes("12(木)：休"), "今月の希望の列");
     assert.ok((await T.pg.locator("[data-conf-list]").innerText()).includes("11/12(木) 秋山さんは「休」の希望ですが入っています"));

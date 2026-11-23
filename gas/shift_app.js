@@ -174,6 +174,8 @@
         const rows = Math.max(maxE, maxL);
         let grid = "";   // スマホでは早番（赤）・遅番（青）を1列に並べ、名前が見えるようにする（2026-11-07 依頼者「スマホだと名前わからない」）
         if (!hidden) for (let i = 1; i <= rows; i++) grid += `<div class="pair">${i <= maxE ? slot("e", i) : `<span></span>`}${i <= maxL ? slot("l", i) : `<span></span>`}</div>`;
+        // 早番・遅番の希望なのに枠に入っていない人は、枠のすぐ下に「超過」で出す（2026-11-23 依頼者。すでに入っている人の勤務を変えるため）
+        if (!hidden) { const ov = X.overflow(S.month, date); for (const k of ["e", "l"]) if (ov[k].length) grid += `<div class="over ${k}" data-over="${date}|${k}"><b>${X.KIND[k]}超過</b>${ov[k].map((n) => `<span>${esc(n)}</span>`).join("、")}<small>（${X.KIND[k]}番の希望・枠に入っていません）</small></div>`; }
         const wishes = c.members.map((x) => [x.name, X.wishOf(S.month, x.name, date)]).filter((x) => x[1]);
         const off = X.offList(S.month, c, date);
         const wd = X.wdOf(date);

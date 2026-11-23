@@ -501,5 +501,13 @@
       day[k] = o; }
     return out;
   }
-  return { moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  /* 早番・遅番の希望なのに、その日の早番（遅番）の枠に入っていない人（2026-11-23 依頼者「早番の枠が埋まっている場合、希望が出たらすぐ下に超過分として出して」
+     ＝すでに入っている人の勤務を変えるため）。{e:[名前], l:[名前]}。枠が足りているかに関係なく、入っていなければ出す */
+  function overflow(month, date) {
+    const out = { e: [], l: [] }, d = ((month && month.days) || {})[date] || {}, wish = (month && month.wish) || {};
+    for (const n of Object.keys(wish)) { const k = WISH_KIND[(wish[n] || {})[date]]; if (k !== "e" && k !== "l") continue;
+      if (!Object.values(d[k] || {}).some((s) => slotName(s) === n)) out[k].push(n); }
+    return out;
+  }
+  return { overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });
