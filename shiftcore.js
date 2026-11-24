@@ -159,6 +159,16 @@
     }
     return out;
   }
+  /* いつもの勤務（基本シフト）と違う人（2026-11-24 依頼者「希望でなくても通常の勤務と違う部分は文字の色が変わるように」）：
+     その日の早番・遅番・日勤の入り方（時間の補足も）が基本シフトと違う人。①②③の番号のちがいは見ない（calItems と同じ決め方） */
+  function changedFromBase(month, cfg, date) {
+    const d = dayOf(month, date), sig = {}, out = new Set();
+    const put = (n, s) => { (sig[n] = sig[n] || []).push(s); };
+    for (const k of ["e", "l"]) for (const sl of Object.values(d[k] || {})) { const n = slotName(sl); if (n) put(n, `${k}:${(sl && sl.t) || ""}`); }
+    for (const x of d.d || []) { const e = splitName(x); if (e.n) put(e.n, `d:${e.t}`); }
+    for (const n of Object.keys(sig)) if (sigOf(sig[n]) !== baseSig(cfg, date, n)) out.add(n);
+    return out;
+  }
   // その日に入っている人（早・遅・日勤）
   const workers = (month, date) => new Set(entries(month, date).map((e) => e.n));
   const wishOf = (month, name, date) => (((month && month.wish) || {})[name] || {})[date] || "";
@@ -521,5 +531,5 @@
       if (!Object.values(d[k] || {}).some((s) => slotName(s) === n)) out[k].push(n); }
     return out;
   }
-  return { unplaced, unplacedAll, overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  return { changedFromBase, unplaced, unplacedAll, overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

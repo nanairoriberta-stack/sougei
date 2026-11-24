@@ -290,3 +290,15 @@ console.log("shift extra ok");
     m.wish = {}; m.fixed = { at: "x" }; assert.deepStrictEqual(S.unplaced(m, c, date), [], "確定した月は出さない");
   }
   console.log("配置未定 OK"); }
+{ // いつもの勤務（基本シフト）と違う人（2026-11-24 依頼者「希望でなくても通常の勤務と違う部分は文字の色が変わるように」）
+  const c = S.cfgOf("m", null), ym = "2026-12", r = S.autoShift({ days: {} }, c, ym), m0 = r.month || r;
+  const date = S.daysOfMonth(ym).find((d) => Object.values((m0.days[d] || {}).e || {}).length && (m0.days[d].d || []).length);
+  const base = S.changedFromBase(m0, c, date);
+  const m = JSON.parse(JSON.stringify(m0)), dd = m.days[date], x = S.splitName(dd.d[0]).n;
+  dd.d = dd.d.slice(1); dd.e[9] = { n: x };   // 日勤の人を早番へ
+  const after = S.changedFromBase(m, c, date);
+  assert.ok(after.has(x), "日勤の人を早番に入れたら「いつもと違う」");
+  assert.ok(!base.has(x), "入れる前は違わない");
+  const k1 = Object.keys(dd.e).find((k) => k !== "9"), n1 = S.slotName(dd.e[k1]), k2 = Object.keys(dd.e).find((k) => k !== "9" && k !== k1);
+  if (k2) { const t = dd.e[k1]; dd.e[k1] = dd.e[k2]; dd.e[k2] = t; assert.ok(!S.changedFromBase(m, c, date).has(n1) || base.has(n1), "①②③の入れ替えだけでは違うにしない"); }
+  console.log("いつもと違う勤務 OK", date, x); }

@@ -162,6 +162,7 @@
     const ngI = X.ngIssues(S.month, c, S.ym), ngSet = new Set(ngI.map((x) => `${x.date}|${x.kind}|${x.slot}`));   // NGの条件とちがう枠（2026-11-13）
     const days = X.daysOfMonth(S.ym), lead = (X.wdOf(days[0]) + 6) % 7;   // 月曜始まり（2026-11-07 依頼者）
     if (!hidden) html += `<div class="sh-legend" data-legend><span class="e">赤＝早番</span>・<span class="l">青＝遅番</span>（①②③は番号）</div>`;
+    if (!hidden) html += `<div class="sh-legend2" data-legend-chg><span class="chg chgbg">紫の太字・紫の枠</span>＝いつもの勤務（基本シフト）と違う人</div>`;
     // 希望を入れるだけの画面（男性の表の職員）はマスの高さをそろえて押しやすく（2026-11-13 依頼者「スマホで日付が縦にすごく狭くて打ちづらい」。.wo）。スマホの見出しは「月」だけ
     html += `<table class="sh-grid${wishOnly ? " wo" : ""}"><thead><tr>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th class="${i === 0 ? "su" : i === 6 ? "sa" : ""}">${X.WD[i]}<span class="wdx">曜日</span></th>`).join("")}</tr></thead><tbody>`;
     const cells = Array(lead).fill(null).concat(days);
@@ -170,8 +171,9 @@
       html += "<tr>" + cells.slice(r, r + 7).map((date) => {
         if (!date) return `<td class="empty"></td>`;
         const d = X.daysOfMonth ? (S.month && S.month.days || {})[date] || {} : {}, need = X.needOf(c, date);
+        const chg = hidden ? new Set() : X.changedFromBase(S.month, c, date);   // いつもの勤務と違う人は紫の文字（2026-11-24 依頼者）
         const slot = (k, i) => { const s = (d[k] || {})[i], n = X.slotName(s), hole = holeSet.has(`${date}|${k}|${i}`), bad = n && confSet.has(`${date}|${n}`);
-          return `<button class="slot ${k}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}${ngSet.has(`${date}|${k}|${i}`) ? " ng" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i><b class="kk">${X.KIND[k]}</b>${X.MARK[i] || i}</i>${n ? esc(n) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
+          return `<button class="slot ${k}${n && chg.has(n) ? " chgs" : ""}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}${ngSet.has(`${date}|${k}|${i}`) ? " ng" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i><b class="kk">${X.KIND[k]}</b>${X.MARK[i] || i}</i>${n ? (chg.has(n) ? `<span class="chg" data-chg="${esc(n)}">${esc(n)}</span>` : esc(n)) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
         const maxE = Math.max(need.e, ...Object.keys(d.e || {}).map(Number), 0), maxL = Math.max(need.l, ...Object.keys(d.l || {}).map(Number), 0);
         const rows = Math.max(maxE, maxL);
         let grid = "";   // スマホでは早番（赤）・遅番（青）を1列に並べ、名前が見えるようにする（2026-11-07 依頼者「スマホだと名前わからない」）
@@ -182,7 +184,7 @@
         const off = X.offList(S.month, c, date);
         const wd = X.wdOf(date);
         return `<td class="day${wd === 0 ? " su" : wd === 6 ? " sa" : ""}${S.mode === "wish" ? " wishmode" : ""}" data-day="${date}"><div class="dnum">${Number(date.slice(8))}${d.note ? `<span class="dnote">${esc(d.note)}</span>` : ""}</div><div class="slots">${grid}</div>
-          ${hidden ? "" : `<div class="line"><button class="dk" data-dk="${date}" ${S.mode === "wish" ? "tabindex=-1" : ""}>日勤：${esc((d.d || []).join("、"))}</button></div>
+          ${hidden ? "" : `<div class="line"><button class="dk" data-dk="${date}" ${S.mode === "wish" ? "tabindex=-1" : ""}>日勤：${(d.d || []).map((x) => chg.has(X.splitName(x).n) ? `<span class="chg" data-chg="${esc(X.splitName(x).n)}">${esc(x)}</span>` : esc(x)).join("、")}</button></div>
           ${(() => { const un = X.unplaced(S.month, c, date); return un.length ? `<div class="line unp" data-unplaced="${date}">配置未定：${un.map((n) => `<span>${esc(n)}</span>`).join("、")}</div>` : ""; })()}
           <div class="line off">休み：${off.map((n) => `<span class="${X.wishOf(S.month, n, date) ? "w" : ""}">${esc(n)}</span>`).join("、")}</div>`}
           ${wishes.length ? `<div class="line wish">希望：${wishes.map(([n, w]) => `<span class="${wcls(w)}" data-wcls="${wcls(w)}">${esc(n)} ${esc(w)}</span>`).join("、")}</div>` : ""}</td>`;
