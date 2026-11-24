@@ -235,7 +235,9 @@ function createCore(o) {
   function drop(op) { store.del(keyOf(op)); }
 
   function enqueue(op) {
-    op.opId = op.opId || uid(rnd); op.seq = now() * 1000 + (seqN++ % 1000); op.state = "queued";
+    // 送る順番：端末の時計が戻っても（時刻合わせなど）、あとに入れた操作が先に送られないように、いま残っているどの操作よりも後ろにする
+    const maxSeq = list().reduce((m, x) => Math.max(m, Number(x.seq) || 0), 0);
+    op.opId = op.opId || uid(rnd); op.seq = Math.max(now() * 1000 + (seqN++ % 1000), maxSeq + 1); op.state = "queued";
     op.by = me; op.at = iso();
     const saved = put(op);           // 送る前に「値ごと」端末に保存（障害D）
     emit(); kick();

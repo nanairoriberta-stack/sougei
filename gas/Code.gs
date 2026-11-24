@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.24b',
+  VERSION: '2026.11.24c',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -938,6 +938,7 @@ function calApply_(me, op) {
     }
     var res = TCCore.applyOp(op, paths, raws);
     if (res.status === 'outdated') return { status: 'failed' };
+    if (res.status === 'conflict' && opAppliedBefore_(op.opId)) return { status: 'done' };   // 前に保存されていた同じ操作（重なりにしない＝古い内容で上書きさせない）
     if (res.status !== 'ok') return { status: res.status, reason: res.reason || null, theirs: res.theirs || null };
     res.writes.forEach(function (w) {
       var meta = w.path.indexOf('days/') === 0 ? { date: w.data.date, maxEnd: w.data.maxEnd } : { date: w.data.date };
@@ -964,14 +965,25 @@ function calApply_(me, op) {
 function calJournal_(me, op, raws) {
   try {
     var sh = sheet_('_予定の控え');
-    if (!sh) { sh = SpreadsheetApp.getActiveSpreadsheet().insertSheet('_予定の控え'); sh.appendRow(['日時', '職員番号', '操作', '予定ID', '日付', '中身（新しい内容）', '前の内容']); try { sh.hideSheet(); } catch (e) {} }
+    if (!sh) { sh = SpreadsheetApp.getActiveSpreadsheet().insertSheet('_予定の控え'); sh.appendRow(['日時', '職員番号', '操作', '予定ID', '日付', '中身（新しい内容）', '前の内容', '操作ID']); try { sh.hideSheet(); } catch (e) {} }
     var before = null; raws.forEach(function (r) { var e = r && r.events && r.events[op.id]; if (e) before = e; });
     var cut = function (v) { if (v == null) return ''; var s = JSON.stringify(v); return 'J' + (s.length > 45000 ? s.slice(0, 45000) : s); };
     var after = op.kind === 'upsert' ? op.ev : op.kind === 'comment' ? op.comment : null;
     // スプレッドシート全体のマスの数には上限（1000万）があるので、15万行（1日500件でおよそ10か月分）を超えたら、いちばん古い2万行を消す
     try { if (sh.getLastRow() > 150000) sh.deleteRows(2, 20000); } catch (e) {}
-    sh.appendRow([new Date(), txt_(me.no || ''), op.kind, txt_(op.id), txt_((op.ev && op.ev.date) || op.date || op.cmKey || (before && before.date) || ''), cut(after), op.kind === 'comment' ? '' : cut(before)]);
+    sh.appendRow([new Date(), txt_(me.no || ''), op.kind, txt_(op.id), txt_((op.ev && op.ev.date) || op.date || op.cmKey || (before && before.date) || ''), cut(after), op.kind === 'comment' ? '' : cut(before), txt_(op.opId || '')]);
   } catch (e) { console.error(e && e.stack || e); }
+}
+/* この操作はもう前に保存されていたか（予定の控えの「操作ID」で探す）。入口のページから戻した控えなど、届いていたのに端末に残っていた古い操作が、
+   あとでほかの人が直した予定と「重なり」になって、古い内容で上書きされないようにする（2026-11-24 依頼者「デバッグのプロの目線で再検証」） */
+function opAppliedBefore_(opId) {
+  try {
+    var sh = sheet_('_予定の控え'); if (!sh || !opId) return false;
+    var last = sh.getLastRow(); if (last < 2) return false;
+    var k = Math.min(last - 1, 30000), vals = sh.getRange(last - k + 1, 8, k, 1).getValues();
+    for (var i = vals.length - 1; i >= 0; i--) if (String(vals[i][0]).replace(/^'/, '') === opId) return true;
+  } catch (e) {}
+  return false;
 }
 function sgText_(sg) {
   var t = { staff_off: sg.half === 'am' ? 'AM休' : sg.half === 'pm' ? 'PM休' : '休み・不在', staff_plan: '職員の予定', user_absent: '欠席', user_extra: '利用日外利用' + [sg.meet ? ' 迎え' + sg.meet : '', sg.noMeet ? ' ' + sg.noMeet : '', sg.send ? ' 送り' + sg.send : '', sg.noSend ? ' ' + sg.noSend : ''].join(''),
@@ -1273,9 +1285,10 @@ function linkAfterSave_(key, value, idx) {
   }
 }
 /* 予定の前後の日付について、既にある送迎表へ反映（取り消しも）する */
+// 何日も続く予定（長い入院・長期休暇など）も、1年分までその日の送迎表に反映する（2026-11-24。以前は62日まで＝それより後の日は送迎表を保存し直すまで反映されなかった）。まだ作られていない日は読むだけで何もしないので軽い
 function reconcileDates_(op, rawsBefore, idx) {
   var dates = {};
-  var addRange = function (a, b) { if (!a) return; b = b || a; var d = new Date(a + 'T00:00:00'), e = new Date(b + 'T00:00:00'), n = 0; while (d <= e && n++ < 62) { dates[Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd')] = 1; d.setDate(d.getDate() + 1); } };
+  var addRange = function (a, b) { if (!a) return; b = b || a; var d = new Date(a + 'T00:00:00'), e = new Date(b + 'T00:00:00'), n = 0; while (d <= e && n++ < 370) { dates[Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd')] = 1; d.setDate(d.getDate() + 1); } };
   rawsBefore.forEach(function (r) { var ev = r && r.events && r.events[op.id]; if (ev) addRange(ev.date, ev.endDate); });
   if (op.ev) addRange(op.ev.date, op.ev.endDate);
   Object.keys(dates).forEach(function (date) {

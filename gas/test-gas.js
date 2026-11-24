@@ -952,7 +952,30 @@ async function bootstrap() {
     for (let i = 0; i < 40 && cOld.status().queued; i++) await sleep(1000);
     assert.strictEqual(cOld.status().conflicts.length, 0, "古い控え（もう届いた新しい予定）は重なりにしない");
     assert.strictEqual((await q("2026-11-17", "2026-11-17")).find((e) => e.id === "ev_adopt001").title, "日野 AM休み", "あとで直した内容はそのまま");
-    return "つまずき・権限・反映エラー・控え・入口から戻す OK";
+    // ⑥ 前に保存されていた古い操作がもう一度届いても（入口の控えなど）、そのあとほかの人が直した内容を上書きしない・「重なり」にもしない
+    const opA = { kind: "upsert", opId: "op_old00001", id: "ev_old00001", baseRev: null, ev: evOff("2026-11-18", "日野") };
+    assert.strictEqual((await d.call("cal.apply", opA)).status, "ok");
+    const e1 = (await q("2026-11-18", "2026-11-18")).find((e) => e.id === "ev_old00001");
+    const opB = { kind: "upsert", opId: "op_old00002", id: "ev_old00001", baseRev: e1.rev, fromDate: "2026-11-18", ev: Object.assign(evOff("2026-11-18", "日野", "pm"), { title: "日野 PM休み（あとで直した）" }) };
+    assert.strictEqual((await d.call("cal.apply", opB)).status, "ok");
+    const e2 = (await q("2026-11-18", "2026-11-18")).find((e) => e.id === "ev_old00001");
+    const opC = { kind: "upsert", opId: "op_old00003", id: "ev_old00001", baseRev: e1.rev, fromDate: "2026-11-18", ev: Object.assign(evOff("2026-11-18", "日野"), { title: "日野 休み（古い直し）" }) };
+    assert.strictEqual((await d.call("cal.apply", opC)).status, "conflict", "本当に重なった直しは今までどおり「重なり」");
+    assert.strictEqual((await d.call("cal.apply", opA)).status, "done", "前に保存された新しい予定の操作は「届いていた」");
+    const opB2 = Object.assign({}, opB); await d.call("cal.apply", { kind: "upsert", opId: "op_old00004", id: "ev_old00001", baseRev: e2.rev, fromDate: "2026-11-18", ev: Object.assign(evOff("2026-11-18", "日野", "am"), { title: "日野 AM休み（さらに直した）" }) });
+    assert.strictEqual((await d.call("cal.apply", opB2)).status, "done", "前に保存された直しの操作がもう一度届いても「届いていた」（上書きしない）");
+    assert.strictEqual((await q("2026-11-18", "2026-11-18")).find((e) => e.id === "ev_old00001").title, "日野 AM休み（さらに直した）", "いちばん新しい内容のまま");
+    // ⑦ 端末の時計が戻っても、あとに入れた操作はあとに送る
+    { let t = 2000000; const cT = TC.createCore({ db: null, store: TC.makeStore(lsOf(memStore())), now: () => t, sleep, random: rnd, me: me.no, runOp: () => Promise.reject({ code: "network" }) });
+      cT.save(Object.assign(evOff("2026-11-19", "日野"), { id: "ev_clock001" }), null); t = 1000000;
+      cT.save(Object.assign(evOff("2026-11-19", "日野"), { id: "ev_clock002" }), null);
+      assert.deepStrictEqual(cT.list().map((x) => x.id), ["ev_clock001", "ev_clock002"], "入れた順に並ぶ"); }
+    // ⑧ 何日も続く予定（100日）は、62日より後の日の送迎表にも反映される
+    await admin.call("kv.cas", { key: "v2:sheet:2027-03-20", rev: 0, value: engFor("v2").emptySheet() });
+    await d.call("cal.apply", { kind: "upsert", opId: "op_long0001", id: "ev_long0001", baseRev: null, ev: Object.assign(evOff("2026-12-20", "日野"), { endDate: "2027-03-29", title: "日野 長期休み" }) });
+    const sh = (await admin.call("kv.get", "v2:sheet:2027-03-20")).value, hi = (await admin.call("kv.get", "v2:master")).value.staff.find((x) => x.name === "日野");
+    assert.ok(sh.staffOv && sh.staffOv[hi.id] && sh.staffOv[hi.id].off, "90日目の送迎表も休み " + JSON.stringify(sh.staffOv));
+    return "つまずき・権限・反映エラー・控え・入口から戻す・前に届いた操作・時計・長い予定 OK";
   });
 
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
