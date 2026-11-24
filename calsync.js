@@ -21,7 +21,9 @@ function komaSg(master, ev) {
   const id = String(ev.id || "");
   // シフト表から入った予定（sh…）はコマにしない。TimeTreeから写した予定（tt…）も、写したままの「その他予定」はコマにしない（数が多い）。
   // 職員その他・利用者その他に直した予定はコマにする（2026-11-11 依頼者「小瀧 研修 出てない」＝写した予定を職員その他に直したものだった、と見て）
-  if (/^sh/.test(id) || (/^tt/.test(id) && ev.label === "other")) return null;
+  // シフト表の予定（sh m|f 年月日 _…）・TimeTreeから写した予定（tt 年月日 _…）だけを形で見分ける（2026-11-24。以前は「sh」「tt」で始まるだけで外していた＝
+  // ふつうの予定のID（ランダムな20文字）が偶然 sh・tt で始まると、送迎表にコマが出なかった。約4000件に1件）
+  if (/^sh[mf]\d{8}_/.test(id) || (/^tt\d{8}_/.test(id) && ev.label === "other")) return null;
   if (ev.label === "uother") return (ev.users || []).length ? { type: "staff_plan", staff: [], users: ev.users } : null;
   if (ev.label !== "sother" && ev.label !== "other") return null;
   const names = new Set(((master && master.staff) || []).map((s) => s.name));

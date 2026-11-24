@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.24c',
+  VERSION: '2026.11.24d',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -955,7 +955,7 @@ function calApply_(me, op) {
     var docs = res.writes.filter(function (w) { return w.path.indexOf('days/') === 0; }).map(function (w) { return w.data; });
     // スマホの通知に使う中身（cal.apply の返事からは外す）。シフト表・TimeTreeから写した予定は知らせない
     var ex0 = null; raws.forEach(function (r) { var e = r && r.events && r.events[op.id]; if (e) ex0 = e; });
-    var push = op.kind === 'comment' || /^(sh|tt)/.test(op.id) ? null : { id: op.id, title: title, date: (op.ev && op.ev.date) || (ex0 && ex0.date) || '', mansion: (op.ev && op.ev.biz === 'mansion') || (ex0 && ex0.biz === 'mansion') || false,
+    var push = op.kind === 'comment' || /^(sh[mf]|tt)\d{8}_/.test(op.id) ? null : { id: op.id, title: title, date: (op.ev && op.ev.date) || (ex0 && ex0.date) || '', mansion: (op.ev && op.ev.biz === 'mansion') || (ex0 && ex0.biz === 'mansion') || false,
       kind: op.kind === 'delete' ? 'del' : op.kind === 'restore' ? 'new' : (ex0 && !ex0.deleted ? 'chg' : 'new') };
     return { status: 'ok', docs: docs, _push: push };
   });

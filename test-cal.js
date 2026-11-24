@@ -629,3 +629,14 @@ console.log('extra OK');
   assert.strictEqual(C.reconcile(m, sheet, [{ ...evM[0], biz: 'seikatsu' }], D).blocks.filter((b) => /evmn1/.test(b.id)).length, 1, '生活介護ならコマになる（比べるため）');
   const nl = E.calNoteLines(m, evM, D); assert.ok(!nl.user.length && !nl.staff.length && !nl.biz.length, '特記事項にも出さない ' + JSON.stringify(nl));
   console.log('mansion not on sheet OK'); }
+{ // 予定のID（ランダムな20文字）が偶然 sh・tt で始まっても、シフト表・TimeTreeの予定とまちがえない（2026-11-24 依頼者「もうないか？」で見つけた穴）
+  const D2 = '2026-11-02', S2 = (n) => m.staff.find((s) => s.name === n), sh0 = Object.assign(E.emptySheet(), { runs: [], blocks: [] });
+  const evs = [{ id: 'shQx7ab9KkLmNoPqRsTu', rev: 1, date: D2, endDate: D2, allDay: false, start: '10:00', end: '11:00', title: '八壁 研修', label: 'sother', tanto: ['八壁'], sg: null },
+    { id: 'ttZ2yX4wV6uT8sR0qP1o', rev: 1, date: D2, endDate: D2, allDay: false, start: '13:00', end: '14:00', title: '会議', label: 'other', tanto: ['八壁'], sg: null },
+    { id: 'shm20261102_abc', rev: 1, date: D2, endDate: D2, allDay: true, title: '八壁 早番①', label: 'sother', tanto: ['八壁'], sg: null },
+    { id: 'tt20261102_01', rev: 1, date: D2, endDate: D2, allDay: true, title: '写した予定', label: 'other', sg: null }];
+  const x = C.reconcile(m, sh0, evs, D2), ids = x.blocks.map((b) => b.id).join(' ');
+  assert.ok(/shQx7ab9/.test(ids) && /ttZ2yX4w/.test(ids), 'ふつうの予定はコマになる ' + ids);
+  assert.ok(!/shm20261102/.test(ids) && !/tt20261102/.test(ids), 'シフト表・TimeTreeの予定はコマにしない ' + ids);
+  assert.ok(x.blocks.some((b) => /shQx7ab9/.test(b.id) && b.staffId === S2('八壁').id), '八壁さんの欄');
+  console.log('sh/tt id OK'); }
