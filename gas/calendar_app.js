@@ -941,7 +941,7 @@ function openSync(){
   const sum=e=>e?`<b>${esc(ttl(e))}</b>${e.deleted?"（削除済み）":""}<br>${esc(e.date)} ${esc(timeText(e))}${e.place?"<br>"+esc(e.place):""}`:"<b>見つかりません</b>（削除または日付変更）";
   const kindName={upsert:"予定の保存",delete:"予定の削除",restore:"予定の復元",comment:"コメント"};
   const reason={changed:"あなたが開いた後に、他の人がこの予定を変更しました。",deleted:"他の人がこの予定を削除しました。",missing:"予定が見つかりません（他の人が削除または日付を変更しました）。",exists:"同じ予定がすでにあります。"};
-  const code={invalid_argument:"権限がないため保存できませんでした。",quota_exceeded:"保存できる量の上限に達しました。管理者に連絡してください。",full:"この日またはこの予定の保存量が上限です（コメントは1件の予定につき100件まで）。",outdated_client:"新しい版のデータのため、この版からは書き込めません。最新版を読み込んでから再送してください。",failed:"データの形が正しくないため保存できませんでした。"};
+  const code={invalid_argument:"権限がないため保存できませんでした。",permission_denied:"この予定を入れる権限がありません（マンションの予定はマンションの勤務の人と管理者だけ）。",quota_exceeded:"保存できる量の上限に達しました。管理者に連絡してください。",full:"この日またはこの予定の保存量が上限です（コメントは1件の予定につき100件まで）。",outdated_client:"新しい版のデータのため、この版からは書き込めません。最新版を読み込んでから再送してください。",failed:"データの形が正しくないため保存できませんでした。"};
   const opHtml=op=>{const mine=op.kind==="upsert"?op.ev:op.kind==="comment"?null:null;const theirs=op.info&&op.info.theirs?C.normEvent(op.info.theirs,op.info.theirs.id||"xxxxxxxx",0):null;
     const body=op.kind==="comment"?`<div class="cmp"><div><b>あなたのコメント</b>${esc(op.comment.text)}</div></div>`:op.kind==="upsert"?`<div class="cmp"><div><b>あなたの入力</b>${sum(C.normEvent(op.ev,op.id,0))}</div><div><b>現在の内容</b>${sum(theirs)}</div></div>`:`<div class="cmp"><div><b>操作</b>${kindName[op.kind]}</div><div><b>現在の内容</b>${sum(theirs)}</div></div>`;
     const conflict=op.state==="conflict";
@@ -1169,6 +1169,13 @@ render();
   window.SGHost.startPolling(20000);   // ほかの人が入れた予定が早く出るように（二重に入れるのを防ぐ）
   window.SGHost.onLogin(()=>core.kick());
   core.on(()=>{render();if(ed)drawComments();else if($("ov")&&$("sy-t"))openSync()});
+  // まだ送れていない予定を、入口のページ（なないろのアイコン。端末に残る）にも控えておく・開いたときに戻す（2026-11-24 依頼者「カレンダーに入れたデータが絶対消えないように」）。
+  // iPhoneのホーム画面から開くと、この画面（Googleの別のアドレス）の端末の保存は閉じるたびに消えることがあり、電波のない所で入れて閉じると消えていた
+  if(window.SGHost.wrap){const W=window.SGHost.wrap;
+    const keepOps=()=>{try{window.top.postMessage({sg:"keep-ops",ops:core.list().filter(x=>x.state==="queued"||x.state==="conflict"||x.state==="failed")},W)}catch{}};
+    core.on(keepOps);
+    window.addEventListener("message",e=>{if(e.origin!==W||!e.data||e.data.sg!=="ops")return;const n=core.adopt(Array.isArray(e.data.ops)?e.data.ops:[]);if(n)toast(`前に送れていなかった予定 ${n}件を送ります`)});
+    try{window.top.postMessage({sg:"need-ops"},W)}catch{}}
   S.dbState="ok";subscribe();core.kick();render();
   showShiftBtn();setInterval(showShiftBtn,5000);   // ログイン後に権限が届いたら出す
   if(ed&&ed.roWhy==="loading"&&!ed.confirmDel){const mOut=bizOf(ed.d)==="mansion"&&!mansionOk();ed.ro=!S.canWrite||mOut||(!!ed.base&&!canLabel(ed.d.label));ed.roWhy=ed.ro?(!S.canWrite?"perm":mOut?"mansion":"label"):"";drawSheet()}   // 準備中に開いた入力画面を、入力できるように開き直す   // 起動時に未送信を自動で再送（障害D）

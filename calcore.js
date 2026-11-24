@@ -17,7 +17,8 @@ const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", 
 const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "user_extra", "help", "hwork", "shift", "help_cancel", "liberta"];   // liberta＝リベルタ（ﾏﾝｼｮﾝ）の泊まり なし／あり（2026-11-07）   // help_cancel＝いつものヘルプをその日だけなし（2026-11-07）
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
-const PERM = ["invalid_argument", "quota_exceeded", "transform_error", "full", "outdated_client"];
+const PERM = ["invalid_argument", "quota_exceeded", "transform_error", "full", "outdated_client", "permission_denied"];
+const WAIT_ALL = ["network", "timeout", "busy", "auth"];   // 通信できない・混んでいる・ログインし直し：全部待って送り直す（ほかのエラーはその予定だけ後回し）
 const PAUSE = ["revoked", "not_granted", "capability_disabled", "capability_removed"];
 
 function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -289,20 +290,29 @@ function createCore(o) {
   async function process() {
     if (running) return; running = true;
     try {
+      // サーバーでつまずいた予定（通信以外のエラー）は、その予定だけ後回しにして、ほかの予定は先に送る（2026-11-24 依頼者「カレンダーに入れたデータが絶対消えないように」。
+      // 以前は1件がずっとつまずくと、そのあとに入れた予定もすべて送れないまま端末に残っていた）。同じ予定のあとの操作は順番を守って待つ
+      const stuck = new Set(); let stuckErr = null;
       for (;;) {
         if (paused) break;
-        const q = list().filter(x => x.state === "queued");
-        if (!q.length) { retryDelay = 0; lastError = null; break; }
+        const q = list().filter(x => x.state === "queued" && !stuck.has(x.id));
+        if (!q.length) {
+          if (stuck.size) { lastError = stuckErr; retryDelay = Math.min(retryDelay ? retryDelay * 2 : 2000, 60000); emit(); schedule(retryDelay); }
+          else { retryDelay = 0; lastError = null; }
+          break;
+        }
         const op = q[0];
         let r;
         try { r = await run(op); }
         catch (e) {
           const c = (e && e.code) || "network";
-          if (PERM.includes(c)) { op.state = "failed"; op.info = { code: c }; put(op); if (c === "outdated_client") { paused = c; } emit(); continue; }
+          if (PERM.includes(c)) { op.state = "failed"; op.info = { code: c, message: (e && e.message) || "" }; put(op); if (c === "outdated_client") { paused = c; } emit(); continue; }
           if (PAUSE.includes(c)) { paused = c; emit(); break; }
-          lastError = c; retryDelay = Math.min(retryDelay ? retryDelay * 2 : 2000, 60000); emit(); schedule(retryDelay); break;
+          if (WAIT_ALL.includes(c)) { lastError = c; retryDelay = Math.min(retryDelay ? retryDelay * 2 : 2000, 60000); emit(); schedule(retryDelay); break; }
+          op.tries = (op.tries || 0) + 1; op.lastCode = c; put(op); stuck.add(op.id); stuckErr = c; emit(); continue;   // 端末には残したまま、あとで送り直す
         }
         if (r.status === "ok" || r.status === "done") { drop(op); lastError = null; retryDelay = 0; }   // 成功した操作だけ外す（障害C）
+        else if (r.status === "conflict" && op.adopted && r.reason === "exists") { drop(op); }   // 入口のページから戻した控えで、もう届いていた新しい予定（二重にしない）
         else if (r.status === "conflict") { op.state = "conflict"; op.info = { reason: r.reason, theirs: r.theirs || null }; put(op); }
         else { op.state = "failed"; op.info = { code: r.status }; put(op); }
         emit();
@@ -324,6 +334,14 @@ function createCore(o) {
     setMe(id) { me = id; },
     on(f) { listeners.add(f); return () => listeners.delete(f); },
     list, kick,
+    /* 入口のページ（端末に残る）に控えておいた未送信の操作を戻す（iPhoneのホーム画面から開くと、この画面の端末の保存が閉じるたびに消えることがある。2026-11-24）。
+       もう届いていたものはサーバーが「届いていた」と答えるので二重にならない */
+    adopt(ops) {
+      const have = new Set(list().map(x => x.opId)); let n = 0;
+      for (const op of ops || []) { if (!op || typeof op !== "object" || !op.opId || !Number.isFinite(op.seq) || have.has(op.opId) || !["queued", "conflict", "failed"].includes(op.state) || !["upsert", "delete", "restore", "comment"].includes(op.kind)) continue; op.adopted = true; put(op); n++; }
+      if (n) { emit(); kick(); }
+      return n;
+    },
     status() {
       const ops = list();
       return { queued: ops.filter(x => x.state === "queued").length, conflicts: ops.filter(x => x.state === "conflict"), failed: ops.filter(x => x.state === "failed"), running, paused, lastError, persistent: store.persistent, retryDelay };

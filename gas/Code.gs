@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.23g',
+  VERSION: '2026.11.24a',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -946,7 +946,10 @@ function calApply_(me, op) {
     });
     var title = op.kind === 'comment' ? '' : (op.ev && op.ev.title) || (raws[0] && raws[0].events && raws[0].events[op.id] && raws[0].events[op.id].title) || '';
     log_(me, 'カレンダー', { upsert: op.baseRev == null && !op.baseOp ? '予定の作成' : '予定の変更', delete: '予定の削除', restore: '予定の復元', comment: 'コメント' }[op.kind], title + (sg ? '（送迎表：' + sgText_(sg) + '）' : ''));
-    if (op.kind !== 'comment') reconcileDates_(op, raws, idx);
+    calJournal_(me, op, raws);   // 予定の控え（どの版にも戻せるように。2026-11-24 依頼者「カレンダーに入れたデータが絶対消えないように」）
+    // 送迎表への反映でつまずいても、カレンダーの保存は「保存済み」にする（以前は反映のエラーで保存も失敗に見え、送り直すと「届いていた」扱いで反映がされないままだった）。
+    // 反映は送迎表を開いた・保存したときにもう一度される。つまずいたことは変更履歴に「エラー」で残す
+    if (op.kind !== 'comment') { try { reconcileDates_(op, raws, idx); } catch (e) { console.error(e && e.stack || e); log_(me, 'エラー', '送迎表への反映', title + '：' + String(e && e.message || e).slice(0, 200)); } }
     // 書いた日の文書を返す：画面はこれで表を直し、月の読み直しを待たずに「保存済み」にできる
     var docs = res.writes.filter(function (w) { return w.path.indexOf('days/') === 0; }).map(function (w) { return w.data; });
     // スマホの通知に使う中身（cal.apply の返事からは外す）。シフト表・TimeTreeから写した予定は知らせない
@@ -955,6 +958,18 @@ function calApply_(me, op) {
       kind: op.kind === 'delete' ? 'del' : op.kind === 'restore' ? 'new' : (ex0 && !ex0.deleted ? 'chg' : 'new') };
     return { status: 'ok', docs: docs, _push: push };
   });
+}
+/* 予定の控え（隠しシート「_予定の控え」）：カレンダーの保存のたびに、その操作の中身（新しい内容・消す前の内容）をまるごと1行ずつ足していく。
+   書き換え・削除・ゴミ箱の自動整理（30日）のあとでも、どの時点の内容にも戻せる。控えを書けなくても保存は止めない */
+function calJournal_(me, op, raws) {
+  try {
+    var sh = sheet_('_予定の控え');
+    if (!sh) { sh = SpreadsheetApp.getActiveSpreadsheet().insertSheet('_予定の控え'); sh.appendRow(['日時', '職員番号', '操作', '予定ID', '日付', '中身（新しい内容）', '前の内容']); try { sh.hideSheet(); } catch (e) {} }
+    var before = null; raws.forEach(function (r) { var e = r && r.events && r.events[op.id]; if (e) before = e; });
+    var cut = function (v) { if (v == null) return ''; var s = JSON.stringify(v); return 'J' + (s.length > 45000 ? s.slice(0, 45000) : s); };
+    var after = op.kind === 'upsert' ? op.ev : op.kind === 'comment' ? op.comment : null;
+    sh.appendRow([new Date(), txt_(me.no || ''), op.kind, txt_(op.id), txt_((op.ev && op.ev.date) || op.date || op.cmKey || (before && before.date) || ''), cut(after), op.kind === 'comment' ? '' : cut(before)]);
+  } catch (e) { console.error(e && e.stack || e); }
 }
 function sgText_(sg) {
   var t = { staff_off: sg.half === 'am' ? 'AM休' : sg.half === 'pm' ? 'PM休' : '休み・不在', staff_plan: '職員の予定', user_absent: '欠席', user_extra: '利用日外利用' + [sg.meet ? ' 迎え' + sg.meet : '', sg.noMeet ? ' ' + sg.noMeet : '', sg.send ? ' 送り' + sg.send : '', sg.noSend ? ' ' + sg.noSend : ''].join(''),

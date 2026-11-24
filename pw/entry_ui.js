@@ -35,6 +35,7 @@ const path = require("path"), fs = require("fs"), os = require("os");
   await offlineTest(W);
   await embedTest(W);
   await keepTest(W);
+  await opsTest(W);
 })().catch((e) => { console.error(e); process.exit(1); });
 
 /* 電波がないときに最後に見た予定（2026-11-17 依頼者「オフラインでも最終みたカレンダーみれるように」）：
@@ -169,4 +170,31 @@ async function keepTest(W) {
   await pg.waitForFunction(() => localStorage.getItem("sgTok") === null, null, { timeout: 5000 });
   assert.deepStrictEqual(errs.filter((e) => !/fonts|ERR_/.test(e)), [], "画面エラーなし");
   await b.close(); console.log("入口のページでログインしたまま OK");
+}
+
+/* まだ送れていない予定の控え（2026-11-24 依頼者「カレンダーに入れたデータが絶対消えないように」）：中の画面が入口のページに控え、開き直したときに返してもらう。ほかのサイトには渡さない */
+async function opsTest(W) {
+  const ORIGIN = "https://nanairo.example.workers.dev";
+  const b = await chromium.launch(), ctx = await b.newContext(), pg = await ctx.newPage();
+  await ctx.route(ORIGIN + "/**", async (route) => { const q = await W.fetch(new Request(route.request().url()), {});
+    route.fulfill({ status: q.status, headers: Object.fromEntries(q.headers), body: Buffer.from(await q.arrayBuffer()) }); });
+  await ctx.route("https://script.google.com/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: `<!DOCTYPE html><body><script>
+    window.got=[];addEventListener("message",e=>{if(e.data&&e.data.sg==="ops")window.got.push(e.data.ops)});
+    window.keep=(ops)=>window.top.postMessage({sg:"keep-ops",ops},"${ORIGIN}");window.ask=()=>window.top.postMessage({sg:"need-ops"},"${ORIGIN}");</script></body>` }));
+  await pg.goto(ORIGIN + "/?page=calendar"); await pg.waitForTimeout(800);
+  const fr = () => pg.frames().find((f) => f.url().startsWith("https://script.google.com"));
+  const op = { opId: "op_test0001", seq: 1, kind: "upsert", id: "ev_test0001", state: "queued", ev: { title: "電波なしで入れた予定", date: "2026-12-01" } };
+  await fr().evaluate((o) => window.keep([o]), op); await pg.waitForTimeout(200);
+  assert.ok((await pg.evaluate(() => localStorage.getItem("sgOps") || "")).includes("電波なしで入れた予定"), "入口のページに控える");
+  await pg.reload(); await pg.waitForTimeout(800);   // 閉じて開き直した（中の画面の保存は消えている）
+  await fr().evaluate(() => window.ask()); await pg.waitForTimeout(300);
+  const got = await fr().evaluate(() => window.got);
+  assert.strictEqual(got.length, 1); assert.strictEqual(got[0][0].opId, "op_test0001", "開き直すと返してもらえる");
+  await fr().evaluate(() => window.keep([])); await pg.waitForTimeout(200);
+  assert.strictEqual(await pg.evaluate(() => localStorage.getItem("sgOps")), null, "送り終わったら控えを消す");
+  // ほかのサイト（入口の中でない窓）が聞いても渡さない
+  await pg.evaluate((o) => localStorage.setItem("sgOps", JSON.stringify([o])), op);
+  const r = await pg.evaluate(() => new Promise((res) => { let v = "none"; addEventListener("message", (e) => { if (e.data && e.data.sg === "ops") v = "got"; }); window.postMessage({ sg: "need-ops" }, "*"); setTimeout(() => res(v), 500); }));
+  assert.strictEqual(r, "none", "入口の外には渡さない");
+  await b.close(); console.log("未送信の予定の控え（入口のページ）OK");
 }

@@ -892,6 +892,69 @@ async function bootstrap() {
     const w0 = g.stats.writes; get({ page: "export", key, ym: "2026-12" }); assert.strictEqual(g.stats.writes, w0, "書きこまない");
     return "連携のアドレス: …" + url.slice(-30);
   });
+  await test("カレンダーのデータが消えない（2026-11-24 依頼者「絶対消えないように」）：つまずく1件で後ろが止まらない・送迎表の反映エラーでも保存・予定の控え・入口のページの控えから戻す", async () => {
+    const { g, admin } = await bootstrap();
+    const d = device(g); const me = await d.login(noOf(g, "日野"), pinOf(g, "日野"));
+    const q = async (from, to) => Object.values(TC.mergeDays(await d.call("docs.query", { col: "days", from, to })));
+    // ① サーバーでつまずく1件（ここでは日野の11/10）があっても、そのあとに入れた予定は先に保存される。つまずいた1件も端末に残り、直れば送られる
+    let bad = true;
+    const st1 = memStore(); const c1 = TC.createCore({ db: null, store: TC.makeStore(lsOf(st1)), now: Date.now, sleep, random: rnd, me: me.no,
+      runOp: (op) => (bad && op.ev && op.ev.date === "2026-11-10") ? Promise.reject({ code: "unavailable", message: "テストのつまずき" }) : d.call("cal.apply", op) });
+    c1.save(Object.assign(evOff("2026-11-10", "日野"), { id: "ev_stuck001" }), null);
+    c1.save(Object.assign(evOff("2026-11-11", "日野"), { id: "ev_after001" }), null);
+    c1.save(Object.assign(evOff("2026-11-12", "日野", "am"), { id: "ev_after002" }), null);
+    for (let i = 0; i < 40 && (await q("2026-11-11", "2026-11-12")).filter((e) => /ev_after/.test(e.id)).length < 2; i++) await sleep(1000);
+    assert.strictEqual((await q("2026-11-11", "2026-11-12")).filter((e) => /ev_after/.test(e.id)).length, 2, "つまずいた1件のあとの予定も保存される");
+    assert.strictEqual(c1.status().queued, 1, "つまずいた1件は端末に残る");
+    assert.ok(c1.list()[0].tries >= 1 && c1.list()[0].lastCode === "unavailable");
+    bad = false; c1.kick(); for (let i = 0; i < 60 && c1.status().queued; i++) { await sleep(1000); c1.kick(); }
+    assert.ok((await q("2026-11-10", "2026-11-10")).some((e) => e.id === "ev_stuck001"), "直れば送られる");
+    // ② 権限で入れられない（マンションの予定）は「要確認」に残し、ほかを止めない
+    const c2 = TC.createCore({ db: null, store: TC.makeStore(lsOf(memStore())), now: Date.now, sleep, random: rnd, me: me.no, runOp: (op) => d.call("cal.apply", op) });
+    c2.save({ id: "ev_mans0001", title: "マンションの会", date: "2026-11-13", endDate: "2026-11-13", allDay: true, start: "", end: "", label: "mevent", biz: "mansion", place: "", memo: "", members: [] }, null);
+    c2.save(Object.assign(evOff("2026-11-13", "日野"), { id: "ev_after003" }), null);
+    for (let i = 0; i < 40 && c2.status().queued; i++) await sleep(1000);
+    assert.strictEqual(c2.status().failed.length, 1, "入れられない1件は要確認"); assert.strictEqual(c2.status().failed[0].info.code, "permission_denied");
+    assert.ok((await q("2026-11-13", "2026-11-13")).some((e) => e.id === "ev_after003"), "ほかは保存");
+    // ③ 送迎表への反映でつまずいても、カレンダーの保存は保存済み。変更履歴に「エラー」
+    await admin.call("kv.cas", { key: "v2:sheet:2026-11-16", rev: 0, value: engFor("v2").emptySheet() });
+    const orig = g.ctx.SGCal.reconcile; g.ctx.SGCal.reconcile = () => { throw new Error("テストの反映エラー"); };
+    let r; try { r = await d.call("cal.apply", { kind: "upsert", opId: "op_recon001", id: "ev_recon001", baseRev: null, ev: evOff("2026-11-16", "日野") }); } finally { g.ctx.SGCal.reconcile = orig; }
+    assert.strictEqual(r.status, "ok", "反映でつまずいても保存は成功");
+    assert.ok((await q("2026-11-16", "2026-11-16")).some((e) => e.id === "ev_recon001"), "予定は保存されている");
+    assert.ok(g.sheets.get("変更履歴").data.some((row) => row[3] === "エラー" && row[4] === "送迎表への反映" && String(row[5]).includes("テストの反映エラー")), "変更履歴にエラー");
+    // ④ 予定の控え：作った・直した・消した中身がまるごと残る（30日たってゴミ箱から消えても戻せる）
+    const ev1 = (await q("2026-11-16", "2026-11-16")).find((e) => e.id === "ev_recon001");
+    await d.call("cal.apply", { kind: "upsert", opId: "op_recon002", id: "ev_recon001", baseRev: ev1.rev, fromDate: "2026-11-16", ev: Object.assign(evOff("2026-11-16", "日野", "pm"), { title: "日野 PM休み（直した）" }) });
+    const ev2 = (await q("2026-11-16", "2026-11-16")).find((e) => e.id === "ev_recon001");
+    await d.call("cal.apply", { kind: "delete", opId: "op_recon003", id: "ev_recon001", date: "2026-11-16", baseRev: ev2.rev });
+    const jr = g.sheets.get("_予定の控え").data.filter((row) => String(row[3]).replace(/^'/, "") === "ev_recon001");
+    assert.deepStrictEqual(jr.map((row) => row[2]), ["upsert", "upsert", "delete"], "3回の操作が残る");
+    assert.strictEqual(JSON.parse(String(jr[1][5]).slice(1)).title, "日野 PM休み（直した）", "新しい内容");
+    assert.strictEqual(JSON.parse(String(jr[1][6]).slice(1)).title, "日野 休み", "前の内容");
+    assert.strictEqual(JSON.parse(String(jr[2][6]).slice(1)).title, "日野 PM休み（直した）", "消す前の内容");
+    // ⑤ 入口のページに控えた未送信の操作を、端末の保存が消えたあとに戻す（iPhone）。二重にならない・もう届いていた新しい予定は「重なり」にしない
+    const off = memStore(); const cOff = TC.createCore({ db: null, store: TC.makeStore(lsOf(off)), now: Date.now, sleep, random: rnd, me: me.no, runOp: () => Promise.reject({ code: "network" }) });
+    cOff.save(Object.assign(evOff("2026-11-17", "日野"), { id: "ev_adopt001" }), null);
+    await sleep(300); const kept = JSON.parse(JSON.stringify(cOff.list()));   // 入口のページに控えた内容
+    assert.strictEqual(kept.length, 1);
+    const cNew = TC.createCore({ db: null, store: TC.makeStore(lsOf(memStore())), now: Date.now, sleep, random: rnd, me: me.no, runOp: (op) => d.call("cal.apply", op) });
+    assert.strictEqual(cNew.adopt(kept), 1, "戻した"); assert.strictEqual(cNew.adopt(kept), 0, "端末にあるものは二度入れない");
+    for (let i = 0; i < 40 && cNew.status().queued; i++) await sleep(1000);
+    assert.ok((await q("2026-11-17", "2026-11-17")).some((e) => e.id === "ev_adopt001"), "電波のない所で入れて閉じた予定が保存される");
+    assert.strictEqual(cNew.adopt(kept), 1); for (let i = 0; i < 40 && cNew.status().queued; i++) await sleep(1000);   // 送ったあとにまた戻ってきても
+    assert.strictEqual(cNew.status().conflicts.length + cNew.status().failed.length, 0, "届いていた分は「届いていた」で終わる");
+    assert.strictEqual((await q("2026-11-17", "2026-11-17")).filter((e) => e.id === "ev_adopt001").length, 1, "二重にならない");
+    const ev3 = (await q("2026-11-17", "2026-11-17")).find((e) => e.id === "ev_adopt001");
+    await d.call("cal.apply", { kind: "upsert", opId: "op_adopt002", id: "ev_adopt001", baseRev: ev3.rev, fromDate: "2026-11-17", ev: Object.assign(evOff("2026-11-17", "日野", "am"), { title: "日野 AM休み" }) });
+    const cOld = TC.createCore({ db: null, store: TC.makeStore(lsOf(memStore())), now: Date.now, sleep, random: rnd, me: me.no, runOp: (op) => d.call("cal.apply", op) });
+    assert.strictEqual(cOld.adopt(kept), 1);
+    for (let i = 0; i < 40 && cOld.status().queued; i++) await sleep(1000);
+    assert.strictEqual(cOld.status().conflicts.length, 0, "古い控え（もう届いた新しい予定）は重なりにしない");
+    assert.strictEqual((await q("2026-11-17", "2026-11-17")).find((e) => e.id === "ev_adopt001").title, "日野 AM休み", "あとで直した内容はそのまま");
+    return "つまずき・権限・反映エラー・控え・入口から戻す OK";
+  });
+
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
     const { g, admin } = await bootstrap();
     const date = "2026-11-25"; const E = engFor("v1"); const m = await admin.kv().get("master"); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);
