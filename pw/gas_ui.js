@@ -851,6 +851,26 @@ const D = path.join(__dirname, "../gas/out");
     if (await A.pg.locator("#evForm").count()) { await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }
     try { await A.pg.evaluate(() => { try { Object.keys(localStorage).filter((k) => /draft/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch {} }); } catch {}
     console.log("なぞって外で離しても閉じない OK", ov && Math.round(ov.width)); }
+  { // 保存せずに閉じても、入力していたら書きかけとして残る・開き直しても残る・別の予定を開くと先に書きかけを開くか聞く（2026-11-24 依頼者「絶対消えないように」）
+    await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await pickLabel(A.pg, "other"); await A.pg.waitForTimeout(200);
+    await A.pg.fill("#f-title", "書きかけの試し 会議"); await A.pg.waitForTimeout(100);   // すぐ閉じる（0.5秒待たない）
+    await A.pg.click("[data-close] >> nth=0"); await A.pg.waitForTimeout(300);
+    assert.strictEqual(await A.pg.locator("#evForm").count(), 0, "閉じた");
+    assert.match(await A.pg.locator("#toast, .toast").first().innerText().catch(() => ""), /書きかけを残しました/, "お知らせ");
+    assert.ok((await A.pg.locator("body").innerText()).includes("書きかけの予定「書きかけの試し 会議」が残っています"), "上に書きかけ");
+    await A.pg.reload(); await A.pg.waitForTimeout(2500);
+    assert.ok((await A.pg.locator("body").innerText()).includes("書きかけの予定「書きかけの試し 会議」が残っています"), "開き直しても残る");
+    let msg = ""; A.pg.once("dialog", (d) => { msg = d.message(); d.accept(); });
+    await A.pg.click("#addBtn"); await A.pg.waitForTimeout(400);
+    assert.ok(msg.includes("書きかけの予定「書きかけの試し 会議」が残っています"), "別の予定を開くと聞く " + msg);
+    assert.strictEqual(await A.pg.inputValue("#f-title"), "書きかけの試し 会議", "OKで書きかけを開く");
+    await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300);
+    await A.pg.click("[data-draft-drop]"); await A.pg.waitForTimeout(300);
+    assert.ok(!(await A.pg.locator("body").innerText()).includes("書きかけの予定「書きかけの試し 会議」"), "破棄で消える");
+    // 何も入力せずに閉じたら残さない
+    await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300); await A.pg.click("[data-close] >> nth=0"); await A.pg.waitForTimeout(300);
+    assert.ok(!(await A.pg.locator("body").innerText()).includes("書きかけの予定"), "入力していなければ残さない");
+    console.log("書きかけを残す OK"); }
   { // ラベルの2段（2026-11-05）：職員の中の「その他」・利用者の中の「その他」・その他予定（2段目なし）
     const D21 = "2026-11-21", setDay = async () => { await A.pg.fill("#f-date", D21); await A.pg.fill("#f-enddate", D21); };
     await A.pg.click("#addBtn"); await A.pg.waitForTimeout(300);

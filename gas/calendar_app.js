@@ -471,8 +471,12 @@ document.addEventListener("touchend",e=>{if(!sw)return;const s=sw;sw=null;const 
 /* ---------- 書きかけ（端末に自動保存） ---------- */
 const DKEY="tc:draft";
 function draftGet(){try{const v=store.get(DKEY);return v?JSON.parse(v):null}catch{return null}}
-let dT;function draftSave(){clearTimeout(dT);dT=setTimeout(()=>{if(!ed||ed.ro)return;try{readForm(false);store.set(DKEY,JSON.stringify({id:ed.id,base:ed.base,form:ed.d,savedAt:new Date().toISOString()}))}catch{}},500)}
-function draftDrop(){clearTimeout(dT);store.del(DKEY)}
+// 書きかけは入口のページ（端末に残る）にも控える（2026-11-24 依頼者「絶対消えないように」。iPhoneのホーム画面から開くと、この画面の端末の保存は閉じるたびに消えることがある）
+const draftMirror=v=>{try{if(window.SGHost&&window.SGHost.wrap)window.top.postMessage({sg:"keep-draft",draft:v||null},window.SGHost.wrap)}catch{}};
+function draftWrite(){if(!ed||ed.ro)return;try{readForm(false);const v={id:ed.id,base:ed.base,form:ed.d,savedAt:new Date().toISOString()};store.set(DKEY,JSON.stringify(v));ed.dirty=true;draftMirror(v)}catch{}}
+let dT=null;function draftSave(){clearTimeout(dT);dT=setTimeout(()=>{dT=null;draftWrite()},500)}
+function draftFlush(){clearTimeout(dT);dT=null;draftWrite()}   // 閉じる前に、書きかけをすぐ残す
+function draftDrop(){clearTimeout(dT);dT=null;store.del(DKEY);draftMirror(null)}
 
 /* ---------- ラベルごとの入力項目と、送迎表への反映 ----------
    ラベルを選ぶと、そのラベルで入力する項目が出る。入力内容から「送迎表に反映」(sg) を組み立てる。
@@ -817,6 +821,9 @@ function checkSg(d,sg){
 /* ---------- 予定の編集 ---------- */
 let ed=null;
 function openEditor(ev,day,draft){
+  // 書きかけが残っているときに別の予定を開くと、書きかけが上書きされていた（2026-11-24 依頼者「絶対消えないように」）→ 先に書きかけを開くか聞く
+  if(!draft){const od=draftGet();if(od&&od.form&&(!ev||od.id!==ev.id)){
+    if(confirm(`書きかけの予定「${od.form.title||(LMAP[od.form.label]||{}).n||"（無題）"}」が残っています。先にそちらを開きますか？\n（「キャンセル」で新しく開きます。新しい方に入力すると、書きかけは置きかわります）`)){const cur=od.id?allEvents().find(x=>x.id===od.id):null;return openEditor(cur||od.base||null,null,od)}}}
   const ro=!(db&&S.canWrite&&core);
   const base=ev||null;
   // 新しい予定は「ヘルプ」から（ヘルプを入れられない一般職員は「職員休み」から）
@@ -1054,7 +1061,9 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-add-day]")){if(canAddHere())openEditor(null,S.sel);return}
   const rs=t.closest("[data-restore]");if(rs){const x=allEvents().find(z=>z.id===rs.dataset.restore);if(x&&core){core.restore(x);toast("元に戻しました")}return}
   if(!$("ov"))return;
-  if((t.id==="ov"&&PDOWN===t)||t.closest("[data-close]")){if(ed)closeEditor();else{$("sheetRoot").innerHTML=""}return}
+  // 保存せずに閉じたとき（外を押した・×）：何か入力していたら書きかけとして残す（2026-11-24 依頼者「絶対消えないように」。以前は入力した内容がそのまま消えた）。
+  // 上の「書きかけの予定が残っています［続きを書く］［破棄］」から戻せる
+  if((t.id==="ov"&&PDOWN===t)||t.closest("[data-close]")){if(ed){const keep=!ed.ro&&(ed.dirty||!!dT);if(keep)draftFlush();closeEditor(keep);if(keep)toast("書きかけを残しました（上の「続きを書く」から戻せます）")}else{$("sheetRoot").innerHTML=""}return}
   /* 同期画面 */
   const f=t.closest("[data-force]");if(f){core.force(f.dataset.force);openSync();return}
   const r=t.closest("[data-retry]");if(r){core.retry(r.dataset.retry);openSync();return}
@@ -1093,7 +1102,7 @@ document.addEventListener("click",async e=>{
 });
 document.addEventListener("keydown",e=>{
   if(e.key==="Enter"&&(e.target.id==="f-sgq-staff"||e.target.id==="f-sgq-users")){e.preventDefault();const b=$("sghits-"+e.target.id.slice(6))?.querySelector("[data-sgpick]");if(b)b.click();return}
-  if(e.key==="Escape"&&$("ov")){if(ed)closeEditor(true);else $("sheetRoot").innerHTML="";return}
+  if(e.key==="Escape"&&$("ov")){if(ed){if(!ed.ro&&(ed.dirty||!!dT))draftFlush();closeEditor(true)}else $("sheetRoot").innerHTML="";return}
   if(e.key==="Escape"&&S.dayOpen){S.dayOpen=false;render();return}
   if(e.key==="Escape"&&SR.open){closeSearch();return}
   if(e.key==="Enter"&&e.target.id==="sq"){e.target.blur();return}   // 検索ボタンでキーボードを閉じて結果を見る
@@ -1174,7 +1183,8 @@ render();
   if(window.SGHost.wrap){const W=window.SGHost.wrap;
     const keepOps=()=>{try{window.top.postMessage({sg:"keep-ops",ops:core.list().filter(x=>x.state==="queued"||x.state==="conflict"||x.state==="failed")},W)}catch{}};
     core.on(keepOps);
-    window.addEventListener("message",e=>{if(e.origin!==W||!e.data||e.data.sg!=="ops")return;const n=core.adopt(Array.isArray(e.data.ops)?e.data.ops:[]);if(n)toast(`前に送れていなかった予定 ${n}件を送ります`)});
+    window.addEventListener("message",e=>{if(e.origin!==W||!e.data||e.data.sg!=="ops")return;const n=core.adopt(Array.isArray(e.data.ops)?e.data.ops:[]);if(n)toast(`前に送れていなかった予定 ${n}件を送ります`);
+      const dr=e.data.draft;if(dr&&typeof dr==="object"&&dr.form&&typeof dr.form==="object"&&!draftGet()){try{store.set(DKEY,JSON.stringify(dr));render()}catch{}}});   // 書きかけも戻す
     try{window.top.postMessage({sg:"need-ops"},W)}catch{}}
   S.dbState="ok";subscribe();core.kick();render();
   showShiftBtn();setInterval(showShiftBtn,5000);   // ログイン後に権限が届いたら出す

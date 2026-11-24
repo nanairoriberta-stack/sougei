@@ -118,7 +118,8 @@ if(d.sg==="push-ask"&&typeof d.key==="string"&&d.key.length>60){ask=d;check()}el
 else if(d.sg==="keep-token"&&TOK.test(d.t||"")&&mine(e.source)){try{localStorage.setItem("sgTok",d.t)}catch(x){}}
 else if(d.sg==="keep-token-clear"&&mine(e.source)){try{localStorage.removeItem("sgTok")}catch(x){}}
 else if(d.sg==="keep-ops"&&mine(e.source)&&Array.isArray(d.ops)){try{var s=JSON.stringify(d.ops);if(s.length<1500000){if(d.ops.length)localStorage.setItem("sgOps",s);else localStorage.removeItem("sgOps")}}catch(x){}}
-else if(d.sg==="need-ops"&&mine(e.source)){var o=[];try{o=JSON.parse(localStorage.getItem("sgOps")||"[]")}catch(x){}try{e.source.postMessage({sg:"ops",ops:Array.isArray(o)?o:[]},e.origin)}catch(x){}}
+else if(d.sg==="keep-draft"&&mine(e.source)){try{if(d.draft&&typeof d.draft==="object"){var s2=JSON.stringify(d.draft);if(s2.length<300000)localStorage.setItem("sgDraft",s2)}else localStorage.removeItem("sgDraft")}catch(x){}}
+else if(d.sg==="need-ops"&&mine(e.source)){var o=[],dr=null;try{o=JSON.parse(localStorage.getItem("sgOps")||"[]")}catch(x){}try{dr=JSON.parse(localStorage.getItem("sgDraft")||"null")}catch(x){}try{e.source.postMessage({sg:"ops",ops:Array.isArray(o)?o:[],draft:dr},e.origin)}catch(x){}}
 else if(d.sg==="need-token"&&mine(e.source)){var t="";try{t=localStorage.getItem("sgTok")||""}catch(x){}try{e.source.postMessage({sg:"token",t:TOK.test(t)?t:""},e.origin)}catch(x){}}});})();`;
 
 // 電波がないときの画面（最後に見た予定・見るだけ）

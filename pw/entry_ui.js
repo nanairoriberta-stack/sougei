@@ -179,7 +179,8 @@ async function opsTest(W) {
   await ctx.route(ORIGIN + "/**", async (route) => { const q = await W.fetch(new Request(route.request().url()), {});
     route.fulfill({ status: q.status, headers: Object.fromEntries(q.headers), body: Buffer.from(await q.arrayBuffer()) }); });
   await ctx.route("https://script.google.com/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: `<!DOCTYPE html><body><script>
-    window.got=[];addEventListener("message",e=>{if(e.data&&e.data.sg==="ops")window.got.push(e.data.ops)});
+    window.got=[];window.gotD=[];addEventListener("message",e=>{if(e.data&&e.data.sg==="ops"){window.got.push(e.data.ops);window.gotD.push(e.data.draft)}});
+    window.keepD=(d)=>window.top.postMessage({sg:"keep-draft",draft:d},"${ORIGIN}");
     window.keep=(ops)=>window.top.postMessage({sg:"keep-ops",ops},"${ORIGIN}");window.ask=()=>window.top.postMessage({sg:"need-ops"},"${ORIGIN}");</script></body>` }));
   await pg.goto(ORIGIN + "/?page=calendar"); await pg.waitForTimeout(800);
   const fr = () => pg.frames().find((f) => f.url().startsWith("https://script.google.com"));
@@ -190,6 +191,11 @@ async function opsTest(W) {
   await fr().evaluate(() => window.ask()); await pg.waitForTimeout(300);
   const got = await fr().evaluate(() => window.got);
   assert.strictEqual(got.length, 1); assert.strictEqual(got[0][0].opId, "op_test0001", "開き直すと返してもらえる");
+  await fr().evaluate(() => window.keepD({ id: null, form: { title: "書きかけの試し" }, savedAt: "x" })); await pg.waitForTimeout(200);   // 書きかけも
+  await fr().evaluate(() => window.ask()); await pg.waitForTimeout(300);
+  assert.strictEqual((await fr().evaluate(() => window.gotD))[1].form.title, "書きかけの試し", "書きかけも返してもらえる");
+  await fr().evaluate(() => window.keepD(null)); await pg.waitForTimeout(200);
+  assert.strictEqual(await pg.evaluate(() => localStorage.getItem("sgDraft")), null, "書きかけを消したら控えも消える");
   await fr().evaluate(() => window.keep([])); await pg.waitForTimeout(200);
   assert.strictEqual(await pg.evaluate(() => localStorage.getItem("sgOps")), null, "送り終わったら控えを消す");
   // ほかのサイト（入口の中でない窓）が聞いても渡さない
