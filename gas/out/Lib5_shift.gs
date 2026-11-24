@@ -170,6 +170,16 @@
     for (const n of Object.keys(sig)) if (sigOf(sig[n]) !== baseSig(cfg, date, n)) out.add(n);
     return out;
   }
+  /* いつもと違う理由で色を分ける（2026-11-24 依頼者「希望休＆希望変更と、こちらで変更した勤務変更の文字の色は別に。アプリもエクセルも」）：
+     {名前: "wish"（その日に希望がある＝希望休・希望勤務による変更） | "ours"（希望はない＝組む人が変えた）}。
+     枠・日勤に入っている人は changedFromBase と同じ決め方。休みの人は、基本では出る日に希望（休み・AM休・PM休）で休んでいるとき "wish" */
+  function changeKinds(month, cfg, date) {
+    const out = {};
+    for (const n of changedFromBase(month, cfg, date)) out[n] = wishOf(month, n, date) ? "wish" : "ours";
+    const base = baseNames(cfg, date), w = workers(month, date);
+    for (const m of (cfg && cfg.members) || []) if (!w.has(m.name) && base.has(m.name) && OFF_WISH[wishOf(month, m.name, date)]) out[m.name] = "wish";
+    return out;
+  }
   // その日に入っている人（早・遅・日勤）
   const workers = (month, date) => new Set(entries(month, date).map((e) => e.n));
   const wishOf = (month, name, date) => (((month && month.wish) || {})[name] || {})[date] || "";
@@ -441,11 +451,17 @@
     const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet(`${Number(ym.slice(5, 7))}月`, { pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 1, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } } });
     const thin = { style: "thin", color: { argb: "FF6B7BBF" } }, med = { style: "medium", color: { argb: "FF1E3A8A" } };
     const RED = "FFC2410C", BLUE = "FF1E40AF", GRAY = "FFF1F5F9", HOLE = "FFFEF3C7";
+    // いつもと違う人の色（アプリと同じ）：希望による変更＝緑、こちらで変えた勤務＝紫
+    const CHG = { wish: { font: "FF0F766E", fill: "FFCCFBF1" }, ours: { font: "FF7C3AED", fill: "FFEDE9FE" } };
+    const F = (o) => Object.assign({ name: "Meiryo UI", size: 10 }, o);
+    const nameRun = (n, kind, size, t) => ({ text: n + (t || ""), font: F(Object.assign({ size }, kind ? { bold: true, underline: "dotted", color: { argb: CHG[kind].font } } : {})) });
+    const listRich = (head, names, kinds, size) => { const out = [{ text: head, font: F({ size }) }]; names.forEach((x, i) => { if (i) out.push({ text: "、", font: F({ size }) }); const e = splitName(x); out.push(nameRun(e.n || x, kinds[e.n], size, e.n && e.t ? `(${e.t})` : "")); }); return out; };
     for (let c = 1; c <= 14; c++) ws.getColumn(c).width = 12.5;
     const cell = (r, c, v, o) => { const x = ws.getCell(r, c); x.value = v; x.font = Object.assign({ name: "Meiryo UI", size: 10 }, (o && o.font) || {}); x.alignment = Object.assign({ vertical: "middle", wrapText: false }, (o && o.align) || {}); if (o && o.fill) x.fill = { type: "pattern", pattern: "solid", fgColor: { argb: o.fill } }; return x; };
     const box = (r1, c1, r2, c2) => { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const x = ws.getCell(r, c); x.border = { top: r === r1 ? med : undefined, bottom: r === r2 ? med : undefined, left: c === c1 ? med : thin, right: c === c2 ? med : thin }; } };
     const [y, m] = ym.split("-").map(Number);
-    ws.mergeCells(1, 1, 1, 14); cell(1, 1, `${y}年${m}月　${cfg.title || ("シフト表" + (groupName ? `（${groupName}）` : ""))}`, { font: { bold: true, size: 14 } }); ws.getRow(1).height = 24;
+    ws.mergeCells(1, 1, 1, 7); cell(1, 1, `${y}年${m}月　${cfg.title || ("シフト表" + (groupName ? `（${groupName}）` : ""))}`, { font: { bold: true, size: 14 } }); ws.getRow(1).height = 24;
+    ws.mergeCells(1, 8, 1, 14); cell(1, 8, { richText: [{ text: "いつもの勤務と違う人：", font: F({ size: 9 }) }, { text: "緑＝希望休・希望勤務で変わった", font: F({ size: 9, bold: true, underline: "dotted", color: { argb: CHG.wish.font } }) }, { text: "　", font: F({ size: 9 }) }, { text: "紫＝こちらで変えた勤務", font: F({ size: 9, bold: true, underline: "dotted", color: { argb: CHG.ours.font } }) }] }, { align: { horizontal: "right" } });
     {
       for (let ci = 0; ci < 7; ci++) { const wd = (ci + 1) % 7; ws.mergeCells(2, ci * 2 + 1, 2, ci * 2 + 2); const x = cell(2, ci * 2 + 1, `${WD[wd]}曜日`, { font: { bold: true, color: { argb: "FFFFFFFF" } }, align: { horizontal: "center" }, fill: wd === 0 ? "FFBE123C" : wd === 6 ? "FF1D4ED8" : "FF1E40AF" }); x.border = { top: med, bottom: med, left: med, right: med }; }
     }
@@ -461,15 +477,16 @@
       week.forEach((date, ci) => {
         const wd = date ? wdOf(date) : (ci + 1) % 7, c1 = ci * 2 + 1, c2 = c1 + 1;   // ci＝列（月曜から）、wd＝曜日（色に使う）
         if (!date) { for (let rr = r0; rr <= rEnd; rr++) { cell(rr, c1, "", { fill: GRAY }); cell(rr, c2, "", { fill: GRAY }); } box(r0, c1, rEnd, c2); return; }
-        const d = dayOf(month, date), need = needOf(cfg, date), dd = d.note ? `　${d.note}` : "";
+        const d = dayOf(month, date), need = needOf(cfg, date), dd = d.note ? `　${d.note}` : "", kinds = changeKinds(month, cfg, date);
         ws.mergeCells(r0, c1, r0, c2); cell(r0, c1, `${Number(date.slice(8))}${dd}`, { font: { bold: true, color: { argb: wd === 0 ? "FFBE123C" : wd === 6 ? "FF1D4ED8" : "FF18201D" } }, align: { horizontal: "center" } });
         for (let i = 1; i <= rows; i++) for (const [k, c] of [["e", c1], ["l", c2]]) {
           const sl = (d[k] || {})[i], n = slotName(sl), req = i <= need[k];
           if (!n && !req) { cell(r0 + i, c, ""); continue; }
-          cell(r0 + i, c, { richText: [{ text: `${KIND[k]}${MARK[i] || i}：`, font: { name: "Meiryo UI", size: 10, bold: true, color: { argb: k === "e" ? RED : BLUE } } }, { text: n ? n + (sl && sl.t ? `(${sl.t})` : "") : "空き", font: { name: "Meiryo UI", size: 10, bold: !n, color: { argb: n ? "FF18201D" : "FF92400E" } } }] }, Object.assign({ align: { shrinkToFit: true } }, n ? {} : { fill: HOLE }));   // 長い名前・時間は文字を小さくして枠に収める
+          cell(r0 + i, c, { richText: [{ text: `${KIND[k]}${MARK[i] || i}：`, font: { name: "Meiryo UI", size: 10, bold: true, color: { argb: k === "e" ? RED : BLUE } } }, n ? nameRun(n, kinds[n], 10, sl && sl.t ? `(${sl.t})` : "") : { text: "空き", font: F({ bold: true, color: { argb: "FF92400E" } }) }] }, Object.assign({ align: { shrinkToFit: true } }, n ? (kinds[n] ? { fill: CHG[kinds[n]].fill } : {}) : { fill: HOLE }));   // 長い名前・時間は文字を小さくして枠に収める
         }
-        ws.mergeCells(r0 + rows + 1, c1, r0 + rows + 1, c2); cell(r0 + rows + 1, c1, `日勤：${(d.d || []).join("、")}`, { font: { size: 9 }, align: { wrapText: true, vertical: "top" } });
-        ws.mergeCells(rEnd, c1, rEnd, c2); cell(rEnd, c1, `休み：${offList(month, cfg, date).join("、")}${unplaced(month, cfg, date).length ? `　配置未定：${unplaced(month, cfg, date).join("、")}` : ""}`, { font: { size: 9 }, align: { wrapText: true, vertical: "top" } });
+        ws.mergeCells(r0 + rows + 1, c1, r0 + rows + 1, c2); cell(r0 + rows + 1, c1, { richText: listRich("日勤：", d.d || [], kinds, 9) }, { font: { size: 9 }, align: { wrapText: true, vertical: "top" } });
+        ws.mergeCells(rEnd, c1, rEnd, c2); { const un = unplaced(month, cfg, date), unK = {}; for (const n of un) unK[n] = "ours";
+          cell(rEnd, c1, { richText: listRich("休み：", offList(month, cfg, date), kinds, 9).concat(un.length ? listRich("　配置未定：", un, unK, 9) : []) }, { font: { size: 9 }, align: { wrapText: true, vertical: "top" } }); }
         box(r0, c1, rEnd, c2);
       });
       for (let rr = r0; rr <= rEnd; rr++) ws.getRow(rr).height = 16;
@@ -532,5 +549,5 @@
       if (!Object.values(d[k] || {}).some((s) => slotName(s) === n)) out[k].push(n); }
     return out;
   }
-  return { changedFromBase, unplaced, unplacedAll, overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  return { changeKinds, changedFromBase, unplaced, unplacedAll, overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

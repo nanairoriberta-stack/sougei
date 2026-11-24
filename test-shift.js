@@ -302,3 +302,31 @@ console.log("shift extra ok");
   const k1 = Object.keys(dd.e).find((k) => k !== "9"), n1 = S.slotName(dd.e[k1]), k2 = Object.keys(dd.e).find((k) => k !== "9" && k !== k1);
   if (k2) { const t = dd.e[k1]; dd.e[k1] = dd.e[k2]; dd.e[k2] = t; assert.ok(!S.changedFromBase(m, c, date).has(n1) || base.has(n1), "①②③の入れ替えだけでは違うにしない"); }
   console.log("いつもと違う勤務 OK", date, x); }
+{ // 希望による変更（緑）とこちらで変えた勤務（紫）を分ける・Excelにも色（2026-11-24 依頼者「希望休＆希望変更と、こちらで変更した勤務変更の文字の色は別に。アプリもエクセルも」）
+  const c = S.cfgOf("m", null), ym = "2026-12", r = S.autoShift({ days: {} }, c, ym), m0 = r.month || r;
+  const date = S.daysOfMonth(ym).find((d) => (m0.days[d] && (m0.days[d].d || []).length >= 1 && Object.values(m0.days[d].e || {}).filter(Boolean).length >= 2));
+  const m = JSON.parse(JSON.stringify(m0)), dd = m.days[date];
+  const x = S.splitName(dd.d[0]).n; dd.d = dd.d.slice(1); dd.e[9] = { n: x };            // 日勤→早番（希望あり）
+  m.wish = { [x]: { [date]: "早番" } };
+  const ek = Object.keys(dd.e).find((k) => k !== "9" && S.slotName(dd.e[k])), y = S.slotName(dd.e[ek]);
+  delete dd.e[ek]; dd.l[9] = { n: y };                                                  // 早番→遅番（希望なし＝こちらで変えた）
+  const k = S.changeKinds(m, c, date);
+  assert.strictEqual(k[x], "wish", "希望がある人の変更は wish");
+  assert.strictEqual(k[y], "ours", "希望のない変更は ours");
+  const offN = (c.members || []).map((mm) => mm.name).find((n) => S.workers(m, date).has(n) && n !== x && n !== y);
+  for (const kk of ["e", "l"]) for (const i of Object.keys(dd[kk] || {})) if (S.slotName(dd[kk][i]) === offN) delete dd[kk][i];
+  dd.d = (dd.d || []).filter((v) => S.splitName(v).n !== offN); m.wish[offN] = { [date]: "休" };
+  assert.strictEqual(S.changeKinds(m, c, date)[offN], "wish", "いつもは出る日に希望休＝wish");
+  (async () => {
+    const ExcelJS = require("./pw/node_modules/exceljs");
+    const wb = S.buildWorkbook(ExcelJS, m, c, ym, "男性"), buf = await wb.xlsx.writeBuffer();
+    const back = new ExcelJS.Workbook(); await back.xlsx.load(buf); const ws = back.worksheets[0];
+    const runs = []; ws.eachRow((row, rr) => row.eachCell((cc) => { const v = cc.value; if (v && v.richText) for (const t of v.richText) runs.push({ t: t.text, color: t.font && t.font.color && t.font.color.argb, fill: cc.fill && cc.fill.fgColor && cc.fill.fgColor.argb, all: v.richText.map((q) => q.text).join("") }); }));
+    const run = (n, re) => runs.find((q) => q.t === n && re.test(q.all));
+    const rx = run(x, new RegExp(`^早9：${x}$`)), ry = run(y, new RegExp(`^遅9：${y}$`));
+    assert.ok(rx && rx.color === "FF0F766E" && rx.fill === "FFCCFBF1", "希望で変わった人は緑の字・緑の背景");
+    assert.ok(ry && ry.color === "FF7C3AED" && ry.fill === "FFEDE9FE", "こちらで変えた人は紫の字・紫の背景");
+    assert.ok(runs.find((q) => q.t === offN && /^休み：/.test(q.all) && q.color === "FF0F766E"), "希望休の人は休みの行で緑");
+    assert.ok(runs.find((q) => /緑＝希望/.test(q.t)) && runs.find((q) => /紫＝こちらで変えた/.test(q.t)), "上に色の説明");
+    console.log("希望の変更・こちらの変更の色 OK", date, x, y, offN);
+  })().catch((e) => { console.error(e); process.exit(1); }); }

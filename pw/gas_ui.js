@@ -533,7 +533,17 @@ const D = path.join(__dirname, "../gas/out");
         assert.ok(/\bchgs\b/.test(await el.getAttribute("class")), "枠が紫");
         assert.strictEqual(await el.locator(`[data-chg="${x}"]`).count(), 1, "名前が紫の太字");
         assert.strictEqual(await el.evaluate((b) => getComputedStyle(b).backgroundColor), "rgb(237, 233, 254)", "薄い紫の背景");
-        assert.ok(await T.pg.locator("[data-legend-chg]").isVisible(), "説明が出る"); }
+        assert.ok(await T.pg.locator("[data-legend-chg]").isVisible(), "説明が出る");
+        // 本人の希望（早番）があると緑に変わる（2026-11-24 依頼者「希望休＆希望変更と、こちらで変更した勤務変更の文字の色は別に」）
+        await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", x);
+        await T.pg.click(`td[data-day="${D}"] .dnum`); await T.pg.waitForTimeout(200); await T.pg.click('[data-wpick="早"]'); await T.pg.waitForTimeout(300);
+        assert.ok(/\bwchgs\b/.test(await el.getAttribute("class")) && !/\bchgs\b/.test(await el.getAttribute("class")), "希望による変更は緑の枠");
+        assert.strictEqual(await el.locator(`[data-wchg="${x}"]`).count(), 1, "名前が緑の太字");
+        assert.strictEqual(await el.evaluate((b) => getComputedStyle(b).backgroundColor), "rgb(204, 251, 241)", "薄い緑の背景");
+        assert.strictEqual(await el.locator(`[data-wchg="${x}"]`).evaluate((b) => getComputedStyle(b).color), "rgb(15, 118, 110)", "緑の文字");
+        await T.pg.click(`td[data-day="${D}"] .dnum`); await T.pg.waitForTimeout(200); await T.pg.click('[data-wpick=""]'); await T.pg.waitForTimeout(300);
+        assert.ok(/\bchgs\b/.test(await el.getAttribute("class")), "希望を消すと紫に戻る");
+        await T.pg.click('[data-mode="shift"]'); await T.pg.waitForTimeout(2200); }
       await T.pg.click(`[data-dk="${D}"]`); await T.pg.waitForTimeout(200); await T.pg.check(`[data-dkn="${x}"]`); await T.pg.click("[data-dk-save]"); await T.pg.waitForTimeout(400);
       assert.ok((await T.pg.locator("#shToast").innerText()).includes("早番・遅番の枠を空けました"), "お知らせ");
       await T.pg.waitForTimeout(2200);
