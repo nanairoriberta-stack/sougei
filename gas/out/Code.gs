@@ -968,6 +968,8 @@ function calJournal_(me, op, raws) {
     var before = null; raws.forEach(function (r) { var e = r && r.events && r.events[op.id]; if (e) before = e; });
     var cut = function (v) { if (v == null) return ''; var s = JSON.stringify(v); return 'J' + (s.length > 45000 ? s.slice(0, 45000) : s); };
     var after = op.kind === 'upsert' ? op.ev : op.kind === 'comment' ? op.comment : null;
+    // スプレッドシート全体のマスの数には上限（1000万）があるので、15万行（1日500件でおよそ10か月分）を超えたら、いちばん古い2万行を消す
+    try { if (sh.getLastRow() > 150000) sh.deleteRows(2, 20000); } catch (e) {}
     sh.appendRow([new Date(), txt_(me.no || ''), op.kind, txt_(op.id), txt_((op.ev && op.ev.date) || op.date || op.cmKey || (before && before.date) || ''), cut(after), op.kind === 'comment' ? '' : cut(before)]);
   } catch (e) { console.error(e && e.stack || e); }
 }
