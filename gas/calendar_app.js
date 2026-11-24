@@ -1065,7 +1065,7 @@ document.addEventListener("click",async e=>{
   // 上の「書きかけの予定が残っています［続きを書く］［破棄］」から戻せる
   if((t.id==="ov"&&PDOWN===t)||t.closest("[data-close]")){if(ed){const keep=!ed.ro&&(ed.dirty||!!dT);if(keep)draftFlush();closeEditor(keep);if(keep)toast("書きかけを残しました（上の「続きを書く」から戻せます）")}else{$("sheetRoot").innerHTML=""}return}
   /* 同期画面 */
-  const f=t.closest("[data-force]");if(f){core.force(f.dataset.force);openSync();return}
+  const f=t.closest("[data-force]");if(f){if(!confirm("ほかの人が直した今の内容を、あなたの内容で上書きします。よろしいですか？\n（上書きされた内容も「_予定の控え」に残ります）"))return;core.force(f.dataset.force);openSync();return}   // 1回押しただけで上書きしない（2026-11-24）
   const r=t.closest("[data-retry]");if(r){core.retry(r.dataset.retry);openSync();return}
   const da=t.closest("[data-discard-ask]");if(da){const slot=document.querySelector(`[data-confirm-slot="${CSS.escape(da.dataset.discardAsk)}"]`);slot.innerHTML=`<div class="acts" style="margin-top:4px"><span class="by" style="font-size:12px">この操作を取り消します。元には戻せません。</span><button class="danger solid sm" data-discard="${esc(da.dataset.discardAsk)}">取り消す</button></div>`;return}
   const dd=t.closest("[data-discard]");if(dd){core.discard(dd.dataset.discard);openSync();return}
