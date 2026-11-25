@@ -598,3 +598,20 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   assert.ok(t.includes(`${u.name}(送${pat})`), "カレンダーで入れた時刻は出す");
   console.log("利用時間変更は週間パターンと比べる OK", u.name, tab, pat);
 }
+{ // その日の利用者でない人は便から外す（2026-11-25 依頼者「利用曜日を消しても送迎表から消えてない」）
+  const E16 = require("./eng.cjs"), m0 = E16.mergeSeedMaster(null, E16.seedMaster());
+  const mon = "2026-12-07", u = m0.users.find((x) => (x.days || []).includes(1)), v = m0.users.find((x) => x.id !== u.id && (x.days || []).includes(1));
+  // v は12月から月曜をやめた（11/30までは月曜も利用＝日付の区切り）
+  const m = JSON.parse(JSON.stringify(m0)); const vNow = m.users.find((x) => x.id === v.id); vNow.days = vNow.days.filter((d) => d !== 1);
+  m.peopleUntil = [{ until: "2026-11-30", staff: {}, users: { [v.id]: JSON.parse(JSON.stringify(v)) } }];
+  const runs = [{ id: "r1", kind: "meet", time: "9:00", userIds: [u.id, v.id], places: { [v.id]: "病院" } }];
+  let out = E16.dropOffDayRiders(runs, m, mon, {});
+  assert.deepStrictEqual(out[0].userIds, [u.id], "利用曜日でない人は便から外す"); assert.ok(!(out[0].places || {})[v.id], "その日だけの行き先も");
+  assert.deepStrictEqual(E16.dropOffDayRiders(runs, m, "2026-11-30", {})[0].userIds, [u.id, v.id], "区切りの前（11/30まで）はまだ月曜の利用者");
+  assert.deepStrictEqual(E16.dropOffDayRiders(runs, m, mon, { [v.id]: true })[0].userIds, [u.id, v.id], "今日だけ利用の人は残す");
+  assert.deepStrictEqual(E16.dropOffDayRiders([{ id: "r2", userIds: ["nobody"] }], m, mon, {})[0].userIds, ["nobody"], "送迎表の名前に無いIDはさわらない");
+  // Excel にも出ない
+  const ws = E16.buildWorkbook(ExcelJS, m, Object.assign(E16.emptySheet(), { runs: E16.dropOffDayRiders(runs, m, mon, {}) }), mon).getWorksheet("送迎表");
+  let t = ""; ws.eachRow((r) => r.eachCell((c) => { t += String(c.value || "") + "|"; }));
+  console.log("その日の利用者でない人は便から外す OK", u.name, v.name, t.includes(v.name) ? "(名前はほかの欄に)" : "");
+}

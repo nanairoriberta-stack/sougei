@@ -107,6 +107,7 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 - `master.peopleUntil=[{until, staff:{id:その期間の人|null}, users:{id:…}}]`（古い順）。区切りは「次の期間とちがう人」だけ（null＝その期間はいない）。その日の一覧＝いまの一覧に新しい区切りから順に当てる（`peopleAtDate`＝sougei.jsx、`SGCal.peopleAt`＝calsync.js。同じ計算・テストで比べている）
 - 職員・利用者のタブの上「このあとの職員（利用者）の変更を使い始める日」（`PeopleFromBar`・`data-peoplefrom`）。日付を入れて変えると `schedulePeople` が変えた項目だけをその日からに（ほかの項目の日付の変更はそのまま）。足した人はその前の日まではいない、消した人はいる（＝入職・退職・利用開始・終了もこれで）。空欄は全部の日。区切りの説明（`peopleCutText`「井川（勤務時間）」）と「区切りを消す」（`dropPeopleCut`）。中身が同じになった区切りは消える
 - 効くところ：送迎表の日の画面・チェック・Excel（`applyDayDept` の頭）、カレンダーの反映（`reconcile`・`summary`）、Claudeの `get_day`、期間の出欠（`attendance_`）。カレンダーの名前の候補は区切りにだけいる人も（`peopleWithPast`）。週間パターンはいまの一覧
+- その日の利用者でない人は便から外す（2026-11-25 依頼者「利用曜日を消しても送迎表から消えてない。未割当に移した時に消えるようになってるけど送迎表から消えるように」＝週間パターンから入った便に乗ったままだった）：`offDayRiderMap`・`dropOffDayRiders`（その日の一覧 `peopleAtDate` で利用曜日に入っていない・その日はいない人。今日だけ利用 `userExtra` は残す。送迎表の名前に無いIDはさわらない）。送迎表の表示（`dataForGrid`）・出力前の確認・Excel（`sheetData`・`collectSheetChecks`）・パターン読込で外す。保存されている便は消さない（曜日を戻すとまた出る）。テスト `test-excel.js`
 - 以前からある個別の欄（`retireDate` 退職日・`startDate` 利用開始日・`daysFrom`）はマスタExcelの取り込みでだけ入る（タブに欄は無い）。そのまま効く。テスト `test-cal.js`・`pw/gas_ui.js`
 
 ## ヘルプ名の統合（2026-10-29）

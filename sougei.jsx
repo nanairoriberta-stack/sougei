@@ -472,6 +472,21 @@ const dropAbsentRiders = (r, absent) => {
   if (r.places) { out.places = { ...r.places }; for (const id of Object.keys(out.places)) if (ab(id)) delete out.places[id]; }
   return out;
 };
+/* その日の利用者でない人（利用曜日でない・日付の区切りでその日はいない）を便から外す（2026-11-25 依頼者「利用曜日を消しても送迎表から消えてない。
+   未割当に移した時に消えるようになってるけど送迎表から消えるようにしてほしい」＝週間パターンから入った便に乗ったままだった）。
+   今日だけ利用（userExtra）の人は残す。送迎表の名前に無いID（以前の人）はさわらない。表示・チェック・Excel・パターン読込で使う（保存されている便は消さない＝曜日を戻すとまた出る） */
+function offDayRiderMap(master, date, userExtra) {
+  const out = {}; if (!master || !date) return out;
+  const wd = weekdayOf(date), ux = userExtra || {}, day = peopleAtDate(master, date);
+  const here = new Map(((day && day.users) || []).map((u) => [u.id, u]));
+  for (const u of [...(master.users || []), ...((day && day.users) || [])]) {
+    const v = here.get(u.id);
+    if (ux[u.id]) continue;
+    if (!v || !(v.days || []).includes(wd)) out[u.id] = true;
+  }
+  return out;
+}
+const dropOffDayRiders = (runs, master, date, userExtra) => { const off = offDayRiderMap(master, date, userExtra); return Object.keys(off).length ? (runs || []).map((r) => dropAbsentRiders(r, off)) : (runs || []); };
 const HELP_OK_FILTER = "__helpok__";   // 送迎表の「表示：」の「ヘルプ可」（職員のタブでヘルプ可にした人だけの列）
 const noRideDefaults = (m, wd) => {
   const o = {};
@@ -10283,7 +10298,7 @@ function AppInner() {
     updateSheet((prev) => ({
       ...(prev || emptySheet()),
       // その日の欠席の人は便に入れない（2026-11-11 依頼者「欠席者ある時はパターンから読み込みしたときも消えるように」）
-      runs: remapRetired(master, date, (p.runs || []).map((r) => dropAbsentRiders({ ...r, id: r.id ? `${r.id}@${date}` : uid() }, (prev && prev.userAbsent) || {}))),
+      runs: dropOffDayRiders(remapRetired(master, date, (p.runs || []).map((r) => dropAbsentRiders({ ...r, id: r.id ? `${r.id}@${date}` : uid() }, (prev && prev.userAbsent) || {}))), master, date, prev && prev.userExtra),
       blocks: remapRetired(master, date, canonHelpBlocks(p.blocks || []).map((b) => ({ ...b, id: b.id ? `${b.id}@${date}` : uid() }))),
       training: p.training || (prev && prev.training) || "",
       // パターンが特記情報(Excel取り込み由来)を持っていれば一緒に反映(無い場合は現状維持)
@@ -10479,7 +10494,7 @@ function AppInner() {
       ...curData,
       // 退職者(日付基準)の担当分は保留列に表示(パターン編集時はそのまま)
       ...(!isPattern && master ? {
-        runs: remapRetired(master, date, curData.runs || []),
+        runs: dropOffDayRiders(remapRetired(master, date, curData.runs || []), master, date, curData.userExtra),
         blocks: canonHelpBlocks(remapRetired(master, date, curData.blocks || [])),
       } : { blocks: canonHelpBlocks(curData.blocks || []) }),
       // 基本の送迎なし(馬場・猪原・野津周の月木・石田の木など)を常に合成(シート/取り込みの設定が優先)
@@ -10814,6 +10829,7 @@ function AppInner() {
   const handleExportQuick = () => {
     if (!sheet || !sheetMaster) { notify("先に送迎表を作成してください(パターンから読込)", "warn"); return; }
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
+      runs: dropOffDayRiders((sheet && sheet.runs) || [], master, date, sheet && sheet.userExtra),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
     notify("確認なしでExcelを出力します");
     exportDay({ ...sheetData, calNotes: calNotesToday }); markExported();
@@ -10821,6 +10837,7 @@ function AppInner() {
   const handleExport = async () => {
     if (!sheet || !sheetMaster) return;
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
+      runs: dropOffDayRiders((sheet && sheet.runs) || [], master, date, sheet && sheet.userExtra),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
     const wd = weekdayOf(date);
     // 保留件数(担当未定+担当者が表にいない予定)を出力時と同じ基準で数える
@@ -11041,6 +11058,7 @@ function AppInner() {
   const doExportNow = () => {
     if (!sheet) return;
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
+      runs: dropOffDayRiders((sheet && sheet.runs) || [], master, date, sheet && sheet.userExtra),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
     exportDay({ ...sheetData, calNotes: calNotesToday }); markExported();
   };
@@ -12853,6 +12871,7 @@ function helpNoCarWarn(master, sheetData) {
 }
 function collectSheetChecks(sheetMaster, sheet, date, patDayArg) {
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
+      runs: dropOffDayRiders((sheet && sheet.runs) || [], { ...sheetMaster, peopleUntil: [] }, date, sheet && sheet.userExtra),   // sheetMaster はもうその日の一覧
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
     const wd = weekdayOf(date);
     // 保留件数(担当未定+担当者が表にいない予定)を出力時と同じ基準で数える
