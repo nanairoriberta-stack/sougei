@@ -9888,9 +9888,11 @@ function AppInner() {
     const f = (e) => { if (e && e.data && e.data.sg === "cal-saved") { try { window.SGHost && window.SGHost.refreshCalendar && window.SGHost.refreshCalendar(); window.SGHost && window.SGHost.pollOnce && window.SGHost.pollOnce(); } catch (er) {} } };
     window.addEventListener("message", f); return () => window.removeEventListener("message", f);
   }, []);
-  useEffect(() => {   // 名前のボタン（右下）が右のカレンダーに重ならないように、左へよける
-    const c = typeof document !== "undefined" && document.querySelector(".sgh-chip:not(.in-slot)");
-    if (c) c.style.right = calSide ? (calSideW + 10) + "px" : "";
+  useEffect(() => {   // 右下の「名字 ☰ メニュー」が右のカレンダー（入力画面の保存ボタン）に重ならないように、左へよける
+    // 2026-11-25 依頼者「被ってて使いづらい」：11/21 にボタンを箱（.sgh-chipbox）に入れてから、以前のよけ方（.sgh-chip を動かす）が効いていなかった。
+    // → 画面全体の目印 --sg-calside（右のカレンダーの幅）で箱をよける（ボタンが後からできても効く）
+    if (typeof document === "undefined") return;
+    document.documentElement.style.setProperty("--sg-calside", calSide ? calSideW + "px" : "0px");
   }, [calSide, calSideW]);
   useEffect(() => {
     if (!calDrag) return;

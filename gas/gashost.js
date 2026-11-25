@@ -60,7 +60,7 @@ const css = `
 .sgh-err{color:#c23a32;font-size:13px;min-height:1em}
 .sgh-chip{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:4000;background:#18201d;color:#fff;border:0;border-radius:999px;padding:7px 14px;font:12px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.2)}
 .sgh-chip{transition:opacity .2s} body:has(.fixed.inset-0) .sgh-chip,body:has(.fixed.inset-0) .sgh-chipbox{display:none}
-.sgh-chipbox{position:fixed;right:max(10px,env(safe-area-inset-right,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:4000;display:flex;align-items:center;gap:6px}
+.sgh-chipbox{position:fixed;right:calc(max(10px,env(safe-area-inset-right,0px)) + var(--sg-calside,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));z-index:4000;display:flex;align-items:center;gap:6px}
 .sgh-chipbox .sgh-chip{position:static}
 .sgh-chipbox.in-slot{position:static;display:inline-flex;z-index:auto}
 .sgh-chipbox.in-slot .sgh-chip{z-index:auto}   /* 箱の中（flex）では z-index が効くので、入力画面の上に出ないように */

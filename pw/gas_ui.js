@@ -356,7 +356,11 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.click("[data-datepop]"); await P.pg.click('[data-day="2026-11-02"]'); await P.pg.waitForTimeout(800);
     console.log("右のカレンダー：送迎表の日付についていく OK");
     await P.pg.screenshot({ path: "g_calside.png" });
+    { // 右下の「名字 ☰ メニュー」は右のカレンダーに重ならない（2026-11-25 依頼者「被ってて使いづらい」＝カレンダーの入力画面の保存ボタンに重なっていた）
+      const box = await P.pg.locator(".sgh-chipbox").boundingBox(), side = await P.pg.locator("[data-calside]").boundingBox();
+      assert.ok(box && side && box.x + box.width <= side.x, "メニューのボタンはカレンダーの左 " + JSON.stringify({ box, side })); }
     await P.pg.click("[data-calside-close]"); await P.pg.waitForTimeout(300); assert.strictEqual(await P.pg.locator("[data-calside]").count(), 0, "閉じる");
+    { const box = await P.pg.locator(".sgh-chipbox").boundingBox(), vw = P.pg.viewportSize().width; assert.ok(box.x + box.width >= vw - 20, "閉じると右下に戻る " + JSON.stringify(box)); }
     console.log("右のカレンダー:", src); }
   { // パソコンのカレンダー：マスの日付の右を押すと、その日の予定を追加
     const C2 = await open("calendar.html", { width: 1280, height: 900 }, boot, "calendar_pc.html");
