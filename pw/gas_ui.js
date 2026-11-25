@@ -598,6 +598,20 @@ const D = path.join(__dirname, "../gas/out");
         await wp(D, "日"); assert.strictEqual(await col("wD"), "rgb(21, 128, 61)", "日勤の希望は緑");
         await wp(D, "早"); }
       await T.pg.locator(`td[data-day="${D}"]`).screenshot({ path: "g_shift_over.png" });
+      { // 超過の人と、その番の枠の人の勤務を入れ替える（2026-11-25 依頼者「日勤の人Aが遅番希望なら、遅番①の人と入れ替える」）
+        await T.pg.click('[data-mode="shift"]'); await T.pg.waitForTimeout(200);
+        const bt = T.pg.locator(`[data-over="${D}|e"] [data-swapin]`).first();
+        const j = (await bt.getAttribute("data-swapin")).split("|")[2], b = (await bt.innerText()).match(/早. (.+)を入れ替え/)[1];
+        await bt.click(); await T.pg.waitForTimeout(400);
+        assert.ok(/勤務を入れ替えました|へ入れました/.test(await T.pg.locator("#shToast").innerText()), "お知らせ " + await T.pg.locator("#shToast").innerText());
+        assert.ok((await T.pg.locator(`[data-slot="${D}|e|${j}"]`).innerText()).includes(who), "超過の人が早番の枠へ");
+        assert.strictEqual(await T.pg.locator(`[data-over="${D}|e"]`).count(), 0, "超過は消える");
+        await T.pg.waitForTimeout(2200);
+        const day = api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.days[D];
+        assert.strictEqual(day.e[j].n, who, "保存"); const unp = await T.pg.locator(`[data-unplaced="${D}"]`).count() ? await T.pg.locator(`[data-unplaced="${D}"]`).innerText() : "";
+        assert.ok((day.d || []).includes(b) || Object.values(day.l || {}).concat(Object.values(day.e || {})).some((x) => x && x.n === b) || unp.includes(b), "枠にいた人は消えない（日勤・ほかの枠・配置未定のどこかに） " + b);
+        console.log("超過の人と入れ替え OK", who, "⇄", b, JSON.stringify(day));
+        await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", who); }
       await wp(D, ""); assert.strictEqual(await T.pg.locator(`[data-over="${D}|e"]`).count(), 0, "希望を消すと消える");
       await T.pg.selectOption("#shWho", "秋山"); console.log("早番の超過 OK", who); }
     await wp("2026-11-12", "休");

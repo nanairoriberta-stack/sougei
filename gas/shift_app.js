@@ -100,6 +100,13 @@
     changed("month");
     if (moved.length) toast(`${name}さんを日勤から${X.KIND[k]}${X.MARK[i] || i}へ移しました`);
   }
+  // 勤務の入れ替え（2026-11-25 依頼者）：name を k の i 番の枠へ、そこにいた人を name のもとの勤務へ
+  function doSwap(date, k, i, name) {
+    const d = dayObj(date), r = X.swapDuty(d, cfg(), date, name, k, i);
+    if (!r) { toast("時間を添えた枠の人は入れ替えられません。枠を押して入れ直してください"); return; }
+    changed("month");
+    toast(r.other ? (r.from ? `${name}さん（${r.from}）と${r.other}さん（${X.KIND[k]}${X.MARK[i] || i}）の勤務を入れ替えました` : `${name}さんを${X.KIND[k]}${X.MARK[i] || i}へ入れました（${r.other}さんは日勤へ）`) : `${name}さんを${X.KIND[k]}${X.MARK[i] || i}へ入れました`);
+  }
   // 基本シフトを変える（設定に保存。曜日ごと）
   function setBase(wd, fn) { const c = clone(cfg()); c.base = Object.assign({}, c.base); const b = Object.assign({ e: [], l: [], d: [] }, c.base[wd]); fn(b); c.base[wd] = b; S.cfg = c; changed("cfg"); }
   function setDayWorkers(date, names) {
@@ -181,7 +188,9 @@
         let grid = "";   // スマホでは早番（赤）・遅番（青）を1列に並べ、名前が見えるようにする（2026-11-07 依頼者「スマホだと名前わからない」）
         if (!hidden) for (let i = 1; i <= rows; i++) grid += `<div class="pair">${i <= maxE ? slot("e", i) : `<span></span>`}${i <= maxL ? slot("l", i) : `<span></span>`}</div>`;
         // 早番・遅番の希望なのに枠に入っていない人は、枠のすぐ下に「超過」で出す（2026-11-23 依頼者。すでに入っている人の勤務を変えるため）
-        if (!hidden) { const ov = X.overflow(S.month, date); for (const k of ["e", "l"]) if (ov[k].length) grid += `<div class="over ${k}" data-over="${date}|${k}"><b>${X.KIND[k]}超過</b>${ov[k].map((n) => `<span>${esc(n)}</span>`).join("、")}<small>（${X.KIND[k]}番の希望・枠に入っていません）</small></div>`; }
+        if (!hidden) { const ov = X.overflow(S.month, date); for (const k of ["e", "l"]) if (ov[k].length) grid += `<div class="over ${k}" data-over="${date}|${k}"><b>${X.KIND[k]}超過</b>${ov[k].map((n) => `<span>${esc(n)}</span>`).join("、")}<small>（${X.KIND[k]}番の希望・枠に入っていません）</small>${
+          // 入れ替えのボタン（2026-11-25 依頼者「日勤の人Aが遅番希望なら、遅番①の人と入れ替える」）：その番の枠の人と勤務を入れ替える
+          S.canEdit && S.mode !== "wish" ? ov[k].map((n) => Object.keys(d[k] || {}).sort((a, b) => a - b).filter((j) => X.slotName(d[k][j]) && !(d[k][j] && d[k][j].t)).map((j) => `<button class="xsw" data-swapin="${date}|${k}|${j}|${esc(n)}">⇄ ${esc(n)}と${X.KIND[k]}${X.MARK[j] || j} ${esc(X.slotName(d[k][j]))}を入れ替え</button>`).join("")).join("") : ""}</div>`; }
         const wishes = c.members.map((x) => [x.name, X.wishOf(S.month, x.name, date)]).filter((x) => x[1]);
         const off = X.offList(S.month, c, date);
         const wd = X.wdOf(date);
@@ -254,7 +263,9 @@
     const s = (d[p.k] || {})[p.i], curN = X.slotName(s);
     el.innerHTML = `<div class="ov" data-close-pick><div class="pk"><h3>${X.label(p.date)} ${X.KIND[p.k]}${X.MARK[p.i] || p.i}</h3>
       <div class="opts">${c.members.map((x) => { const w = X.wishOf(S.month, x.name, p.date), sameK = Object.keys(d[p.k] || {}).find((j) => Number(j) !== p.i && X.slotName(d[p.k][j]) === x.name), inDay = !sameK && busy.has(x.name) && x.name !== curN;
-        return `<button class="opt${x.name === curN ? " on" : ""}" data-pick="${esc(x.name)}">${esc(x.name)}${w ? `<em class="${wcls(w)}">希望：${esc(w)}</em>` : ""}${inDay ? `<em>この日ほかに入っています</em>` : ""}${sameK ? `<em class="swap" data-swap>${X.KIND[p.k]}${X.MARK[sameK] || sameK}に入っています（押すと入れ替え）</em>` : ""}</button>`; }).join("")}</div>
+        return `<button class="opt${x.name === curN ? " on" : ""}" data-pick="${esc(x.name)}">${esc(x.name)}${w ? `<em class="${wcls(w)}">希望：${esc(w)}</em>` : ""}${inDay ? `<em>この日ほかに入っています</em>` : ""}${sameK ? `<em class="swap" data-swap>${X.KIND[p.k]}${X.MARK[sameK] || sameK}に入っています（押すと入れ替え）</em>` : ""}</button>${
+          // 日勤・ほかの番の人と、この枠の人の勤務を入れ替える（2026-11-25 依頼者「通常勤務の人同士は、この人と勤務を入れ替えるボタン」）
+          inDay && curN && !(s && s.t) ? `<button class="opt xsw" data-xswap="${esc(x.name)}">⇄ ${esc(x.name)}さんと${esc(curN)}さんの勤務を入れ替える</button>` : ""}`; }).join("")}</div>
       <p class="note">同じ日の${X.KIND[p.k]}番のほかの枠の人を押すと、この枠と入れ替わります</p>
       <label class="tm">時間（通しなら空欄。例：6~9、16~22）<input id="shTime" maxlength="12" value="${esc((s && s.t) || "")}"></label>
       <div class="acts"><button data-pick-clear>空きにする</button><button data-close-pick>閉じる</button></div></div></div>`;
@@ -296,6 +307,8 @@
     if (at("[data-slot]") && S.canEdit) { const [date, k, i] = at("[data-slot]").dataset.slot.split("|"); S.pick = { date, k, i: Number(i) }; drawPick(); return; }
     if (at("[data-dk]") && S.canEdit) { S.pick = { date: at("[data-dk]").dataset.dk, k: "d" }; drawPick(); return; }
     if (at("[data-pick]")) { const p = S.pick; setSlot(p.date, p.k, p.i, at("[data-pick]").dataset.pick, ($("shTime") || {}).value ? $("shTime").value.trim() : ""); S.pick = null; drawPick(); return; }
+    if (at("[data-xswap]")) { const p = S.pick; doSwap(p.date, p.k, p.i, at("[data-xswap]").dataset.xswap); S.pick = null; drawPick(); return; }
+    if (at("[data-swapin]")) { const [dt, k, i, n] = at("[data-swapin]").dataset.swapin.split("|"); doSwap(dt, k, i, n); return; }
     if (at("[data-pick-clear]")) { const p = S.pick; setSlot(p.date, p.k, p.i, "", ""); S.pick = null; drawPick(); return; }
     if (at("[data-dk-save]")) {   // 「近藤(~13)」のように時間を添えた日勤は、そのまま残す
       const was = ((S.month && S.month.days || {})[S.pick.date] || {}).d || [];

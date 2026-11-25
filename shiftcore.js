@@ -540,6 +540,46 @@
       day[k] = o; }
     return out;
   }
+  /* 勤務の入れ替え（2026-11-25 依頼者「通常勤務の人同士は、この人と勤務を入れ替えるボタン」「日勤の人Aが遅番希望なら、遅番①の人と入れ替える」）：
+     name をその日の k（早番 e／遅番 l）の i 番の枠に入れ、そこにいた人を name のもとの勤務（日勤・ほかの枠）へ移す。
+     name がどこにも入っていない（希望で日勤から外れた・配置未定）ときは、基本シフトのその日の勤務をもとの勤務とみる。それも無ければ、そこにいた人は日勤へ（休みにしない）。
+     時間の補足つきの枠（「秋山(6~9)」）は時間の一部なので、その人は入れ替えない（null）。返すのは { from: もとの勤務の名前, other: そこにいた人 } */
+  function swapDuty(day, cfg, date, name, k, i) {
+    if (!day || !name || (k !== "e" && k !== "l")) return null;
+    i = String(i); day[k] = Object.assign({}, day[k]);
+    const cur = day[k][i], other = slotName(cur);
+    if (other === name) return null;
+    if (cur && typeof cur === "object" && cur.t) return null;
+    let from = null;
+    for (const kk of ["e", "l"]) for (const j of Object.keys(day[kk] || {})) {
+      if (from || (kk === k && j === i) || slotName(day[kk][j]) !== name) continue;
+      if (day[kk][j] && day[kk][j].t) return null;
+      from = { k: kk, i: j };
+    }
+    const di = (day.d || []).findIndex((x) => splitName(x).n === name);
+    if (!from && di >= 0) { if (splitName(day.d[di]).t) return null; from = { k: "d" }; }
+    let fromBase = false;
+    if (!from) {
+      const b = (cfg && baseFor(cfg, date)) || {};
+      if ((b.d || []).some((x) => splitName(x).n === name)) from = { k: "d" };
+      else for (const kk of ["e", "l"]) { const j = (b[kk] || []).findIndex((x) => splitName(x).n === name); if (!from && j >= 0 && !(kk === k && String(j + 1) === i)) from = { k: kk, i: String(j + 1) }; }
+      fromBase = !!from;
+    }
+    // name を枠へ（もとの場所から外す）
+    if (from && from.k !== "d" && !fromBase) { day[from.k] = Object.assign({}, day[from.k]); delete day[from.k][from.i]; }
+    if (from && from.k === "d") day.d = (day.d || []).filter((x) => splitName(x).n !== name);
+    day[k][i] = { n: name };
+    // そこにいた人を name のもとの勤務へ
+    let to = "";
+    if (other && !from) { day.d = (day.d || []).concat([other]); to = "日勤"; }   // もとの勤務が分からないときは、そこにいた人を日勤へ（休みにしない）
+    if (other && from) {
+      if (from.k === "d") { day.d = (day.d || []).concat([other]); to = "日勤"; }
+      else { day[from.k] = Object.assign({}, day[from.k]);
+        if (slotName(day[from.k][from.i])) { day.d = (day.d || []).concat([other]); to = "日勤"; }
+        else { day[from.k][from.i] = { n: other }; to = `${KIND[from.k]}${MARK[from.i] || from.i}`; } }
+    }
+    return { from: from ? (from.k === "d" ? "日勤" : `${KIND[from.k]}${MARK[from.i] || from.i}`) : "", other, to };
+  }
   /* 早番・遅番の希望なのに、その日の早番（遅番）の枠に入っていない人（2026-11-23 依頼者「早番の枠が埋まっている場合、希望が出たらすぐ下に超過分として出して」
      ＝すでに入っている人の勤務を変えるため）。{e:[名前], l:[名前]}。枠が足りているかに関係なく、入っていなければ出す */
   function overflow(month, date) {
@@ -548,5 +588,5 @@
       if (!Object.values(d[k] || {}).some((s) => slotName(s) === n)) out[k].push(n); }
     return out;
   }
-  return { changeKinds, changedFromBase, unplaced, unplacedAll, overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  return { swapDuty, changeKinds, changedFromBase, unplaced, unplacedAll, overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

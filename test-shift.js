@@ -330,3 +330,20 @@ console.log("shift extra ok");
     assert.ok(runs.find((q) => /緑＝希望/.test(q.t)) && runs.find((q) => /紫＝こちらで変えた/.test(q.t)), "上に色の説明");
     console.log("希望の変更・こちらの変更の色 OK", date, x, y, offN);
   })().catch((e) => { console.error(e); process.exit(1); }); }
+{ // 勤務の入れ替え（2026-11-25 依頼者「日勤の人Aが遅番希望なら、遅番①の人と入れ替える」「通常勤務の人同士は、この人と勤務を入れ替えるボタン」）
+  const S = require("./shiftcore.js"), c = S.cfgOf("m", null), date = "2026-12-02";
+  const day = { e: { 1: { n: "橋本" }, 2: { n: "余村慎" } }, l: { 1: { n: "野津" }, 2: { n: "宮永" }, 3: { n: "秋山", t: "17~22" } }, d: ["近藤", "長島(~13)"] };
+  let d = JSON.parse(JSON.stringify(day)), r = S.swapDuty(d, c, date, "近藤", "l", 1);
+  assert.deepStrictEqual(r, { from: "日勤", other: "野津", to: "日勤" });
+  assert.strictEqual(d.l[1].n, "近藤"); assert.ok(d.d.includes("野津") && !d.d.includes("近藤"), "日勤の人と遅①の人が入れ替わる " + JSON.stringify(d));
+  d = JSON.parse(JSON.stringify(day)); r = S.swapDuty(d, c, date, "余村慎", "l", 2);
+  assert.strictEqual(d.l[2].n, "余村慎"); assert.strictEqual(d.e[2].n, "宮永", "早②と遅②の人が入れ替わる"); assert.strictEqual(r.to, "早②");
+  d = JSON.parse(JSON.stringify(day)); assert.strictEqual(S.swapDuty(d, c, date, "近藤", "l", 3), null, "時間を添えた枠の人は入れ替えない");
+  assert.strictEqual(S.swapDuty(JSON.parse(JSON.stringify(day)), c, date, "長島", "l", 1), null, "時間を添えた日勤の人も入れ替えない");
+  // 希望で日勤から外れた人（どこにも入っていない）：基本シフトのその日の勤務をもとの勤務とみる
+  const b = S.baseFor(c, date), dn = (b.d || []).map((x) => S.splitName(x).n).find(Boolean);
+  if (dn) { d = { e: {}, l: { 1: { n: "野津" } }, d: [] }; r = S.swapDuty(d, c, date, dn, "l", 1);
+    assert.strictEqual(d.l[1].n, dn); assert.ok(d.d.includes("野津"), "基本が日勤の人なら、そこにいた人は日勤へ " + JSON.stringify(d)); }
+  d = { e: {}, l: { 1: { n: "野津" } }, d: [] }; S.swapDuty(d, { base: {} }, date, "だれか", "l", 1);
+  assert.deepStrictEqual(d.d, ["野津"], "もとの勤務が分からないときは、そこにいた人を日勤へ（休みにしない）");
+  console.log("勤務の入れ替え OK"); }
