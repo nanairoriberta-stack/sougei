@@ -44,6 +44,7 @@ function komaSg(master, ev) {
 const memoOf = (ev) => { const t = String((ev && ev.memo) || "").replace(/\s+/g, " ").trim(); return t.length > 60 ? t.slice(0, 60) + "…" : t; };
 const withMemo = (note, memo) => [note, memo].filter(Boolean).join("・");
 
+const CROSS_BIZ_TYPES = { staff_off: 1, hwork: 1, shift: 1 };
 function specsFor(master, events, date) {
   const staffBy = new Map((master.staff || []).map((s) => [s.name, s]));
   const userBy = new Map((master.users || []).map((u) => [u.name, u]));
@@ -54,6 +55,9 @@ function specsFor(master, events, date) {
     const sg0 = ev && ev.biz !== "mansion" && (ev.sg || komaSg(master, ev));   // マンションの予定は送迎表に出さない
     if (!ev || ev.deleted || !sg0 || !sg0.type) continue;
     if (!(ev.date <= date && ev.endDate >= date)) continue;
+    // ほかの事業の予定は入れない（2026-11-25 依頼者「生活介護のカレンダーの予定がりんくぷれいす版にも表示されている」＝名前が同じ職員（白戸・小瀧など両方にいる人）で入っていた）。
+    // ただし職員の休み・休日出勤・時間変更はその人の出勤のことなので、両方にいる職員なら両方の送迎表に入れる（CROSS_BIZ_TYPES）
+    if ((ev.biz === "houkago" ? "houkago" : "seikatsu") !== (master && master.linkSeed2 ? "houkago" : "seikatsu") && !CROSS_BIZ_TYPES[sg0.type]) continue;
     const whole = !!ev.allDay || (ev.date < date && ev.endDate > date);
     const from = whole ? "" : appTime(ev.date === date ? ev.start : "0:00");
     const to = whole ? "" : (ev.endDate === date ? appTime(ev.end) : "24:00");
@@ -126,7 +130,35 @@ function blocksOf(spec) {
 const isObj = (x) => x != null && typeof x === "object" && !Array.isArray(x);
 /* 反映で変えた項目（off / start / end / meet / send） */
 const appliedKeys = (prev, mine) => Object.keys(mine || {}).filter((k) => !isObj(prev) || !same(prev[k], mine[k]));
-function revert(next, rec) {
+/* 同じ人・同じ欄に、カレンダーの予定が2つ重なっているとき（2026-11-25 依頼者「利用者の休みを1/1〜1/3と入れてキャンセルで消しても、送迎表で休みのまま」）：
+   あとから当てた予定の「前の値」が、先の予定が入れた値（休み）になっていて、先の予定を消したあとでもう1つを消すと「前の値＝休み」に戻して休みが残っていた。
+   → 前の値は、ほかの予定が入れた値ではなく、その下の値（カレンダーの予定が無いときの値）にする（basePrev）。
+     以前に入ってしまった分も、予定を消すときに、重なっているほかの予定の「前の値」を消した予定の「前の値」に付け替える（revert の relink） */
+function basePrev(next, field, id, cur) {
+  let prev = cur;
+  for (const r of Object.values(next.calApplied || {})) {
+    const e = r && r[field] && r[field][id]; if (!e) continue;
+    if (isObj(prev) && isObj(e.mine)) {
+      const out = Object.assign({}, prev);
+      for (const k of appliedKeys(e.prev, e.mine)) if (same(out[k], e.mine[k])) { if (isObj(e.prev) && e.prev[k] !== undefined) out[k] = clone(e.prev[k]); else delete out[k]; }
+      prev = Object.keys(out).length ? out : null;
+    } else if (same(prev, e.mine)) prev = e.prev == null ? null : clone(e.prev);
+  }
+  return prev;
+}
+function revert(next, rec, selfId) {
+  const relink = (field, id, prev, mine) => {
+    for (const [rid, r] of Object.entries(next.calApplied || {})) {
+      if (r === rec || rid === selfId) continue;
+      const e = r && r[field] && r[field][id]; if (!e) continue;
+      if (isObj(e.prev) && isObj(mine)) {
+        const out = Object.assign({}, e.prev);
+        for (const k of appliedKeys(prev, mine)) if (same(out[k], mine[k])) { if (isObj(prev) && prev[k] !== undefined) out[k] = clone(prev[k]); else delete out[k]; }
+        e.prev = Object.keys(out).length ? out : null;
+      } else if (e.prev != null && same(e.prev, mine)) e.prev = prev == null ? null : clone(prev);
+    }
+  };
+  const set0 = (field, id, prev, mine) => { relink(field, id, prev, mine); set(field, id, prev, mine); };
   const set = (field, id, prev, mine) => {
     const map = next[field] || (next[field] = {});
     const cur = map[id];
@@ -139,12 +171,12 @@ function revert(next, rec) {
     if (!same(cur, mine)) return;                           // 手で変えていたら触らない
     if (prev == null) delete map[id]; else map[id] = prev;
   };
-  for (const [sid, r] of Object.entries(rec.staffOv || {})) set("staffOv", sid, r.prev, r.mine);
-  for (const [uid, r] of Object.entries(rec.userAbsent || {})) set("userAbsent", uid, r.prev, r.mine);
-  for (const [uid, r] of Object.entries(rec.userTime || {})) set("userTime", uid, r.prev, r.mine);
-  for (const [uid, r] of Object.entries(rec.noRide || {})) set("noRide", uid, r.prev, r.mine);
-  for (const [uid, r] of Object.entries(rec.userExtra || {})) set("userExtra", uid, r.prev, r.mine);
-  for (const f of ["libertaOff", "libertaOn"]) for (const [uid, r] of Object.entries(rec[f] || {})) set(f, uid, r.prev, r.mine);
+  for (const [sid, r] of Object.entries(rec.staffOv || {})) set0("staffOv", sid, r.prev, r.mine);
+  for (const [uid, r] of Object.entries(rec.userAbsent || {})) set0("userAbsent", uid, r.prev, r.mine);
+  for (const [uid, r] of Object.entries(rec.userTime || {})) set0("userTime", uid, r.prev, r.mine);
+  for (const [uid, r] of Object.entries(rec.noRide || {})) set0("noRide", uid, r.prev, r.mine);
+  for (const [uid, r] of Object.entries(rec.userExtra || {})) set0("userExtra", uid, r.prev, r.mine);
+  for (const f of ["libertaOff", "libertaOn"]) for (const [uid, r] of Object.entries(rec[f] || {})) set0(f, uid, r.prev, r.mine);
   // 迎え先・送り先：反映した値のままの便だけ元に戻す（手で別の行き先に変えていたら触らない）
   for (const [key, e] of Object.entries(rec.places || {})) {
     const [k, uid] = key.split(":");
@@ -224,7 +256,7 @@ function applySpec(next, spec, keepStaff) {
   const rec = { rev: spec.rev, title: spec.title, type: spec.type, staffOv: {}, userAbsent: {}, userTime: {}, noRide: {}, userExtra: {}, libertaOff: {}, libertaOn: {}, blocks: [] };
   const put = (field, id, val) => {
     const map = next[field] || (next[field] = {});
-    const prev = map[id] === undefined ? null : clone(map[id]);
+    const prev = basePrev(next, field, id, map[id] === undefined ? null : clone(map[id]));
     map[id] = val; rec[field][id] = { prev, mine: clone(val) };
   };
   if (spec.type === "staff_off" && spec.half) spec.staff.forEach((s) => {
@@ -402,7 +434,7 @@ function reconcile(master, sheet, events, date) {
       ((next || sheet).blocks || []).forEach((b) => { if ((rec.blocks || []).includes(b.id) && b.staffId && b.staffId !== HOLD_ID) keepStaff[b.id] = b.staffId; });
       // 送迎表で「コマだけ消す」にしたコマは、予定を直しても消したまま（2026-11-10 依頼者「送迎表作成者がそのコマを消せるように」）
       ((next || sheet).blocks || []).forEach((b) => { if ((rec.blocks || []).includes(b.id) && b.noteOnly) keepStaff["note:" + b.id] = true; });
-      const n = work(); revert(n, rec); delete n.calApplied[id];
+      const n = work(); revert(n, rec, id); delete n.calApplied[id];
     }
   }
   for (const sp of specs) {

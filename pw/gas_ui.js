@@ -1048,7 +1048,7 @@ const D = path.join(__dirname, "../gas/out");
     const mm = api(t, "kv.get", ["master"]).data.value, uid = mm.users.find((x) => x.name === "馬場").id, v = api(t, "kv.get", ["sheet:" + D24]).data;
     if (v && v.value) assert.ok(v.value.noRide[uid].meet === "" && v.value.noRide[uid].send, "送迎表：迎えは送迎する・送りはいつもの家族迎え " + JSON.stringify(v.value.noRide[uid]));
     // 送迎表に出る「時刻」のコマ（時刻を入れたので、普通の迎えの時刻の変更と同じ）
-    if (v && v.value) assert.strictEqual(v.value.userTime[uid].meet, "09:00");
+    if (v && v.value) assert.strictEqual(v.value.userTime[uid].meet, "9:00", "送迎表の時刻は頭の0なし（ほかの時刻と同じ）");
     // 開き直しても「こちらから迎える」
     await A.pg.locator("#panel .ev-row", { hasText: "馬場 こちらから迎え" }).evaluate((b) => b.click()).catch(() => {}); await A.pg.waitForTimeout(400);
     if (await A.pg.locator('input[name="w-meet"]').count()) { assert.strictEqual(await A.pg.evaluate(() => document.querySelector('input[name="w-meet"]:checked').value), "go", "開き直しても"); await A.pg.keyboard.press("Escape"); await A.pg.waitForTimeout(300); }

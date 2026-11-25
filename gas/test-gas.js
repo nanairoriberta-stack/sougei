@@ -978,6 +978,39 @@ async function bootstrap() {
     return "つまずき・権限・反映エラー・控え・入口から戻す・前に届いた操作・時計・長い予定 OK";
   });
 
+  await test("何日も続く利用者の休み（1/1〜1/3）を消すと、どの日の送迎表からも休みが消えて便に戻る（2026-11-25 依頼者）", async () => {
+    const { g, admin } = await bootstrap();
+    const E2 = engFor("v2"), m2 = (await admin.call("kv.get", "v2:master")).value;
+    const days = ["2027-01-01", "2027-01-02", "2027-01-03", "2027-01-04", "2027-01-05"];
+    for (const d of days) { const p = E2.resolveSeedPattern(m2, E2.SEED_PATTERNS[["sun", "mon", "tue", "wed", "thu", "fri", "sat"][new Date(d + "T00:00:00").getDay()]] || {});
+      await admin.call("kv.cas", { key: "v2:sheet:" + d, rev: 0, value: Object.assign(E2.emptySheet(), { runs: p.runs || [], blocks: p.blocks || [] }) }); }
+    const nm = "中村", uid = m2.users.find((u) => u.name === nm).id;
+    const riding = (sh) => (sh.runs || []).some((r) => (r.userIds || []).includes(uid));
+    const before = {}; for (const d of days) before[d] = riding((await admin.call("kv.get", "v2:sheet:" + d)).value);
+    const ev = { title: nm + " 休み", date: "2027-01-01", endDate: "2027-01-05", allDay: true, start: "", end: "", label: "user", place: "", memo: "", members: [], sg: { type: "user_absent", users: [nm] } };
+    assert.strictEqual((await admin.call("cal.apply", { kind: "upsert", opId: "op_mabs0001", id: "ev_mabs0001", baseRev: null, ev })).status, "ok");
+    for (const d of days) { const sh = (await admin.call("kv.get", "v2:sheet:" + d)).value; assert.strictEqual(sh.userAbsent[uid], true, "休み " + d); assert.ok(!riding(sh), "便から外れる " + d); }
+    const stale = {}; for (const d of days) stale[d] = (await admin.call("kv.get", "v2:sheet:" + d)).value;   // 消す前に開いていた画面の送迎表（休みが入っている）
+    const saved = (await admin.call("cal.search", { q: nm + " 休み" })).items.find((x) => x.id === "ev_mabs0001");
+    assert.strictEqual((await admin.call("cal.apply", { kind: "delete", opId: "op_mabs0002", id: "ev_mabs0001", date: saved.date, baseRev: saved.rev })).status, "ok");
+    for (const d of days) { const sh = (await admin.call("kv.get", "v2:sheet:" + d)).value;
+      assert.ok(!sh.userAbsent[uid], "消すと休みが消える " + d + " " + JSON.stringify(sh.userAbsent)); assert.strictEqual(riding(sh), before[d], "便に戻る " + d); }
+    // 消す前から開いていた画面が、休みの入った古い内容のまま保存しても、休みは戻らない
+    for (const d of days) { const mine = JSON.parse(JSON.stringify(stale[d])); mine.memo = "画面で書いたメモ";
+      await admin.call("kv.merge", { key: "v2:sheet:" + d, base: stale[d], mine, baseKnown: true });
+      const sh = (await admin.call("kv.get", "v2:sheet:" + d)).value; assert.ok(!sh.userAbsent[uid] && sh.memo === "画面で書いたメモ", "古い画面の保存 " + d + " " + JSON.stringify(sh.userAbsent)); assert.strictEqual(riding(sh), before[d], "便 " + d); }
+    // 送迎表がまだ無かった日を、休みが入った画面の内容で初めて保存しても
+    { const d = "2027-01-06", ev2 = Object.assign({}, ev, { date: d, endDate: d });
+      await admin.call("cal.apply", { kind: "upsert", opId: "op_mabs0003", id: "ev_mabs0003", baseRev: null, ev: ev2 });
+      const shown = E2.emptySheet(); const C = require("../calsync.js"); const disp = C.reconcile(m2, shown, [Object.assign({ id: "ev_mabs0003", rev: 1 }, ev2)], d);
+      assert.ok(disp.userAbsent[uid], "画面には休み");
+      const sv = (await admin.call("cal.search", { q: nm + " 休み" })).items.find((x) => x.id === "ev_mabs0003");
+      await admin.call("cal.apply", { kind: "delete", opId: "op_mabs0004", id: "ev_mabs0003", date: d, baseRev: sv.rev });
+      await admin.call("kv.merge", { key: "v2:sheet:" + d, base: null, mine: disp, baseKnown: true });
+      const sh = (await admin.call("kv.get", "v2:sheet:" + d)).value; assert.ok(!sh.userAbsent[uid], "まだ無かった日を休みの入った内容で保存しても休みは戻らない " + JSON.stringify(sh.userAbsent)); }
+    return Object.entries(before).filter(([, v]) => v).length + "日分の便に戻る";
+  });
+
   await test("サーバー処理の重さ（シートの読み書き回数）", async () => {
     const { g, admin } = await bootstrap();
     const date = "2026-11-25"; const E = engFor("v1"); const m = await admin.kv().get("master"); const p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);

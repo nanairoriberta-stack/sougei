@@ -640,3 +640,52 @@ console.log('extra OK');
   assert.ok(!/shm20261102/.test(ids) && !/tt20261102/.test(ids), 'シフト表・TimeTreeの予定はコマにしない ' + ids);
   assert.ok(x.blocks.some((b) => /shQx7ab9/.test(b.id) && b.staffId === S2('八壁').id), '八壁さんの欄');
   console.log('sh/tt id OK'); }
+{ // ほかの事業の予定は入れない（2026-11-25 依頼者「生活介護のカレンダーの予定がりんくぷれいす版にも表示されている」）。職員の休み・休日出勤・時間変更は両方にいる職員なら両方
+  const lk = Object.assign(JSON.parse(JSON.stringify(m)), { linkSeed2: true });   // りんく・ぷれいす版（放課後デイ）。白戸さんは両方にいる
+  const D = '2026-11-02', sh0 = Object.assign(E.emptySheet(), { blocks: [], runs: [] }), Sh = lk.staff.find((s) => s.name === '白戸');
+  const ev = [
+    { id: 'bz1', rev: 1, date: D, endDate: D, allDay: false, start: '10:00', end: '11:00', title: '白戸 研修', label: 'sother', tanto: ['白戸'] },
+    { id: 'bz2', rev: 1, date: D, endDate: D, allDay: false, start: '13:00', end: '14:00', title: '会議', label: 'other' },
+    { id: 'bz3', rev: 1, date: D, endDate: D, allDay: false, start: '15:00', end: '16:00', title: '研修', sg: { type: 'staff_plan', staff: ['白戸'] } },
+    { id: 'bz4', rev: 1, date: D, endDate: D, allDay: true, title: '白戸 休み', label: 'leave', sg: { type: 'staff_off', staff: ['白戸'] } },
+  ];
+  const ids = (x) => (x.blocks || []).map((b) => b.id).join(' ');
+  const v3 = C.reconcile(lk, sh0, ev, D);
+  assert.ok(!/bz1|bz2|bz3/.test(ids(v3)), '生活介護の予定はりんく・ぷれいす版のコマにしない ' + ids(v3));
+  assert.strictEqual(v3.staffOv[Sh.id].off, true, '職員の休みは両方の版に入る');
+  assert.deepStrictEqual(C.summary(lk, v3, ev, D).map((s) => s.id), ['bz4'], '反映中にも出さない');
+  const hv = ev.map((e) => Object.assign({}, e, { biz: 'houkago' })), v3h = C.reconcile(lk, sh0, hv, D);
+  assert.ok(/bz1/.test(ids(v3h)) && /bz2/.test(ids(v3h)) && /bz3/.test(ids(v3h)), '放課後デイの予定は入る ' + ids(v3h));
+  const v1 = C.reconcile(m, sh0, hv, D);
+  assert.ok(!/bz1|bz2|bz3/.test(ids(v1)) && v1.staffOv[S('白戸').id].off, '放課後デイの予定は生活介護の版に入れない（休みは入る）');
+  // 前に入ってしまっていたコマは、次の保存で消える
+  const old = C.reconcile(Object.assign({}, lk, { linkSeed2: false }), sh0, ev, D); assert.ok(/bz1/.test(ids(old)));
+  assert.ok(!/bz1|bz3/.test(ids(C.reconcile(lk, old, ev, D))), '入ってしまっていた分は消える');
+  // 特記事項
+  const cn = E.calNoteLines(lk, [{ id: 'bz5', rev: 1, date: D, endDate: D, allDay: true, title: '白戸 面談' }, ev[3]], D, 'v3');
+  assert.ok(!cn.staff.includes('白戸 面談') && cn.staff.includes('白戸 休み'), '特記事項にも出さない（休みは出す） ' + JSON.stringify(cn));
+  console.log('ほかの事業の予定 OK'); }
+{ // 同じ人に休みの予定が2つ重なっているとき（2026-11-25 依頼者「利用者の休みを1/1〜1/3と入れてキャンセルで消しても送迎表で休みのまま」）
+  const D = '2026-11-02', U2 = U('中村').id, Sy = S('八壁').id;
+  const ab = (id, end) => ({ id, rev: 1, date: D, endDate: end || D, allDay: true, title: '中村 休み', sg: { type: 'user_absent', users: ['中村'] } });
+  const off = (id) => ({ id, rev: 1, date: D, endDate: D, allDay: true, title: '八壁 休み', sg: { type: 'staff_off', staff: ['八壁'] } });
+  const ride = (s) => s.runs.filter((r) => (r.userIds || []).includes(U2)).length, r0 = ride(sheet);
+  for (const order of [['A', 'B'], ['B', 'A']]) {
+    let s = C.reconcile(m, sheet, [ab('A', '2026-11-04'), off('X')], D); s = C.reconcile(m, s, [ab('A', '2026-11-04'), ab('B'), off('X'), off('Y')], D);
+    assert.strictEqual(s.userAbsent[U2], true); assert.strictEqual(s.staffOv[Sy].off, true);
+    let left = [ab('A', '2026-11-04'), ab('B'), off('X'), off('Y')].filter((e) => e.id !== order[0] && e.id !== (order[0] === 'A' ? 'X' : 'Y'));
+    s = C.reconcile(m, s, left, D); assert.strictEqual(s.userAbsent[U2], true, 'もう1つ残っている間は休み'); assert.strictEqual(s.staffOv[Sy].off, true);
+    s = C.reconcile(m, s, [], D);
+    assert.ok(!(U2 in s.userAbsent), '両方消すと休みが消える ' + order.join('→')); assert.ok(!(Sy in (s.staffOv || {})) || !s.staffOv[Sy].off, '職員の休みも ' + order.join('→'));
+    assert.strictEqual(ride(s), r0, '便に戻る ' + order.join('→'));
+  }
+  // 以前に入ってしまった分（あとの予定が「前の値＝休み」と覚えている）も、先の予定を消すときに付け替えて戻す
+  let s = C.reconcile(m, sheet, [ab('A', '2026-11-04'), ab('B')], D);
+  s.calApplied.B.userAbsent[U2].prev = true;   // 以前の作り方で入った重なり
+  s = C.reconcile(m, s, [ab('B')], D); s = C.reconcile(m, s, [], D);
+  assert.ok(!(U2 in s.userAbsent), '以前に入った重なりも、両方消すと休みが消える');
+  // 手で休みにしていた人は、カレンダーの予定を消しても休みのまま（今までどおり）
+  const manual = Object.assign(JSON.parse(JSON.stringify(sheet)), { userAbsent: { [U2]: true } });
+  let t = C.reconcile(m, manual, [ab('A'), ab('B')], D); t = C.reconcile(m, t, [ab('B')], D); t = C.reconcile(m, t, [], D);
+  assert.strictEqual(t.userAbsent[U2], true, '手で休みにしていたら残す');
+  console.log('重なった休みを消す OK'); }

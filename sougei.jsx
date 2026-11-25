@@ -1459,6 +1459,8 @@ function calNoteLines(master, events, date, edition) {
     const memo = String(e.memo || "").replace(/\s+/g, " ").trim(), memo1 = memo.length > 200 ? memo.slice(0, 200) + "…" : memo;
     const line = title + (e.allDay || !e.start ? "" : ` ${hm(e.date === date ? e.start : "0:00")}〜${hm((e.endDate || e.date) === date ? e.end : "24:00")}`) + (memo1 ? `（${memo1}）` : "");
     if (!title || t === "help" || t === "staff_plan" || t === "user_absent") continue;
+    // ほかの事業の予定は出さない（2026-11-25 依頼者「生活介護のカレンダーの予定がりんくぷれいす版にも表示されている」）。職員の休み・休日出勤・時間変更だけは、その職員がこの版にいれば出す
+    if ((e.biz === "houkago" ? "houkago" : "seikatsu") !== myBiz && !(t === "staff_off" || t === "hwork" || t === "shift")) continue;
     if (t === "user_time" || t === "user_extra" || t === "help_cancel" || t === "liberta") { if ((sg.users || []).some((n) => users.includes(n))) out.user.push(line); continue; }   // ヘルプキャンセルも特記事項(利用者)に
     if (t === "staff_off" || t === "hwork" || t === "shift") { if ((sg.staff || []).some((n) => staff.includes(n))) { out.staff.push(line);
       // 1日休み（メモなし）は Excel の特記事項(職員)の先頭「休み：八壁・…」と同じなので、そこに名前があれば出さない（2026-11-13 依頼者「ここ2重にならないように」）
