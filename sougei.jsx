@@ -4223,7 +4223,13 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
   // 送迎表の userTime には週間パターンから読み込んだ「いつもの時刻」も入るので、利用者タブの時刻（曜日ごと→基本）と同じなら出さない。
   // 利用者タブに時刻が無い人は、カレンダー（送迎変更・利用日外利用）で入った時刻だけ出す（パターンから入った時刻を「変更」と出さない）
   const calUT = calUserTimeOf(sheet);
+  // 2026-11-25（その2）依頼者「まだ■利用時間変更が出る」：週間パターンにも利用時間（以前に取り込んだExcelの「■利用時間変更」）が入っていて、
+  // パターンを読み込むたびにその時刻が入り、利用者タブと違うので出ていた → 出力のときにその曜日の週間パターンの時刻（sheet.patUserTime）と同じなら出さない
+  const patUT = sheet.patUserTime || null;
   const sendChanged = (u) => { const s = (userTimeMap[u.id] || {}).send; if (!s) return false;
+    if (calUT[u.id] && calUT[u.id].send) return true;   // カレンダーで入れた時刻
+    const pat = patUT && (patUT[u.id] || {}).send;
+    if (pat) return toMin(s) !== toMin(pat);
     const tab = ((u.timeByDay || {})[wd] || {}).send || u.sendTime || "";
     if (tab) return toMin(s) !== toMin(tab);
     return !!(calUT[u.id] && calUT[u.id].send); };
@@ -10797,6 +10803,8 @@ function AppInner() {
   };
 
   // Excelを出力したことと、そのときに反映していたカレンダーの予定を、その日の送迎表に残す（あとで変わったらお知らせ）
+  // 日の送迎表のExcel：その曜日の週間パターンの利用時間も渡す（パターンと同じ時刻は「■利用時間変更」に出さない。2026-11-25）
+  const exportDay = async (x) => { let pu = {}; try { const p = await sGet(`pattern:${weekdayOf(date)}`); pu = (p && p.userTime) || {}; } catch (e) {} return exportExcel(sheetMaster, { ...x, patUserTime: pu }, date); };
   const markExported = () => {
     const C = typeof window !== "undefined" && window.SGCal;
     updateSheet((prev) => (prev ? { ...prev, exportedAt: new Date().toISOString(), exportSnap: C && C.exportSnapOf ? C.exportSnapOf(prev) : {} } : prev));
@@ -10808,7 +10816,7 @@ function AppInner() {
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
     notify("確認なしでExcelを出力します");
-    exportExcel(sheetMaster, { ...sheetData, calNotes: calNotesToday }, date); markExported();
+    exportDay({ ...sheetData, calNotes: calNotesToday }); markExported();
   };
   const handleExport = async () => {
     if (!sheet || !sheetMaster) return;
@@ -10954,7 +10962,7 @@ function AppInner() {
 
     if (!groups.length) {
       notify("✓ チェックOK(エラーなし)。Excelを出力します");
-      exportExcel(sheetMaster, { ...sheetData, calNotes: calNotesToday }, date); markExported();
+      exportDay({ ...sheetData, calNotes: calNotesToday }); markExported();
       return;
     }
     setModal({ type: "exportCheck", groups, idx: 0 });
@@ -11034,7 +11042,7 @@ function AppInner() {
     if (!sheet) return;
     const sheetData = { staffOv: {}, userAbsent: {}, userDept: {}, notes: "", contact: "", ...sheet, blocks: canonHelpBlocks((sheet && sheet.blocks) || []),
       noRide: { ...noRideDefaults(sheetMaster, weekdayOf(date)), ...((sheet && sheet.noRide) || {}) } };
-    exportExcel(sheetMaster, { ...sheetData, calNotes: calNotesToday }, date); markExported();
+    exportDay({ ...sheetData, calNotes: calNotesToday }); markExported();
   };
 
   const countStaffItems = (staffId) =>
@@ -11751,7 +11759,7 @@ function AppInner() {
                 onClick={() => {
                   if (!pattern || (!(pattern.runs || []).length && !(pattern.blocks || []).length)) { notify(`${DAYS[weekday]}曜日のパターンが空です`, "warn"); return; }
                   const d0 = nextDateOfWeekday(weekday);
-                  exportExcel(patternMaster || master, { ...emptySheet(), ...pattern, staffOv: pattern.staffOv || {} }, d0, { dayLabel: `${DAYS[weekday]}曜日の週間パターン`, fileLabel: `週間パターン_${DAYS[weekday]}曜日` });
+                  exportExcel(patternMaster || master, { ...emptySheet(), ...pattern, staffOv: pattern.staffOv || {}, patUserTime: pattern.userTime || {} }, d0, { dayLabel: `${DAYS[weekday]}曜日の週間パターン`, fileLabel: `週間パターン_${DAYS[weekday]}曜日` });
                 }}>🖨 この曜日を印刷(Excel)</button>
               <PaperPick />
             </div>

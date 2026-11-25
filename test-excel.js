@@ -585,3 +585,16 @@ const ExcelJS = require("./pw/node_modules/exceljs");
   }
   console.log("利用時間変更はほんとうに変わった時刻だけ OK", withTab.name, noTab && noTab.name);
 }
+{ // 2026-11-25（その2）依頼者「まだ■利用時間変更が出る」：週間パターンの利用時間（以前に取り込んだExcelから）と同じなら出さない
+  const E15 = require("./eng.cjs"), m = E15.mergeSeedMaster(null, E15.seedMaster()), D = "2026-11-02", wd = 1;
+  const u = m.users.find((x) => (x.days || []).includes(wd) && (((x.timeByDay || {})[wd] || {}).send || x.sendTime));
+  const tab = ((u.timeByDay || {})[wd] || {}).send || u.sendTime, [h, mi] = tab.split(":").map(Number), pat = `${h + 1}:${String(mi).padStart(2, "0")}`, other = `${h + 2}:${String(mi).padStart(2, "0")}`;
+  const notesOf = (sheet) => { const ws = E15.buildWorkbook(ExcelJS, m, Object.assign(E15.emptySheet(), sheet), D).getWorksheet("送迎表"); let t = ""; ws.eachRow((r) => r.eachCell((c) => { t += String(c.value || "") + "|"; })); return t; };
+  let t = notesOf({ userTime: { [u.id]: { send: pat } }, patUserTime: { [u.id]: { send: pat } } });
+  assert.ok(!t.includes(`${u.name}(送`), "週間パターンと同じ時刻は出さない（利用者タブと違っても） " + u.name + pat);
+  t = notesOf({ userTime: { [u.id]: { send: other } }, patUserTime: { [u.id]: { send: pat } } });
+  assert.ok(t.includes(`${u.name}(送${other})`), "週間パターンと違う時刻は出す");
+  t = notesOf({ userTime: { [u.id]: { send: pat } }, patUserTime: { [u.id]: { send: pat } }, calApplied: { e1: { rev: 1, userTime: { [u.id]: { prev: null, mine: { send: pat } } } } } });
+  assert.ok(t.includes(`${u.name}(送${pat})`), "カレンダーで入れた時刻は出す");
+  console.log("利用時間変更は週間パターンと比べる OK", u.name, tab, pat);
+}

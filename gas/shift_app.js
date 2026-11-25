@@ -13,7 +13,7 @@
   const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
   // 男性の表は、?d= が無ければ翌月から開く（2026-11-07 依頼者「男性は希望を入れる画面は翌月をデフォルトに」）
   const nextYm = (() => { const d = new Date(today.getFullYear(), today.getMonth() + 1, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; })(), hasD = /^\d{4}-\d{2}-\d{2}$/.test(window.__SG_DATE || "");
-  const S = { group: store.get("sh:group") === "f" ? "f" : "m", ym: store.get("sh:group") !== "f" && !hasD ? nextYm : thisYm, loaded: false, err: "", canEdit: false, member: false,
+  const S = { mine: store.get("sh:mine") === "1", group: store.get("sh:group") === "f" ? "f" : "m", ym: store.get("sh:group") !== "f" && !hasD ? nextYm : thisYm, loaded: false, err: "", canEdit: false, member: false,
     cfg: null, cfgBase: null, month: null, monthBase: null, mode: "shift", wishWho: "", withNames: true, saving: 0, failed: "", pick: null, settings: null, showLine: false };
   const me = () => H.me || {};
   const cfg = () => X.cfgOf(S.group, S.cfg);
@@ -157,8 +157,10 @@
       <label class="wn">ひとこと：<input id="shWishNote" maxlength="80" value="${esc(((S.month && S.month.wishNote) || {})[S.wishWho] || "")}" placeholder="例：13〜17日 旅行"></label></div>`;
     // シフトの確定（2026-11-07 依頼者「管理者以外は確定までは見えないように。最終確定ボタン」）
     // 男性の表は、表の職員には希望を入れる画面だけ（2026-11-10 依頼者「男性の希望休のカレンダーは希望を入れる画面のみに」）。勤務は職場カレンダーで見る
-    const wishOnly = !S.canEdit && S.group === "m";
-    const fixed = X.isFixed(S.month, S.ym), hidden = wishOnly || (!S.canEdit && (!!(S.month && S.month.hidden) || !fixed)), fx = (S.month && S.month.fixed) || null;
+    // 確定した月は、表の職員にも全員のシフトを見せる（2026-11-25 依頼者「確定したシフトが全員分見れるようになってほしい」）。確定前は今までどおり希望だけ
+    const fixed = X.isFixed(S.month, S.ym), shown = fixed && !(S.month && S.month.hidden);
+    const wishOnly = !S.canEdit && S.group === "m" && !shown;
+    const hidden = wishOnly || (!S.canEdit && (!!(S.month && S.month.hidden) || !fixed)), fx = (S.month && S.month.fixed) || null;
     if (S.canEdit) html += fixed ? `<div class="sh-fix on" data-fix="on">✅ この月のシフトは<b>確定</b>しています（表の職員にも見え、職場カレンダーにも出ます）${fx && fx.at ? `<small>${esc(String(fx.at).slice(5, 10).replace("-", "/"))} ${esc(fx.by || "")}</small>` : ""}<button data-act="unfix">確定を取り消す</button></div>`
       : `<div class="sh-fix" data-fix="off">この月のシフトは<b>まだ確定していません</b>。組む人（管理者など）だけに見えています。表の職員には希望だけが見え、職場カレンダーにも出ません。<button data-act="fix" class="primary" data-fix-btn>✅ このシフトで確定する</button><button data-act="refit" data-refit title="今の希望（休み・早番・遅番・日勤など）に合わない枠を空けます。時間の補足つきで入れた枠はそのままです">🔄 希望の入った状態に戻す</button></div>`;
     else if (hidden && !wishOnly) html += `<div class="sh-fix" data-unfixed>この月のシフトはまだ確定していません。確定すると、ここに勤務が出ます（今は希望だけ入れられます）。</div>`;
@@ -168,10 +170,23 @@
     const ri = X.ruleIssues(S.month, c, S.ym), riSet = new Set(ri.map((x) => `${x.date}|${x.kind}|${x.now}`));
     const ngI = X.ngIssues(S.month, c, S.ym), ngSet = new Set(ngI.map((x) => `${x.date}|${x.kind}|${x.slot}`));   // NGの条件とちがう枠（2026-11-13）
     const days = X.daysOfMonth(S.ym), lead = (X.wdOf(days[0]) + 6) % 7;   // 月曜始まり（2026-11-07 依頼者）
+    // 自分のシフトだけ表示（2026-11-25 依頼者「自分のシフトだけ表示するボタンもほしい」）：マスにその人の勤務（早①・遅②・日勤・休み）だけを大きく出す
+    const meN = c.members.some((m) => m.name === S.myName) ? S.myName : (S.canEdit ? S.wishWho : "");
+    const mine = !hidden && !!meN && !!S.mine;
+    const dutyOf = (date) => { const d = (S.month && S.month.days || {})[date] || {}, out = [];
+      for (const k of ["e", "l"]) for (const i of Object.keys(d[k] || {}).sort((a, b) => a - b)) { const s = d[k][i]; if (X.slotName(s) === meN) out.push({ k, t: `${X.KIND[k]}${X.MARK[i] || i}${s && s.t ? `(${s.t})` : ""}` }); }
+      for (const x of d.d || []) { const e = X.splitName(x); if (e.n === meN) out.push({ k: "d", t: "日勤" + (e.t ? `(${e.t})` : "") }); }
+      if (!out.length) out.push(X.unplaced(S.month, c, date).includes(meN) ? { k: "u", t: "配置未定" } : { k: "o", t: "休み" });
+      return out; };
+    if (!hidden && meN) {
+      let ne = 0, nl = 0, nd = 0, no = 0; for (const dt of days) for (const x of dutyOf(dt)) { if (x.k === "e") ne++; else if (x.k === "l") nl++; else if (x.k === "d") nd++; else if (x.k === "o") no++; }
+      html += `<div class="sh-mine"><button data-mine aria-pressed="${mine}">${mine ? "👥 全員のシフトを表示" : "👤 自分のシフトだけ表示"}</button>${mine ? `<span data-mine-sum>${esc(meN)}さん：早番${ne}回・遅番${nl}回・日勤${nd}日・休み${no}日</span>` : ""}</div>`;
+    }
     if (!hidden) html += `<div class="sh-legend" data-legend><span class="e">赤＝早番</span>・<span class="l">青＝遅番</span>（①②③は番号）</div>`;
     if (!hidden) html += `<div class="sh-legend2" data-legend-chg>いつもの勤務（基本シフト）と違う人：<span class="wchg wchgbg">緑＝希望休・希望勤務で変わった</span>　<span class="chg chgbg">紫＝こちらで変えた勤務</span>　<span class="hwk hwkbg">桃＝休日出勤</span></div>`;
     // 希望を入れるだけの画面（男性の表の職員）はマスの高さをそろえて押しやすく（2026-11-13 依頼者「スマホで日付が縦にすごく狭くて打ちづらい」。.wo）。スマホの見出しは「月」だけ
     html += `<table class="sh-grid${wishOnly ? " wo" : ""}"><thead><tr>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th class="${i === 0 ? "su" : i === 6 ? "sa" : ""}">${X.WD[i]}<span class="wdx">曜日</span></th>`).join("")}</tr></thead><tbody>`;
+    const changeKindsMe = (date) => (X.changeKinds(S.month, c, date) || {})[meN] || "";
     const cells = Array(lead).fill(null).concat(days);
     while (cells.length % 7) cells.push(null);
     for (let r = 0; r < cells.length; r += 7) {
@@ -185,6 +200,8 @@
           return `<button class="slot ${k}${n && kinds[n] === "ours" ? " chgs" : n && kinds[n] === "wish" ? " wchgs" : n && kinds[n] === "hwork" ? " hwks" : ""}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}${ngSet.has(`${date}|${k}|${i}`) ? " ng" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i><b class="kk">${X.KIND[k]}</b>${X.MARK[i] || i}</i>${n ? (chg.has(n) ? chgSpan(n, n) : esc(n)) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
         const maxE = Math.max(need.e, ...Object.keys(d.e || {}).map(Number), 0), maxL = Math.max(need.l, ...Object.keys(d.l || {}).map(Number), 0);
         const rows = Math.max(maxE, maxL);
+        if (mine) { const wd = X.wdOf(date), k0 = changeKindsMe(date), w = X.wishOf(S.month, meN, date);
+          return `<td class="day mine${wd === 0 ? " su" : wd === 6 ? " sa" : ""}${S.mode === "wish" ? " wishmode" : ""}" data-day="${date}"><div class="dnum">${Number(date.slice(8))}</div>${dutyOf(date).map((x) => `<div class="mduty ${x.k}${k0 === "hwork" ? " hw" : ""}" data-mine-duty="${date}">${esc(x.t)}${k0 === "hwork" ? "<small>休日出勤</small>" : ""}</div>`).join("")}${w ? `<div class="line wish">希望：<span class="${wcls(w)}">${esc(w)}</span></div>` : ""}</td>`; }
         let grid = "";   // スマホでは早番（赤）・遅番（青）を1列に並べ、名前が見えるようにする（2026-11-07 依頼者「スマホだと名前わからない」）
         if (!hidden) for (let i = 1; i <= rows; i++) grid += `<div class="pair">${i <= maxE ? slot("e", i) : `<span></span>`}${i <= maxL ? slot("l", i) : `<span></span>`}</div>`;
         // 早番・遅番の希望なのに枠に入っていない人は、枠のすぐ下に「超過」で出す（2026-11-23 依頼者。すでに入っている人の勤務を変えるため）
@@ -298,6 +315,7 @@
     const t = e.target, at = (sel) => t.closest(sel);
     if (at("[data-group]")) { S.group = at("[data-group]").dataset.group; store.set("sh:group", S.group); load(); return; }
     if (at("[data-mon]")) { const [y, m] = S.ym.split("-").map(Number), d = new Date(y, m - 1 + Number(at("[data-mon]").dataset.mon), 1); S.ym = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; load(); return; }
+    if (at("[data-mine]")) { S.mine = !S.mine; store.set("sh:mine", S.mine ? "1" : ""); render(); return; }
     if (at("[data-mode]")) { S.mode = at("[data-mode]").dataset.mode; render(); return; }
     if (!S.loaded) return;
     if (at("[data-wish-del]")) { if (!S.canEdit && S.wishWho !== S.myName) return; const d = at("[data-wish-del]").dataset.wishDel, who = S.wishWho; S.month.wish = Object.assign({}, S.month.wish); const w = Object.assign({}, S.month.wish[who]); delete w[d]; S.month.wish[who] = w; S.month = X.fitPending(S.month, S.ym); changed("month"); return; }

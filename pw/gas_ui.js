@@ -726,9 +726,28 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok((await Y.pg.locator(".sh-wishbar").innerText()).includes("横田"), "自分の希望");
     assert.strictEqual(await Y.pg.locator("#shWho").count(), 0, "表の職員は自分（ログインした人）が選ばれている"); await Y.pg.click('td[data-day="2026-11-20"] .dnum'); await Y.pg.waitForTimeout(200); await Y.pg.click('[data-wpick="休"]'); await Y.pg.waitForTimeout(2500);
     assert.strictEqual(api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value.wish["横田"]["2026-11-20"], "休", "自分の希望が保存");
-    // 男性の表は、表の職員には希望を入れる画面だけ（2026-11-10 依頼者）：勤務の枠・日勤・休み・基本シフト・曜日のパターンは出さない
+    // 確定した月は、表の職員にも全員のシフトが見える（2026-11-25 依頼者「確定したシフトが全員分見れるようになってほしい」）
+    const m11 = () => api(t, "shift.get", [{ group: "m", ym: "2026-11" }]).data.month.value;
+    const setFixed = (v) => { const cur = m11(); api(t, "shift.save", [{ group: "m", ym: "2026-11", kind: "month", base: cur, baseKnown: true, mine: Object.assign({}, cur, { fixed: v }) }]); };
+    setFixed({ at: "2026-11-25T10:00:00", by: "管理者" }); await Y.pg.click('[data-mon="1"]'); await Y.pg.waitForTimeout(1500); await Y.pg.click('[data-mon="-1"]'); await Y.pg.waitForTimeout(2500);
+    assert.ok(await Y.pg.locator("[data-slot]").count() > 30, "確定した月は全員の勤務の枠が見える " + await Y.pg.locator("[data-slot]").count());
+    assert.ok(await Y.pg.locator(".line.off").count() > 0, "休みの行も見える");
+    assert.strictEqual(await Y.pg.locator("[data-mine-duty]").count(), 0, "はじめは全員");
+    // 自分のシフトだけ表示（2026-11-25 依頼者）
+    await Y.pg.click("[data-mine]"); await Y.pg.waitForTimeout(400);
+    assert.strictEqual(await Y.pg.locator("[data-slot]").count(), 0, "自分のだけにすると、ほかの人の枠は出さない");
+    { const d11 = m11().days, ws = [];
+      for (const [dt, d] of Object.entries(d11)) { const inE = Object.values(d.e || {}).some((x) => x && x.n === "横田"), inL = Object.values(d.l || {}).some((x) => x && x.n === "横田"), inD = (d.d || []).some((x) => String(x).split("(")[0] === "横田");
+        const tx = await Y.pg.locator(`[data-mine-duty="${dt}"]`).allInnerTexts(), j = tx.join(" ");
+        if (inE) assert.ok(/早/.test(j), dt + " 早番 " + j); else if (inL) assert.ok(/遅/.test(j), dt + " 遅番 " + j); else if (inD) assert.ok(/日勤/.test(j), dt + " 日勤 " + j); else ws.push(j); }
+      assert.ok(ws.every((j) => /休み|配置未定/.test(j)), "入っていない日は休み " + ws.join(","));
+      assert.ok(/横田さん：早番\d+回・遅番\d+回・日勤\d+日・休み\d+日/.test(await Y.pg.locator("[data-mine-sum]").innerText()), "回数のまとめ"); }
+    await Y.pg.screenshot({ path: "g_shift_mine.png" });
+    await Y.pg.click("[data-mine]"); await Y.pg.waitForTimeout(400); assert.ok(await Y.pg.locator("[data-slot]").count() > 30, "全員に戻せる");
+    // 確定していない月は、今までどおり希望を入れる画面だけ（2026-11-10 依頼者）：勤務の枠・日勤・休み・基本シフト・曜日のパターンは出さない
+    setFixed(false); await Y.pg.click('[data-mon="1"]'); await Y.pg.waitForTimeout(1500); await Y.pg.click('[data-mon="-1"]'); await Y.pg.waitForTimeout(2500);
     assert.strictEqual(await Y.pg.locator("[data-slot]").count(), 0, "勤務の枠は出さない");
-    assert.strictEqual(await Y.pg.locator(".sh-base, .sh-pat, .line.off, [data-legend]").count(), 0, "基本シフト・パターン・休みの行は出さない");
+    assert.strictEqual(await Y.pg.locator(".sh-base, .sh-pat, .line.off, [data-legend], [data-mine]").count(), 0, "基本シフト・パターン・休みの行・自分だけボタンは出さない");
     assert.ok((await Y.pg.locator('td[data-day="2026-11-20"]').innerText()).includes("横田 休"), "希望は見える");
     // スマホでも日付のマスに高さがある（2026-11-13 依頼者「日付が縦にすごく狭くて打ちづらい」）
     { const hs = await Y.pg.$$eval("td[data-day]", (l) => l.map((e) => e.getBoundingClientRect().height)); assert.ok(Math.min(...hs) >= 60, "マスの高さ " + Math.min(...hs));

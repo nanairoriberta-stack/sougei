@@ -96,3 +96,19 @@ label.opt{flex-direction:row;align-items:center;gap:6px;padding:6px;border:1px s
 .sh-grid .hwk,.sh-legend2 .hwk{color:#be185d !important;font-weight:800;text-decoration:underline dotted}
 .sh-grid .slot.hwks{background:#fce7f3 !important;box-shadow:inset 0 0 0 2px #ec4899;border-radius:4px}
 .sh-grid .line .hwk,.sh-legend2 .hwkbg{background:#fce7f3;border-radius:3px;padding:0 2px;box-shadow:inset 0 0 0 1.5px #ec4899}
+/* 自分のシフトだけ表示（2026-11-25 依頼者） */
+.sh-mine{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 2px 6px}
+.sh-mine button{padding:7px 14px;border-radius:18px;border:1.5px solid #1e40af;background:#fff;color:#1e40af;font-weight:700;font-size:14px;cursor:pointer}
+.sh-mine button[aria-pressed="true"]{background:#1e40af;color:#fff}
+.sh-mine span{font-size:13px;font-weight:700;color:#334155}
+.sh-grid td.mine{vertical-align:top}
+.sh-grid .mduty{margin:4px 2px;padding:6px 2px;border-radius:8px;text-align:center;font-weight:800;font-size:15px;line-height:1.2}
+.sh-grid .mduty small{display:block;font-size:10px;font-weight:700}
+.sh-grid .mduty.e{background:#fee2e2;color:#b91c1c}
+.sh-grid .mduty.l{background:#dbeafe;color:#1d4ed8}
+.sh-grid .mduty.d{background:#dcfce7;color:#15803d}
+.sh-grid .mduty.o{background:#f1f5f9;color:#64748b;font-weight:600}
+.sh-grid .mduty.u{background:#fef3c7;color:#92400e}
+.sh-grid .mduty.hw{box-shadow:inset 0 0 0 2px #ec4899}
+.sh-grid .mduty.hw small{color:#be185d}
+@media (max-width:760px){.sh-grid .mduty{font-size:12px;padding:4px 1px}}
