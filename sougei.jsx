@@ -4219,8 +4219,16 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     .map((u) => { const o = libOffMap[u.id]; return `${u.name}(${[o.am ? "朝" : "", o.pm ? "夕" : ""].filter(Boolean).join("・")})`; });
   const userTimeMap = sheet.userTime || {};
   // 迎えの時間は表(Excel)には明記しない方針のため、送りの変更のみ記載する(迎えはアプリ内の警告・吹き出しでのみ使用)
+  // 「利用時間変更」に出すのは、ほんとうに変わった時刻だけ（2026-11-25 依頼者「カレンダーにも送迎表のタブにもない情報がエクセルの特記事項(利用者)に出てくる」）：
+  // 送迎表の userTime には週間パターンから読み込んだ「いつもの時刻」も入るので、利用者タブの時刻（曜日ごと→基本）と同じなら出さない。
+  // 利用者タブに時刻が無い人は、カレンダー（送迎変更・利用日外利用）で入った時刻だけ出す（パターンから入った時刻を「変更」と出さない）
+  const calUT = calUserTimeOf(sheet);
+  const sendChanged = (u) => { const s = (userTimeMap[u.id] || {}).send; if (!s) return false;
+    const tab = ((u.timeByDay || {})[wd] || {}).send || u.sendTime || "";
+    if (tab) return toMin(s) !== toMin(tab);
+    return !!(calUT[u.id] && calUT[u.id].send); };
   const timeChangeLines = master.users
-    .filter((u) => (u.days || []).includes(wd) && !absent[u.id] && userTimeMap[u.id] && userTimeMap[u.id].send)
+    .filter((u) => (u.days || []).includes(wd) && !absent[u.id] && sendChanged(u))
     .map((u) => { const t = userTimeMap[u.id]; return `${u.name}(送${t.send})`; });
   const absentNoteLines = master.users
     .filter((u) => (u.days || []).includes(wd) && absent[u.id])

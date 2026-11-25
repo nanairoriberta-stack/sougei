@@ -563,3 +563,25 @@ const ExcelJS = require("./pw/node_modules/exceljs");
  assert.ok(/希望迎え\(9:00\)/.test(w(sh2)),'利用者タブ(9:00)と2時間ずれたら警告');
  console.log('time gap vs user tab OK');
 }
+{ // 「■利用時間変更」は、ほんとうに変わった時刻だけ（2026-11-25 依頼者「カレンダーにも送迎表のタブにもない情報がエクセルの特記事項(利用者)に出てくる」）
+  const E14 = require("./eng.cjs"), m = E14.mergeSeedMaster(null, E14.seedMaster()), D = "2026-11-02", wd = 1;
+  const us = m.users.filter((u) => (u.days || []).includes(wd));
+  const withTab = us.find((u) => ((u.timeByDay || {})[wd] || {}).send || u.sendTime), noTab = us.find((u) => !(((u.timeByDay || {})[wd] || {}).send || u.sendTime));
+  const tabSend = ((withTab.timeByDay || {})[wd] || {}).send || withTab.sendTime;
+  const notesOf = (sheet) => { const ws = E14.buildWorkbook(ExcelJS, m, Object.assign(E14.emptySheet(), sheet), D).getWorksheet("送迎表"); let t = ""; ws.eachRow((r) => r.eachCell((c) => { const v = String(c.value || ""); if (v.includes("■欠席") || v.includes("■利用時間変更") || v.includes("■送迎なし") || v.includes("────")) t += v; })); return t; };
+  // 週間パターンから入った「いつもの時刻」（利用者タブと同じ）は出さない
+  let t = notesOf({ userTime: { [withTab.id]: { send: tabSend.replace(/^(\d):/, "0$1:") } } });
+  assert.ok(!t.includes(withTab.name + "(送"), "いつもの時刻は利用時間変更に出さない " + t);
+  // 利用者タブと違う時刻は出す
+  const other = (toM) => { const x = toM + 60; return `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}`; };
+  const [h, mi] = tabSend.split(":").map(Number), chg = other(h * 60 + mi);
+  t = notesOf({ userTime: { [withTab.id]: { send: chg } } });
+  assert.ok(t.includes(`${withTab.name}(送${chg})`), "変えた時刻は出す " + t);
+  if (noTab) {   // 利用者タブに時刻の無い人：パターンから入った時刻は出さない・カレンダーで入れた時刻は出す
+    t = notesOf({ userTime: { [noTab.id]: { send: "16:00" } } });
+    assert.ok(!t.includes(noTab.name + "(送"), "タブに時刻の無い人のパターンの時刻は出さない " + t);
+    t = notesOf({ userTime: { [noTab.id]: { send: "16:00" } }, calApplied: { ev1: { rev: 1, userTime: { [noTab.id]: { prev: null, mine: { send: "16:00" } } } } } });
+    assert.ok(t.includes(noTab.name + "(送16:00)"), "カレンダーで入れた時刻は出す " + t);
+  }
+  console.log("利用時間変更はほんとうに変わった時刻だけ OK", withTab.name, noTab && noTab.name);
+}
