@@ -11182,7 +11182,7 @@ function AppInner() {
             <div className="flex-1 min-w-0">
             {(() => {   // いま開いている日：Excel出力のあとにカレンダーの変更があれば帯で知らせる（もう一度出力すると消える）
               const C = typeof window !== "undefined" && window.SGCal;
-              const ch = !isPattern && sheet && C && C.exportChanges ? C.exportChanges(sheet) : [];
+              const ch = !isPattern && sheet && C && C.exportChanges && String(date) >= todayStr() ? C.exportChanges(sheet) : [];   // 過ぎた日は帯を出さない（2026-11-25 依頼者）
               if (!ch.length) return null;
               const at = new Date(sheet.exportedAt);
               return (
@@ -11875,7 +11875,7 @@ function AppInner() {
 
       {/* ---------- Excel出力のあとのカレンダーの変更（ほかの日も）：右上にお知らせ ---------- */}
       {(() => {
-        const list = expAlerts.filter((a) => expDismissed[a.date] !== expSig(a) && !(a.date === date && tab === "sheet" && !isPattern));
+        const list = expAlerts.filter((a) => String(a.date) >= todayStr() && expDismissed[a.date] !== expSig(a) && !(a.date === date && tab === "sheet" && !isPattern));
         if (!list.length) return null;
         const md = (d) => { const x = new Date(d + "T00:00:00"); return `${x.getMonth() + 1}月${x.getDate()}日(${DAYS[x.getDay()]})`; };
         return (

@@ -157,9 +157,10 @@ bash test.sh ui      # ＋ブラウザ(Playwright)のテスト
 
 ## Excel出力のあとのカレンダーの変更のお知らせ（2026-10-29）
 - Excelを出力すると、その日の送迎表に `exportedAt` と `exportSnap`（そのとき反映していたカレンダーの予定 ID→{rev,title}、`SGCal.exportSnapOf`）を残す（`markExported`）
-- 今の `calApplied` と比べた追加・変更・取り消し＝`SGCal.exportChanges`。サーバーの `docSet_` が送迎表の文書の meta に `expChg`（数）と `date` を付け、`sg.exportAlerts`（版ごと、昨日以降）が一覧だけで探す
+- 今の `calApplied` と比べた追加・変更・取り消し＝`SGCal.exportChanges`。サーバーの `docSet_` が送迎表の文書の meta に `expChg`（数）と `date` を付け、`sg.exportAlerts`（版ごと、今日以降）が一覧だけで探す
 - 送迎表の画面は30秒ごとに聞き、右上にお知らせ「11月3日(火)のカレンダーに変更があります：白戸 休み（追加）」［この日を開く］［閉じる］（`data-exp-popup`。閉じたら同じ内容は出さない＝端末に `sg:expDismiss:<版>`）。
   開いている日は上に赤い帯（`data-exp-banner`）。もう一度出力すると消える
+- 過ぎた日（今日より前）は知らせない（2026-11-25 依頼者「既に過ぎた日でカレンダーの変更があった場合は、送迎表には出ないように」→「お知らせを出さない」を選んだ）：`exportAlerts_` は今日から（以前は昨日から）、画面のお知らせ・赤い帯も今日より前の日は出さない（`todayStr`）。過ぎた日の送迎表の中身は今までどおりカレンダーに合わせて変わる。テスト `gas/test-gas.js`
 
 ## 送迎表の右にカレンダー（パソコン、2026-10-29）
 送迎表の上の「📅 右にカレンダーを出す」（`data-calside-btn`）→ 右側に `…/exec?page=calendar&embed=1` を iframe で出す（`data-calside`、幅はドラッグで360〜800px、開いているか・幅は端末に `sg:calSide`/`sg:calSideW`）。

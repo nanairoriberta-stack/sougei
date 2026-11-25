@@ -613,7 +613,9 @@ async function bootstrap() {
 
   await test("Excel出力のあとにカレンダーが変わった日を知らせる（sg.exportAlerts）", async () => {
     const { admin } = await bootstrap();
-    const kv = admin.kv(), get = async (k) => (await admin.call("kv.get", k)).value, date = "2026-11-25";
+    // 日付は今日（日本時間）。過ぎた日（昨日）は知らせない（2026-11-25 依頼者）
+    const jst = (o) => new Date(Date.now() + 9 * 3600e3 + o * 864e5).toISOString().slice(0, 10);
+    const kv = admin.kv(), get = async (k) => (await admin.call("kv.get", k)).value, date = jst(0), past = jst(-1);
     const E = engFor("v1"), m = await get("master"), p = E.resolveSeedPattern(m, E.SEED_PATTERNS.wed);
     kv.put("sheet:" + date, Object.assign(E.emptySheet(), { runs: p.runs, blocks: p.blocks })); await settleKV([admin]);
     await admin.call("cal.apply", { kind: "upsert", opId: "op_exp00001", id: "ev_exp00001", baseRev: null, ev: evOff(date, "日野") });
@@ -628,6 +630,12 @@ async function bootstrap() {
     assert.strictEqual(al.length, 1); assert.strictEqual(al[0].date, date);
     assert.deepStrictEqual(al[0].changes.map((c) => c.title + "（" + c.what + "）").sort(), ["八壁 AM休（追加）", "日野 休み（取り消し）"].sort());
     assert.deepStrictEqual(await admin.call("sg.exportAlerts", { ns: "v2:" }), [], "ほかの版には出ない");
+    { // 過ぎた日（昨日）は、出力のあとにカレンダーが変わっても知らせない
+      kv.put("sheet:" + past, Object.assign(E.emptySheet(), { runs: p.runs, blocks: p.blocks })); await settleKV([admin]);
+      await kv.update("sheet:" + past, (v) => ({ ...v, exportedAt: "2026-11-01T06:00:00.000Z", exportSnap: C.exportSnapOf(v) })); await settleKV([admin]);
+      await admin.call("cal.apply", { kind: "upsert", opId: "op_exp00009", id: "ev_exp00009", baseRev: null, ev: evOff(past, "日野") });
+      assert.ok(!(await admin.call("sg.exportAlerts", { ns: "" })).some((a) => a.date === past), "過ぎた日は知らせない");
+      assert.ok(C.exportChanges((await admin.call("kv.get", "sheet:" + past)).value).length > 0, "送迎表の中身はカレンダーに合わせて変わる（今までどおり）"); }
     // もう一度出力すると消える
     await kv.update("sheet:" + date, (v) => ({ ...v, exportedAt: "2026-11-24T07:00:00.000Z", exportSnap: C.exportSnapOf(v) })); await settleKV([admin]);
     assert.deepStrictEqual(await admin.call("sg.exportAlerts", { ns: "" }), []);

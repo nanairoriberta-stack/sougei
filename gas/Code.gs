@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.25f',
+  VERSION: '2026.11.25g',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -610,8 +610,9 @@ function ttLeaveFix_(me, run) {
 function exportAlerts_(ns) {
   if (['', 'v2:', 'v3:'].indexOf(ns) < 0) return [];
   var sh = sheet_(APP.SH.docs), n = sh.getLastRow(); if (n < 2) return [];
-  var heads = sh.getRange(2, 1, n - 1, 4).getValues(), y = new Date(today_() + 'T00:00:00'); y.setDate(y.getDate() - 1);
-  var from = Utilities.formatDate(y, 'Asia/Tokyo', 'yyyy-MM-dd'), idx = null, out = [];
+  // 過ぎた日（今日より前）のカレンダーの変更は知らせない（2026-11-25 依頼者「既に過ぎた日でカレンダーの変更があった場合は、送迎表には出ないように」→「お知らせを出さない」。以前は昨日から）
+  var heads = sh.getRange(2, 1, n - 1, 4).getValues();
+  var from = today_(), idx = null, out = [];
   heads.forEach(function (h) {
     var meta; try { meta = h[3] ? JSON.parse(h[3]) : {}; } catch (e) { return; }
     if (!meta.expChg || !meta.k || meta.k !== ns + 'sheet:' + meta.date || meta.date < from) return;
