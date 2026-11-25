@@ -538,6 +538,9 @@ const D = path.join(__dirname, "../gas/out");
         assert.strictEqual(await el.locator(`[data-chg="${x}"]`).count(), 1, "名前が紫の太字");
         assert.strictEqual(await el.evaluate((b) => getComputedStyle(b).backgroundColor), "rgb(237, 233, 254)", "薄い紫の背景");
         assert.ok(await T.pg.locator("[data-legend-chg]").isVisible(), "説明が出る");
+        assert.ok((await T.pg.locator("[data-legend-chg]").innerText()).includes("桃＝休日出勤"), "説明に休日出勤（2026-11-25）");
+        { const hw = await T.pg.$$eval("[data-hwork]", (l) => l.map((e) => [e.textContent, getComputedStyle(e).color]));
+          assert.ok(hw.every(([, c]) => c === "rgb(190, 24, 93)"), "休日出勤の人は桃色 " + JSON.stringify(hw)); console.log("休日出勤の印", hw.length, "人", hw.slice(0, 3).map((x) => x[0]).join("・")); }
         // 本人の希望（早番）があると緑に変わる（2026-11-24 依頼者「希望休＆希望変更と、こちらで変更した勤務変更の文字の色は別に」）
         await T.pg.click('[data-mode="wish"]'); await T.pg.waitForTimeout(200); await T.pg.selectOption("#shWho", x);
         await T.pg.click(`td[data-day="${D}"] .dnum`); await T.pg.waitForTimeout(200); await T.pg.click('[data-wpick="早"]'); await T.pg.waitForTimeout(300);

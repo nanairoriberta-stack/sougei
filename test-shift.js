@@ -347,3 +347,21 @@ console.log("shift extra ok");
   d = { e: {}, l: { 1: { n: "野津" } }, d: [] }; S.swapDuty(d, { base: {} }, date, "だれか", "l", 1);
   assert.deepStrictEqual(d.d, ["野津"], "もとの勤務が分からないときは、そこにいた人を日勤へ（休みにしない）");
   console.log("勤務の入れ替え OK"); }
+{ // 休日出勤の人は別の色（2026-11-25 依頼者「休日出勤になっている人もまた別で文字の色を付けて。休日出勤がわかりやすくなるよう」）
+  const S = require("./shiftcore.js"), c = S.cfgOf("m", null), ym = "2026-12";
+  const date = S.daysOfMonth(ym).find((d) => { const b = S.baseFor(c, d); return b && c.members.some((m) => ![...(b.e || []), ...(b.l || []), ...(b.d || [])].some((x) => S.splitName(x).n === m.name)); });
+  const b = S.baseFor(c, date), offN = c.members.map((m) => m.name).find((n) => ![...(b.e || []), ...(b.l || []), ...(b.d || [])].some((x) => S.splitName(x).n === n));
+  const m = { days: { [date]: { e: { 1: { n: offN } }, l: {}, d: [] } }, wish: {} };
+  assert.strictEqual(S.changeKinds(m, c, date)[offN], "hwork", "基本シフトで出ない日に入っている人は休日出勤");
+  m.wish = { [offN]: { [date]: "早番" } };
+  assert.strictEqual(S.changeKinds(m, c, date)[offN], "hwork", "希望で入っても休日出勤の色");
+  (async () => {
+    const ExcelJS = require("./pw/node_modules/exceljs");
+    const wb = S.buildWorkbook(ExcelJS, m, c, ym, "男性"), buf = await wb.xlsx.writeBuffer();
+    const back = new ExcelJS.Workbook(); await back.xlsx.load(buf); const ws = back.worksheets[0];
+    let hit = null, legend = false; ws.eachRow((row) => row.eachCell((cc) => { const v = cc.value; if (!(v && v.richText)) return;
+      for (const t of v.richText) { if (t.text === offN && /^早①：/.test(v.richText.map((q) => q.text).join(""))) hit = { color: t.font.color.argb, fill: cc.fill.fgColor.argb }; if (/桃＝休日出勤/.test(t.text)) legend = true; } }));
+    assert.ok(hit && hit.color === "FFBE185D" && hit.fill === "FFFCE7F3", "Excelでも桃色 " + JSON.stringify(hit));
+    assert.ok(legend, "上の説明に休日出勤");
+    console.log("休日出勤の色 OK", date, offN);
+  })().catch((e) => { console.error(e); process.exit(1); }); }

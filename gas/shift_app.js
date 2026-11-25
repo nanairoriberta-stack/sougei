@@ -169,7 +169,7 @@
     const ngI = X.ngIssues(S.month, c, S.ym), ngSet = new Set(ngI.map((x) => `${x.date}|${x.kind}|${x.slot}`));   // NGの条件とちがう枠（2026-11-13）
     const days = X.daysOfMonth(S.ym), lead = (X.wdOf(days[0]) + 6) % 7;   // 月曜始まり（2026-11-07 依頼者）
     if (!hidden) html += `<div class="sh-legend" data-legend><span class="e">赤＝早番</span>・<span class="l">青＝遅番</span>（①②③は番号）</div>`;
-    if (!hidden) html += `<div class="sh-legend2" data-legend-chg>いつもの勤務（基本シフト）と違う人：<span class="wchg wchgbg">緑＝希望休・希望勤務で変わった</span>　<span class="chg chgbg">紫＝こちらで変えた勤務</span></div>`;
+    if (!hidden) html += `<div class="sh-legend2" data-legend-chg>いつもの勤務（基本シフト）と違う人：<span class="wchg wchgbg">緑＝希望休・希望勤務で変わった</span>　<span class="chg chgbg">紫＝こちらで変えた勤務</span>　<span class="hwk hwkbg">桃＝休日出勤</span></div>`;
     // 希望を入れるだけの画面（男性の表の職員）はマスの高さをそろえて押しやすく（2026-11-13 依頼者「スマホで日付が縦にすごく狭くて打ちづらい」。.wo）。スマホの見出しは「月」だけ
     html += `<table class="sh-grid${wishOnly ? " wo" : ""}"><thead><tr>${[1, 2, 3, 4, 5, 6, 0].map((i) => `<th class="${i === 0 ? "su" : i === 6 ? "sa" : ""}">${X.WD[i]}<span class="wdx">曜日</span></th>`).join("")}</tr></thead><tbody>`;
     const cells = Array(lead).fill(null).concat(days);
@@ -180,9 +180,9 @@
         const d = X.daysOfMonth ? (S.month && S.month.days || {})[date] || {} : {}, need = X.needOf(c, date);
         // いつもの勤務と違う人（2026-11-24 依頼者）：希望による変更＝緑（wchg）、こちらで変えた勤務＝紫（chg）
         const kinds = hidden ? {} : X.changeKinds(S.month, c, date), chg = { has: (n) => !!kinds[n] };
-        const chgSpan = (n, label) => kinds[n] === "wish" ? `<span class="wchg" data-wchg="${esc(n)}">${esc(label)}</span>` : `<span class="chg" data-chg="${esc(n)}">${esc(label)}</span>`;
+        const chgSpan = (n, label) => kinds[n] === "hwork" ? `<span class="hwk" data-hwork="${esc(n)}">${esc(label)}</span>` : kinds[n] === "wish" ? `<span class="wchg" data-wchg="${esc(n)}">${esc(label)}</span>` : `<span class="chg" data-chg="${esc(n)}">${esc(label)}</span>`;
         const slot = (k, i) => { const s = (d[k] || {})[i], n = X.slotName(s), hole = holeSet.has(`${date}|${k}|${i}`), bad = n && confSet.has(`${date}|${n}`);
-          return `<button class="slot ${k}${n && kinds[n] === "ours" ? " chgs" : n && kinds[n] === "wish" ? " wchgs" : ""}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}${ngSet.has(`${date}|${k}|${i}`) ? " ng" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i><b class="kk">${X.KIND[k]}</b>${X.MARK[i] || i}</i>${n ? (chg.has(n) ? chgSpan(n, n) : esc(n)) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
+          return `<button class="slot ${k}${n && kinds[n] === "ours" ? " chgs" : n && kinds[n] === "wish" ? " wchgs" : n && kinds[n] === "hwork" ? " hwks" : ""}${hole ? " hole" : ""}${bad ? " bad" : ""}${riSet.has(`${date}|${k}|${i}`) ? " rule" : ""}${leSet.has(`${date}|${k}|${i}`) ? " turn" : ""}${ngSet.has(`${date}|${k}|${i}`) ? " ng" : ""}" data-slot="${date}|${k}|${i}" ${S.mode === "wish" ? "tabindex=-1" : ""}><i><b class="kk">${X.KIND[k]}</b>${X.MARK[i] || i}</i>${n ? (chg.has(n) ? chgSpan(n, n) : esc(n)) + (s && s.t ? `<small>(${esc(s.t)})</small>` : "") : hole ? "空き" : ""}</button>`; };
         const maxE = Math.max(need.e, ...Object.keys(d.e || {}).map(Number), 0), maxL = Math.max(need.l, ...Object.keys(d.l || {}).map(Number), 0);
         const rows = Math.max(maxE, maxL);
         let grid = "";   // スマホでは早番（赤）・遅番（青）を1列に並べ、名前が見えるようにする（2026-11-07 依頼者「スマホだと名前わからない」）

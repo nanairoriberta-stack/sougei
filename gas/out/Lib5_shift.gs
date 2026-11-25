@@ -177,6 +177,8 @@
     const out = {};
     for (const n of changedFromBase(month, cfg, date)) out[n] = wishOf(month, n, date) ? "wish" : "ours";
     const base = baseNames(cfg, date), w = workers(month, date);
+    // 休日出勤（2026-11-25 依頼者「休日出勤になっている人もまた別で文字の色を付けて」）：基本シフトではその日に出ない人が入っている＝"hwork"（希望でも、こちらで入れても）
+    if (cfg && baseFor(cfg, date)) for (const n of w) if (!base.has(n)) out[n] = "hwork";
     for (const m of (cfg && cfg.members) || []) if (!w.has(m.name) && base.has(m.name) && OFF_WISH[wishOf(month, m.name, date)]) out[m.name] = "wish";
     return out;
   }
@@ -452,7 +454,7 @@
     const thin = { style: "thin", color: { argb: "FF6B7BBF" } }, med = { style: "medium", color: { argb: "FF1E3A8A" } };
     const RED = "FFC2410C", BLUE = "FF1E40AF", GRAY = "FFF1F5F9", HOLE = "FFFEF3C7";
     // いつもと違う人の色（アプリと同じ）：希望による変更＝緑、こちらで変えた勤務＝紫
-    const CHG = { wish: { font: "FF0F766E", fill: "FFCCFBF1" }, ours: { font: "FF7C3AED", fill: "FFEDE9FE" } };
+    const CHG = { wish: { font: "FF0F766E", fill: "FFCCFBF1" }, ours: { font: "FF7C3AED", fill: "FFEDE9FE" }, hwork: { font: "FFBE185D", fill: "FFFCE7F3" } };
     const F = (o) => Object.assign({ name: "Meiryo UI", size: 10 }, o);
     const nameRun = (n, kind, size, t) => ({ text: n + (t || ""), font: F(Object.assign({ size }, kind ? { bold: true, underline: "dotted", color: { argb: CHG[kind].font } } : {})) });
     const listRich = (head, names, kinds, size) => { const out = [{ text: head, font: F({ size }) }]; names.forEach((x, i) => { if (i) out.push({ text: "、", font: F({ size }) }); const e = splitName(x); out.push(nameRun(e.n || x, kinds[e.n], size, e.n && e.t ? `(${e.t})` : "")); }); return out; };
@@ -461,7 +463,7 @@
     const box = (r1, c1, r2, c2) => { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const x = ws.getCell(r, c); x.border = { top: r === r1 ? med : undefined, bottom: r === r2 ? med : undefined, left: c === c1 ? med : thin, right: c === c2 ? med : thin }; } };
     const [y, m] = ym.split("-").map(Number);
     ws.mergeCells(1, 1, 1, 7); cell(1, 1, `${y}年${m}月　${cfg.title || ("シフト表" + (groupName ? `（${groupName}）` : ""))}`, { font: { bold: true, size: 14 } }); ws.getRow(1).height = 24;
-    ws.mergeCells(1, 8, 1, 14); cell(1, 8, { richText: [{ text: "いつもの勤務と違う人：", font: F({ size: 9 }) }, { text: "緑＝希望休・希望勤務で変わった", font: F({ size: 9, bold: true, underline: "dotted", color: { argb: CHG.wish.font } }) }, { text: "　", font: F({ size: 9 }) }, { text: "紫＝こちらで変えた勤務", font: F({ size: 9, bold: true, underline: "dotted", color: { argb: CHG.ours.font } }) }] }, { align: { horizontal: "right" } });
+    ws.mergeCells(1, 8, 1, 14); cell(1, 8, { richText: [{ text: "いつもの勤務と違う人：", font: F({ size: 9 }) }, { text: "緑＝希望休・希望勤務で変わった", font: F({ size: 9, bold: true, underline: "dotted", color: { argb: CHG.wish.font } }) }, { text: "　", font: F({ size: 9 }) }, { text: "紫＝こちらで変えた勤務", font: F({ size: 9, bold: true, underline: "dotted", color: { argb: CHG.ours.font } }) }, { text: "　", font: F({ size: 9 }) }, { text: "桃＝休日出勤", font: F({ size: 9, bold: true, underline: "dotted", color: { argb: CHG.hwork.font } }) }] }, { align: { horizontal: "right" } });
     {
       for (let ci = 0; ci < 7; ci++) { const wd = (ci + 1) % 7; ws.mergeCells(2, ci * 2 + 1, 2, ci * 2 + 2); const x = cell(2, ci * 2 + 1, `${WD[wd]}曜日`, { font: { bold: true, color: { argb: "FFFFFFFF" } }, align: { horizontal: "center" }, fill: wd === 0 ? "FFBE123C" : wd === 6 ? "FF1D4ED8" : "FF1E40AF" }); x.border = { top: med, bottom: med, left: med, right: med }; }
     }
