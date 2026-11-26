@@ -163,6 +163,26 @@ const D = path.join(__dirname, "../gas/out");
     const sv = api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value, kb = sv.blocks.find((b) => b.calId === "ev_kotaki01");
     assert.ok(kt.some((x) => x.includes("小瀧 研修")), "表にコマ " + JSON.stringify(kt) + " / 保存 " + JSON.stringify(kb));
     console.log("小瀧 研修のコマ OK", JSON.stringify(kb && { t: kb.time, s: kb.staffId })); }
+  { // コマのコピー・貼り付け（2026-11-26 依頼者「コマをコピーして貼り付けできるようにしたい」）：右クリック→コピー→「ここに貼る」、Ctrl+V、やめる
+    const chip = P.pg.locator('[data-item-id^="cal_ev_kotaki01"]').first();
+    await chip.click({ button: "right" }); await P.pg.click("[data-copy-koma]"); await P.pg.waitForSelector("[data-clip-bar]");
+    assert.match(await P.pg.textContent("[data-clip-bar]"), /コピー中：.*小瀧 研修/, "コピー中の帯");
+    await P.pg.click('[data-paste-cell="__hold__:600"]'); await P.pg.waitForTimeout(3000);
+    const pasted = () => api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value.blocks.filter((b) => !b.calId && /小瀧 研修/.test(b.label || ""));
+    let ps = pasted();
+    assert.ok(ps.length === 1 && ps[0].staffId === "__hold__" && ps[0].time === "10:00" && !/^cal_/.test(ps[0].id) && !ps[0].wholeDay, "保留の10:00に写し（カレンダーの印は外す） " + JSON.stringify(ps));
+    assert.ok(api(t, "kv.get", ["v2:sheet:2026-11-02"]).data.value.blocks.some((b) => b.calId === "ev_kotaki01"), "元のコマはそのまま");
+    await P.pg.hover('[data-paste-cell="__hold__:660"]'); await P.pg.keyboard.press("Control+v"); await P.pg.waitForTimeout(3000);
+    ps = pasted(); assert.ok(ps.length === 2 && ps.some((b) => b.time === "11:00") && new Set(ps.map((b) => b.id)).size === 2, "Ctrl+V でもう1つ（何回でも貼れる・IDは別） " + JSON.stringify(ps.map((b) => b.time)));
+    await P.pg.click("[data-clip-cancel]"); await P.pg.waitForTimeout(300);
+    assert.strictEqual(await P.pg.locator("[data-clip-bar], [data-paste-cell]").count(), 0, "やめると貼り付けのボタンが消える");
+    const pc = P.pg.locator(`[data-item-id="${ps[0].id}"]`); await pc.hover(); await P.pg.keyboard.press("Control+c"); await P.pg.waitForSelector("[data-clip-bar]");
+    await P.pg.keyboard.press("Escape"); await P.pg.waitForTimeout(300);
+    assert.strictEqual(await P.pg.locator("[data-clip-bar]").count(), 0, "Ctrl+C でコピー・Esc でやめる");
+    // 片づけ（あとのテストに響かないように）
+    for (const b0 of ps) { await P.pg.locator(`[data-item-id="${b0.id}"]`).click({ button: "right" }); await P.pg.click('button:has-text("🗑 削除")'); await P.pg.waitForTimeout(500); }
+    await P.pg.waitForTimeout(2500); assert.strictEqual(pasted().length, 0, "貼ったコマは消せる");
+    console.log("コマのコピー・貼り付け OK"); }
   { // ヘルプ可（2026-11-11 依頼者「職員の所にヘルプ可のチェックボックス、表示の一番右にヘルプ可の人だけ表示されるボタン」）
     const mv = api(t, "kv.get", ["v2:master"]).data.value, hi = mv.staff.find((x) => x.name === "日野");
     await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(500);

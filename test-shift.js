@@ -188,7 +188,21 @@ console.log("shift OK", S.holes(dr, cfg, ym).length, "の穴が下書きのあ�
   const nov = S.monthOf("m", "2026-11", null), all = S.calItems(nov, "2026-11"), diff = S.calItems(nov, "2026-11", cm);
   assert.ok(diff.length > 0 && diff.length < all.length / 2, `${all.length} → ${diff.length}`);
   assert.ok(!diff.some((x) => x.date === "2026-11-01"), "11/1は基本シフトどおり");
-  assert.ok(diff.some((x) => x.date === "2026-11-03" && x.title === "余村慎 早番③(6~9)"), "基本とちがう勤務は出る");
+  assert.ok(diff.some((x) => x.date === "2026-11-03" && x.title === "余村慎 早番(6~9)"), "基本とちがう勤務は出る（①②③は付けない 2026-11-26）");
+  assert.ok(!diff.some((x) => /[①②③]/.test(x.title)), "題名に番号なし");
+  // 送迎表に反映する中身（2026-11-26 依頼者「勤務変更にしといてもらわないと送迎表に反映されない」）
+  const c3 = S.calSgOf(diff.find((x) => x.date === "2026-11-03" && x.name === "余村慎"));
+  assert.ok(c3.label === "shift" && c3.sg.type === "shift" && c3.sg.wstart === "06:00" && c3.sg.wend === "09:00" && c3.sg.reason === "早番", JSON.stringify(c3));
+  const off3 = S.calSgOf(diff.find((x) => x.date === "2026-11-03" && x.title === "近藤 休み"));
+  assert.ok(off3.label === "leave" && off3.sg.type === "staff_off" && off3.sg.staff[0] === "近藤" && !off3.sg.half, "休み＝職員休み");
+  const hb2 = S.calSgOf({ name: "橋本", duty: [{ k: "e", t: "" }, { k: "l", t: "" }] });
+  assert.ok(hb2.sg.wstart === "06:00" && hb2.sg.wend === "22:00" && !hb2.sg.afrom && hb2.sg.reason === "早番・遅番", "早番＋遅番（間が空かなければ中抜けなし＝いつもの中抜けのまま） " + JSON.stringify(hb2.sg));
+  const n9 = S.calSgOf({ name: "余村慎", duty: [{ k: "l", t: "" }] }); assert.ok(n9.sg.wstart === "13:00" && n9.sg.wend === "22:00", "9時間の人の遅番");
+  const hw = S.calSgOf({ name: "長島", hwork: true, duty: [{ k: "d", t: "~13" }] });
+  assert.ok(hw.label === "hwork" && hw.sg.type === "hwork" && !hw.allDay && hw.start === "08:30" && hw.end === "13:00", "基本では休みの曜日＝休日出勤 " + JSON.stringify(hw));
+  const away = S.calSgOf({ name: "野津", duty: [{ k: "e", t: "6~9" }, { k: "l", t: "17~22" }] });
+  assert.ok(away.sg.wstart === "06:00" && away.sg.wend === "22:00" && away.sg.afrom === "09:00" && away.sg.ato === "17:00", "早番と遅番の間は中抜け");
+  const sun = diff.filter((x) => x.hwork); assert.ok(sun.every((x) => S.calSgOf(x).label === "hwork"));
   assert.ok(diff.some((x) => x.date === "2026-11-03" && x.title === "近藤 休み"), "基本は出る日に入っていなければ休み");
   const tue = Object.assign(JSON.parse(JSON.stringify(nov)), {}); const b2 = S.baseFor(cm, "2026-11-10");
   assert.deepStrictEqual(S.calItems({ days: { "2026-11-10": { e: Object.fromEntries((b2.e || []).map((n, i) => [i + 1, { n }])), l: Object.fromEntries((b2.l || []).map((n, i) => [i + 1, { n }])), d: b2.d || [] } } }, "2026-11", cm).filter((x) => x.date === "2026-11-10"), [], "基本シフトどおりの日は何も出さない");

@@ -674,6 +674,17 @@ const dragStart = (payload) => (e) => {
   e.dataTransfer.effectAllowed = "move";
 };
 const dragEnd = () => { DRAG = null; };
+/* コマのコピー・貼り付け（2026-11-26 依頼者「コマをコピーして貼り付けできるようにしたい」）。
+   便・ヘルプ・予定の写しを新しいIDで、貼ったマスの職員・時間へ（マスの中の分のずれはそのまま＝移動と同じ）。
+   カレンダー・りんく依頼から入ったコマの印（calId・wholeDay・linkReq など）は外す＝ふつうの手で入れたコマになる（カレンダーの予定を消しても消えない） */
+const KOMA_DROP = ["ord", "calId", "wholeDay", "linkReq", "linkCancelled", "noteOnly"];
+function copyKoma(item, staffId, slotMin) {
+  const x = JSON.parse(JSON.stringify(item || {}));
+  KOMA_DROP.forEach((k) => { delete x[k]; });
+  const t = toMin(x.time), off = t != null ? t % SLOT : 0;
+  return { ...x, id: uid(), staffId, time: toStr(slotMin + off) };
+}
+const komaText = (clip) => { if (!clip) return ""; const it = clip.item || {}; return clip.target === "runs" ? `${RUN_KINDS[it.kind] || "便"} ${it.time || ""}` : `${it.kind === "help" ? "ヘルプ " : ""}${it.time || ""} ${it.label || "予定"}`; };
 
 // ---------- アプリ内通知・確認(サンドボックスではalert/confirmが使えないため) ----------
 let _notify = () => {};
@@ -6931,7 +6942,7 @@ function StaffOvModal({ master, staff, ov, itemCount, fixedOffToday, onSave, onH
 /* ============================================================
    タイムグリッド(時間 × 職員 + 保留列)
    ============================================================ */
-function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, searchQ, activeSearchId, searchSeq, onCell, onItem, onStaff, onToggleOff, onMoveItem, onDeleteItem, onSetOrder, onRemoveRider, onDropUserOnRun, onDropUserOnCell, onDropVehicleOnRun, onDropVehicleOnCell, onHoverTime, onLeavePos }) {
+function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, searchQ, activeSearchId, searchSeq, onCell, onItem, onStaff, onToggleOff, onMoveItem, onDeleteItem, onSetOrder, onRemoveRider, onDropUserOnRun, onDropUserOnCell, onDropVehicleOnRun, onDropVehicleOnCell, onHoverTime, onLeavePos, clip, onCopy, onPaste, onClipCancel }) {
   const gridScrollRef = useRef(null);
   const topScrollRef = useRef(null);
   const [gridScrollW, setGridScrollW] = useState(2000);
@@ -6981,6 +6992,28 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
   const ovMap = data.staffOv || {};
   const [overKey, setOverKey] = useState(null);
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, target, item }
+  // コピー・貼り付け（2026-11-26）：パソコンはマウスを乗せたコマで Ctrl+C（⌘C）、乗せたマスで Ctrl+V（⌘V）。Esc でコピーをやめる
+  const hoverItemRef = useRef(null), hoverCellRef = useRef(null);
+  const keyRef = useRef({}); keyRef.current = { onCopy, onPaste, onClipCancel, clip };
+  useEffect(() => {
+    const onKey = (e) => {
+      const k = keyRef.current, a = document.activeElement, tag = a && a.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (a && a.isContentEditable)) return;
+      if (e.key === "Escape" && k.clip && k.onClipCancel) { k.onClipCancel(); return; }
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      const sel = window.getSelection && String(window.getSelection() || "");
+      if ((e.key === "c" || e.key === "C") && hoverItemRef.current && k.onCopy && !sel) { e.preventDefault(); k.onCopy(hoverItemRef.current.target, hoverItemRef.current.item); }
+      else if ((e.key === "v" || e.key === "V") && k.clip && hoverCellRef.current && k.onPaste) { e.preventDefault(); k.onPaste(hoverCellRef.current.col, hoverCellRef.current.m); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const canPasteAt = (col) => !!clip && onPaste && (col !== REQ_ID || clip.target === "runs");
+  const pasteBtn = (col, m) => canPasteAt(col) ? (
+    <button type="button" data-paste-cell={`${col}:${m}`} className="w-full text-[10px] leading-tight rounded border border-dashed border-violet-400 text-violet-700 bg-violet-50/80 opacity-40 group-hover:opacity-100 hover:bg-violet-100 font-bold"
+      onClick={(e) => { e.stopPropagation(); onPaste(col, m); }} title="コピーしたコマをこのマスに貼り付けます">📋 ここに貼る</button>) : null;
+  const cellHover = (col, m) => ({ onMouseEnter: () => { hoverCellRef.current = { col, m }; }, onMouseLeave: () => { if (hoverCellRef.current && hoverCellRef.current.col === col && hoverCellRef.current.m === m) hoverCellRef.current = null; } });
+  const itemHover = (target, item) => ({ onMouseEnter: () => { hoverItemRef.current = { target, item }; }, onMouseLeave: () => { if (hoverItemRef.current && hoverItemRef.current.item.id === item.id) hoverItemRef.current = null; } });
   // 固定休の判定:休日出勤(workToday)がなければその日は非表示
   const fixedOff = (s) => weekday != null && (s.offDays || []).includes(weekday);
   const worksToday = (s) => s.emp !== "パート" && (!fixedOff(s) || !!((ovMap[s.id] || {}).workToday));
@@ -7134,6 +7167,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
             }}
             onClick={() => onItem({ target: "runs", item })}
             onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setCtxMenu({ x: e.clientX, y: e.clientY, target: "runs", item }); }}
+            {...itemHover("runs", item)}
             data-item-id={item.id}
             className={`block w-full text-left rounded border px-1 py-0.5 mb-0.5 ${c.chip} hover:brightness-95 cursor-grab active:cursor-grabbing ${overKey === rKey ? "ring-2 ring-sky-500" : ""} ${activeSearchId === item.id ? "ring-4 ring-rose-500" : hitRun(item) ? "ring-4 ring-amber-400" : sq ? "opacity-40" : ""}${sortIndicator(item.id)}`}
             title={warns.length ? warns.join(" / ") : "クリックで編集 / 右クリックで削除 / ドラッグで移動・マス内の並べ替え"}>
@@ -7188,6 +7222,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
           onDrop={chipSortDrop(items, cellColId, cellSlotMin, item)}
           onClick={() => onItem({ target: "blocks", item })}
           onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setCtxMenu({ x: e.clientX, y: e.clientY, target: "blocks", item }); }}
+          {...itemHover("blocks", item)}
           data-item-id={item.id}
           className={`block w-full text-left rounded border px-1 py-0.5 mb-0.5 cursor-grab active:cursor-grabbing ${
             isHelp ? "bg-orange-50 border-orange-300 text-orange-900" : "bg-stone-100 border-stone-300 text-stone-700"
@@ -7204,6 +7239,13 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
 
   return (
     <>
+    {clip && onPaste && (
+      <div data-clip-bar className="mb-1 flex flex-wrap items-center gap-2 rounded-md border border-violet-300 bg-violet-50 px-2 py-1 text-xs text-violet-900">
+        <span className="font-bold">📋 コピー中：{komaText(clip)}</span>
+        <span>貼り付けたいマスの「📋 ここに貼る」を押してください（何回でも貼れます。別の日・週間パターンにも貼れます）</span>
+        <button type="button" data-clip-cancel className="ml-auto rounded border border-violet-400 bg-white px-2 py-0.5 font-bold hover:bg-violet-100" onClick={() => onClipCancel && onClipCancel()}>やめる</button>
+      </div>
+    )}
     {/* 上部にも横スクロールバーを出す(下端が画面外でも操作できるように・本体と同期) */}
     <div ref={topScrollRef} className="always-scrollbar mb-1 rounded" style={{ overflowX: "scroll", overflowY: "hidden", height: 15 }}
       onScroll={(e) => { const g = gridScrollRef.current; if (g && g.scrollLeft !== e.currentTarget.scrollLeft) g.scrollLeft = e.currentTarget.scrollLeft; }}>
@@ -7228,6 +7270,10 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
               onClick={() => { onItem({ target: ctxMenu.target === "rider" ? "runs" : ctxMenu.target, item: ctxMenu.item }); setCtxMenu(null); }}>
               ✏ {ctxMenu.target === "rider" ? "元の便を編集" : "編集"}
             </button>
+            {ctxMenu.target !== "rider" && onCopy && (
+              <button data-copy-koma={ctxMenu.item.id} className="w-full text-left px-3 py-1.5 hover:bg-violet-50 text-violet-800"
+                onClick={() => { onCopy(ctxMenu.target, ctxMenu.item); setCtxMenu(null); }}>📋 コピー</button>
+            )}
             {ctxMenu.target !== "rider" && (() => {
               // 同じマス内の予定を上下に並べ替え
               const it = ctxMenu.item;
@@ -7411,6 +7457,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                     onDragOver={cellDragOver(cKey)}
                     onDragLeave={() => { if (overKey === cKey) setOverKey(null); }}
                     onDrop={cellDrop(s.id, m)}
+                    {...cellHover(s.id, m)}
                     className={`border border-stone-200 align-top p-0.5 ${emptyCell} ${offGrid ? "bg-stone-100/80" : "bg-white"} group ${overKey === cKey ? "outline outline-2 outline-sky-500 bg-sky-50" : ""}`}>
                     {m === libOnlySlot(s, ov) && <div className="text-[10px] font-bold text-teal-800 bg-teal-100 border border-teal-300 rounded px-1 mb-0.5" data-libonly-koma={s.id} title="ﾘﾍﾞﾙﾀのみの日（職員のタブの「ﾘﾍﾞﾙﾀのみ」かカレンダーの時間変更・休日出勤）。下の部署の職員の欄には出ません">ﾘﾍﾞﾙﾀのみ</div>}
                     {m === earlyLeaveSlot(s, ov, data.blocks) ? (() => {
@@ -7430,6 +7477,7 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                         {renderItems(sorted.slice(pos), s.id, m)}
                       </>);
                     })() : renderItems(items, s.id, m)}
+                    {pasteBtn(s.id, m)}
                     <button className="w-full text-stone-300 text-xs opacity-0 group-hover:opacity-100 hover:text-sky-600 leading-none" onClick={() => onCell(s.id, toStr(m))}>+</button>
                   </td>
                 );
@@ -7438,8 +7486,10 @@ function TimeGrid({ master, data, deptFilter, weekday, sheetMode, gridHeight, se
                 onDragOver={cellDragOver(`${HOLD_ID}:${m}`)}
                 onDragLeave={() => { if (overKey === `${HOLD_ID}:${m}`) setOverKey(null); }}
                 onDrop={cellDrop(HOLD_ID, m)}
+                {...cellHover(HOLD_ID, m)}
                 className={`border border-stone-200 border-dashed align-top p-0.5 ${emptyCell} bg-yellow-50/50 group ${overKey === `${HOLD_ID}:${m}` ? "outline outline-2 outline-yellow-500 bg-yellow-100" : ""}`}>
                 {renderItems(cellMap[`${HOLD_ID}:${m}`] || [], HOLD_ID, m)}
+                {pasteBtn(HOLD_ID, m)}
                 <button className="w-full text-yellow-500/40 text-xs opacity-0 group-hover:opacity-100 hover:text-yellow-700 leading-none" onClick={() => onCell(HOLD_ID, toStr(m))}>+</button>
               </td>
             </tr>
@@ -10573,6 +10623,17 @@ function AppInner() {
       }),
     }));
 
+  // コマのコピー・貼り付け（2026-11-26 依頼者）。コピーしたコマは日付・週間パターンを変えても残る（別の日にも貼れる）。やめる・Esc で消える
+  const [clip, setClip] = useState(null);   // { target:"runs"|"blocks", item }
+  const copyItem = (target, item) => { if (!item) return; setClip({ target: target === "runs" ? "runs" : "blocks", item: JSON.parse(JSON.stringify(item)) }); notify(`コピーしました：${komaText({ target, item })}。貼り付けたいマスの「📋 ここに貼る」を押してください`); };
+  const pasteItem = (staffId, slotMin) => {
+    if (!clip) return;
+    const nx = copyKoma(clip.item, staffId, slotMin);
+    curUpdate((prev) => ({ ...prev, [clip.target]: [...(prev[clip.target] || []), nx] }));
+    notify(`貼り付けました：${komaText({ target: clip.target, item: nx })}`, "success");
+  };
+  const clipProps = { clip, onCopy: copyItem, onPaste: pasteItem, onClipCancel: () => setClip(null) };
+
   // 移動元の便が空(乗車0名)になったら、その枠を自動で消す(ドラッグ移動時のみ)
   const dropEmptySrc = (runs, fromRunId) => runs.filter((r) => !(r.id === fromRunId && (r.userIds || []).length === 0));
 
@@ -11312,6 +11373,7 @@ function AppInner() {
                   deptFilter={deptFilter}
                   weekday={weekdayOf(date)}
                   sheetMode={true}
+                  {...clipProps}
                   gridHeight={panelsOpen ? "52vh" : "calc(100vh - 220px)"}
                   onCell={(staffId, time) => setModal({ type: "item", initial: { staffId, time } })}
                   onItem={({ target, item }) => setModal({ type: "item", initial: { ...item }, editTarget: target })}
@@ -11809,6 +11871,7 @@ function AppInner() {
                 deptFilter={deptFilter}
                 weekday={weekday}
                 sheetMode={false}
+                {...clipProps}
                 onCell={(staffId, time) => setModal({ type: "item", initial: { staffId, time } })}
                 onItem={({ target, item }) => setModal({ type: "item", initial: { ...item }, editTarget: target })}
                 onStaff={(s) => setModal({ type: "staffOv", staffId: s.id })}

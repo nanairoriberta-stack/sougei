@@ -149,15 +149,48 @@
       const put = (n, s) => { (sig[n] = sig[n] || []).push(s); };
       for (const k of ["e", "l"]) for (const sl of Object.values(d[k] || {})) { const n = slotName(sl); if (n) put(n, `${k}:${(sl && sl.t) || ""}`); }
       for (const x of d.d || []) { const e = splitName(x); if (e.n) put(e.n, `d:${e.t}`); }
-      const add = (n, txt) => { if (!n) return; if (!by[n]) { by[n] = []; order.push(n); } by[n].push(txt); };
-      for (const k of ["e", "l"]) for (const [i, sl] of Object.entries(d[k] || {}).sort((a, b) => Number(a[0]) - Number(b[0]))) {
-        const n = slotName(sl), t = (sl && sl.t) || ""; add(n, `${KIND[k]}番${MARK[Number(i)] || ""}${t ? `(${t})` : ""}`);
+      // 題名に ①②③ の番号は付けない（2026-11-26 依頼者「遅番①とかの①は全体カレンダーには不要」）
+      const duty = {};
+      const add = (n, txt, k, t) => { if (!n) return; if (!by[n]) { by[n] = []; order.push(n); duty[n] = []; } if (!by[n].includes(txt)) by[n].push(txt); duty[n].push({ k, t }); };
+      for (const k of ["e", "l"]) for (const [, sl] of Object.entries(d[k] || {}).sort((a, b) => Number(a[0]) - Number(b[0]))) {
+        const n = slotName(sl), t = (sl && sl.t) || ""; add(n, `${KIND[k]}番${t ? `(${t})` : ""}`, k, t);
       }
-      for (const x of d.d || []) { const e = splitName(x); add(e.n, `日勤${e.t ? `(${e.t})` : ""}`); }
-      for (const n of order) if (!cfg || sigOf(sig[n]) !== baseSig(cfg, date, n)) out.push({ date, name: n, title: `${n} ${by[n].join("・")}` });
-      if (cfg && order.length) for (const m of cfg.members || []) if (!by[m.name] && baseSig(cfg, date, m.name)) out.push({ date, name: m.name, title: `${m.name} 休み` });
+      for (const x of d.d || []) { const e = splitName(x); add(e.n, `日勤${e.t ? `(${e.t})` : ""}`, "d", e.t); }
+      for (const n of order) { const bs = cfg ? baseSig(cfg, date, n) : null; if (!cfg || sigOf(sig[n]) !== bs) out.push({ date, name: n, title: `${n} ${by[n].join("・")}`, duty: duty[n], hwork: !!cfg && !bs }); }
+      if (cfg && order.length) for (const m of cfg.members || []) if (!by[m.name] && baseSig(cfg, date, m.name)) out.push({ date, name: m.name, title: `${m.name} 休み`, off: true });
     }
     return out;
+  }
+  /* カレンダーの予定の中身（2026-11-26 依頼者「男性シフトを確定したときにその他予定になっているが、勤務変更にしといてもらわないと送迎表に反映されない」）：
+     calItems の1件を、送迎表に反映するカレンダーの予定に。
+     ・休み（基本では出る日に入っていない）→ 職員休み（1日）
+     ・基本では休みの曜日に入った → 休日出勤（出勤〜退勤の時刻・中抜け）
+     ・ほか → 職員時間変更（その日の出勤・退勤。早番＋遅番の人は間を中抜け）
+     時刻：早番 6:00〜14:00・遅番 14:00〜22:00・日勤 8:30〜17:30（9時間の余村慎・森・窪田は 早番 6:00〜15:00・遅番 13:00〜22:00＝カレンダーの勤務のボタンと同じ）。
+     時間の補足「6~9」「~13」「17~22」はその時刻（片方だけならもう片方はいつもの時刻） */
+  const N9 = /^(余村慎|森|窪田)$/;
+  const hhmm = (s) => { const m = /^(\d{1,2})(?::(\d{2}))?$/.exec(String(s || "").trim()); return m && Number(m[1]) <= 24 ? `${pad(Number(m[1]))}:${m[2] || "00"}` : ""; };
+  const mins = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+  function dutyTimes(name, k, t) {
+    const n9 = N9.test(name || ""), def = k === "e" ? ["06:00", n9 ? "15:00" : "14:00"] : k === "l" ? [n9 ? "13:00" : "14:00", "22:00"] : ["08:30", "17:30"];
+    const m = /^\s*([\d:]*)\s*[~〜～\-]\s*([\d:]*)\s*$/.exec(String(t || ""));
+    if (!m) return def;
+    const a = hhmm(m[1]) || def[0], b = hhmm(m[2]) || def[1];
+    return mins(a) < mins(b) ? [a, b] : def;
+  }
+  const KIND_NAME = { e: "早番", l: "遅番", d: "日勤" };
+  function calSgOf(it) {
+    if (!it) return null;
+    if (it.off) return { label: "leave", allDay: true, start: "", end: "", sg: { type: "staff_off", staff: [it.name], users: [], half: "", reason: "" } };
+    const segs = (it.duty || []).map((x) => dutyTimes(it.name, x.k, x.t)).sort((a, b) => mins(a[0]) - mins(b[0]));
+    if (!segs.length) return null;
+    const merged = [];
+    for (const s of segs) { const last = merged[merged.length - 1]; if (last && mins(s[0]) <= mins(last[1])) { if (mins(s[1]) > mins(last[1])) last[1] = s[1]; } else merged.push(s.slice()); }
+    const st = merged[0][0], en = merged[merged.length - 1][1];
+    const away = merged.length === 2 ? { afrom: merged[0][1], ato: merged[1][0] } : {};   // 早番＋遅番（橋本・野津）の間は中抜け
+    const reason = [...new Set((it.duty || []).map((x) => KIND_NAME[x.k]))].join("・");
+    if (it.hwork) return { label: "hwork", allDay: false, start: st, end: en === "24:00" ? "23:59" : en, sg: Object.assign({ type: "hwork", staff: [it.name], users: [], dept: "" }, away) };
+    return { label: "shift", allDay: true, start: "", end: "", sg: Object.assign({ type: "shift", staff: [it.name], users: [], dept: "", reason, wstart: st, wend: en === "24:00" ? "23:59" : en }, away) };
   }
   /* いつもの勤務（基本シフト）と違う人（2026-11-24 依頼者「希望でなくても通常の勤務と違う部分は文字の色が変わるように」）：
      その日の早番・遅番・日勤の入り方（時間の補足も）が基本シフトと違う人。①②③の番号のちがいは見ない（calItems と同じ決め方） */
@@ -590,5 +623,5 @@
       if (!Object.values(d[k] || {}).some((s) => slotName(s) === n)) out[k].push(n); }
     return out;
   }
-  return { swapDuty, changeKinds, changedFromBase, unplaced, unplacedAll, overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
+  return { calSgOf, dutyTimes, swapDuty, changeKinds, changedFromBase, unplaced, unplacedAll, overflow, moveToSlot, moveToDay, NG_K, ngOf, ngText, ngIssues, fitWish, fitWishes, fitPending, WISH_KIND, isFixed, autoShift, calItems, daysOfMonth, lateEarly, fixLateEarly, fixRules, ruleSlot, ruleText, ruleIssues, baseFor, weeksFrom, splitName, entries, monthOf, SEED_MONTHS, patOf, buildWorkbook, fileName, GROUPS, KIND, MARK, WD, WISHES, PAT, DEFAULT_NEED, DEFAULT_CFG, cfgOf, daysOfMonth, wdOf, label, slotName, needOf, workers, wishOf, offList, holes, conflicts, candidates, lineText, draft, wishSummary };
 });

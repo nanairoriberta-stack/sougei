@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.25h',
+  VERSION: '2026.11.26a',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -1185,28 +1185,31 @@ function shiftSyncCal_(group, ym, month, idx) {
   // 確定するまではカレンダーに出さない（確定を取り消したら消す。2026-11-07 依頼者）
   var cd = docGet_('shift/' + group + '/cfg', idx), items = SGShift.isFixed(month, ym) ? SGShift.calItems(month || {}, ym, SGShift.cfgOf(group, cd ? cd.value : null)) : [], pre = 'sh' + group + ym.replace('-', '');
   var want = {};
-  items.forEach(function (it) { want[shCalId_(pre, it.date, it.name)] = it; });
+  // 送迎表に反映する中身（職員時間変更・休日出勤・職員休み。2026-11-26 依頼者「その他予定になっているが、勤務変更にしといてもらわないと送迎表に反映されない」）。
+  // 前回書いた内容は題名だけでなく中身ごと覚える（sig。以前の「職員その他」で書いた分は、次の保存で書き直す）
+  items.forEach(function (it) { var c = SGShift.calSgOf(it); if (!c) return; it.c = c; it.sig = JSON.stringify([it.title, c.label, c.allDay, c.start, c.end, c.sg]); want[shCalId_(pre, it.date, it.name)] = it; });
   var lastPath = 'shift/' + group + '/' + ym + '/cal', lastDoc = docGet_(lastPath, idx), last = (lastDoc && lastDoc.value) || {};
   var byPath = {}, touch = function (id, date) { var p = TCCore.dayPath(date, id); (byPath[p] = byPath[p] || { date: date, ids: [] }).ids.push(id); };
-  Object.keys(want).forEach(function (id) { if (last[id] !== want[id].title) touch(id, want[id].date); });
+  Object.keys(want).forEach(function (id) { if (last[id] !== want[id].sig) touch(id, want[id].date); });
   Object.keys(last).forEach(function (id) { if (!want[id]) touch(id, ym + '-' + id.slice(pre.length, pre.length + 2)); });
   var all = Object.keys(byPath).sort(); if (!all.length) return 0;
   var paths = all.slice(0, SH_SYNC_MAX), done = {};
-  var now = new Date().toISOString(), n = 0;
+  var now = new Date().toISOString(), n = 0, dates = {};
   paths.forEach(function (p) {
     byPath[p].ids.forEach(function (id) { done[id] = 1; });
     var d = docGet_(p, idx), events = TCCore.normDay(d ? d.value : null), changed = false;
     byPath[p].ids.forEach(function (id) {
       var ex = events[id], it = want[id];
       if (it) {
-        if (ex && !ex.deleted && ex.title === it.title && ex.label === 'sother') return;
-        var ev = TCCore.normEvent({ title: it.title, date: it.date, endDate: it.date, allDay: true, label: 'sother', biz: 'seikatsu', tanto: [it.name],
+        var c = it.c;
+        if (ex && !ex.deleted && ex.title === it.title && ex.label === c.label && JSON.stringify(ex.sg) === JSON.stringify(TCCore.normSg ? TCCore.normSg(c.sg) : c.sg) && !!ex.allDay === c.allDay && (c.allDay || (ex.start === c.start && ex.end === c.end))) return;
+        var ev = TCCore.normEvent({ title: it.title, date: it.date, endDate: it.date, allDay: c.allDay, start: c.start, end: c.end, label: c.label, biz: 'seikatsu', tanto: [it.name], sg: c.sg,
           memo: 'シフト表から自動で入った予定です。直すときはシフト表で直してください（ここで直しても、次にシフト表を保存すると戻ります）',
           createdBy: ex ? ex.createdBy : 'shift', createdAt: ex ? ex.createdAt : now, updatedBy: 'shift', updatedAt: now, rev: (ex ? ex.rev : 0) + 1, lastOp: 'shift' + now.replace(/\D/g, '') }, id, 0);
-        if (ev) { events[id] = ev; changed = true; n++; }
+        if (ev) { events[id] = ev; changed = true; n++; dates[it.date] = 1; }
       } else if (ex && !ex.deleted) {
         var del = JSON.parse(JSON.stringify(ex)); del.deleted = true; del.deletedAt = now; del.deletedBy = 'shift'; del.rev = ex.rev + 1; del.updatedAt = now;
-        events[id] = TCCore.normEvent(del, id, 0); changed = true; n++;
+        events[id] = TCCore.normEvent(del, id, 0); changed = true; n++; dates[ex.date] = 1;
       }
     });
     if (!changed) return;
@@ -1215,8 +1218,10 @@ function shiftSyncCal_(group, ym, month, idx) {
   });
   // 書いた分だけ「前回書いた内容」を進める（残りは次の呼び出しで書く）
   var keep = JSON.parse(JSON.stringify(last));
-  Object.keys(done).forEach(function (id) { if (want[id]) keep[id] = want[id].title; else delete keep[id]; });
+  Object.keys(done).forEach(function (id) { if (want[id]) keep[id] = want[id].sig; else delete keep[id]; });
   docSet_(lastPath, keep, (lastDoc ? lastDoc.rev : 0) + 1, { k: lastPath }, idx);
+  // 書いた日の送迎表に反映（カレンダーで入れたときと同じ。まだ無い日は送迎表を開いたときに入る）
+  try { reconcileDays_(Object.keys(dates), idx); } catch (e) { log_({ name: 'シフト表' }, 'エラー', '送迎表への反映', (e && e.message) || String(e)); }
   return all.length - paths.length;   // まだ書いていない日の文書の数
 }
 // 画面から：シフト表の残りをカレンダーに書く（はじめての月など。1回に SH_SYNC_MAX 日分）
@@ -1292,7 +1297,10 @@ function reconcileDates_(op, rawsBefore, idx) {
   var addRange = function (a, b) { if (!a) return; b = b || a; var d = new Date(a + 'T00:00:00'), e = new Date(b + 'T00:00:00'), n = 0; while (d <= e && n++ < 370) { dates[Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd')] = 1; d.setDate(d.getDate() + 1); } };
   rawsBefore.forEach(function (r) { var ev = r && r.events && r.events[op.id]; if (ev) addRange(ev.date, ev.endDate); });
   if (op.ev) addRange(op.ev.date, op.ev.endDate);
-  Object.keys(dates).forEach(function (date) {
+  reconcileDays_(Object.keys(dates), idx);
+}
+function reconcileDays_(dateList, idx) {
+  (dateList || []).forEach(function (date) {
     var events = null;
     ['v1', 'v2', 'v3'].forEach(function (ed) {
       var ns = APP.EDITIONS[ed], sp = kvPath_(ns + 'sheet:' + date), sd = docGet_(sp, idx);

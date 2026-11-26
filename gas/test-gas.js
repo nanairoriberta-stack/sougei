@@ -715,17 +715,22 @@ async function bootstrap() {
     const calOf = async (date) => Object.values((await admin.call("docs.query", { col: "days", from: date, to: date })).reduce((a, d) => Object.assign(a, d.events), {})).filter((e) => /^shm/.test(e.id));
     // 2026-11-07 依頼者「基本パターンから変更がある時のみ反映」：基本シフトとちがう人だけ（11/2 宮永さんの遅番(16~22)・秋山さんの日勤）
     let c2 = await calOf("2026-11-02"); const hb = c2.find((e) => /^宮永 /.test(e.title) && !e.deleted);
-    assert.ok(hb && hb.title === "宮永 遅番①(16~22)" && hb.label === "sother" && hb.allDay && !hb.sg && hb.tanto[0] === "宮永", "カレンダーに「宮永 遅番①(16~22)」 " + c2.map((e) => e.title).join(","));
+    // 2026-11-26 依頼者：題名に①②③は付けない・送迎表に反映する「職員時間変更」（以前は職員その他で反映されなかった）
+    assert.ok(hb && hb.title === "宮永 遅番(16~22)" && hb.label === "hwork" && !hb.allDay && hb.start === "16:00" && hb.end === "22:00" && hb.sg && hb.sg.type === "hwork" && hb.sg.staff[0] === "宮永" && hb.tanto[0] === "宮永", "カレンダーに「宮永 遅番(16~22)」（月曜は基本では休み＝休日出勤） " + JSON.stringify(hb));
     assert.ok(!c2.some((e) => !e.deleted && /^橋本 /.test(e.title)), "基本シフトどおりの橋本さんは出さない " + c2.map((e) => e.title).join(","));
     assert.ok(c2.some((e) => !e.deleted && e.title === "秋山 日勤"), "その日のほかの人の変更も入る");
     const allNov = (await admin.call("docs.query", { col: "days", from: "2026-11-01", to: "2026-11-30" })).reduce((a, d) => a + Object.values(d.events).filter((e) => /^shm/.test(e.id) && !e.deleted).length, 0);
     assert.ok(allNov > 20 && allNov < 100, "11月の基本とちがう分だけ " + allNov);
     const cur2 = (await admin.call("shift.get", q)).month.value, nx = JSON.parse(JSON.stringify(cur2)), D4 = "2026-11-04";
+    await admin.call("kv.cas", { key: "v2:sheet:" + D4, rev: 0, value: engFor("v2").emptySheet() });   // その日の送迎表がある → シフト表の保存で反映される
     const was = ((nx.days[D4] || {}).e || {})[1]; nx.days[D4] = nx.days[D4] || { e: {}, l: {}, d: [] }; nx.days[D4].e = Object.assign({}, nx.days[D4].e, { 1: { n: "近藤", t: "6~9" } });
     await admin.call("shift.save", Object.assign({ kind: "month", base: cur2, baseKnown: true, mine: nx }, q));
     const c4 = await calOf(D4);
-    assert.ok(c4.some((e) => !e.deleted && /^近藤 .*早番①\(6~9\)/.test(e.title)), "入れ替えると付いていく " + c4.filter((e) => !e.deleted).map((e) => e.title).join(","));
-    if (was && was.n && was.n !== "近藤") assert.ok(!c4.some((e) => !e.deleted && e.title.startsWith(was.n + " ") && /早番①/.test(e.title)), "外した人（" + was.n + "）の早番①は消える");
+    assert.ok(c4.some((e) => !e.deleted && /^近藤 .*早番\(6~9\)/.test(e.title) && !/①/.test(e.title)), "入れ替えると付いていく " + c4.filter((e) => !e.deleted).map((e) => e.title).join(","));
+    if (was && was.n && was.n !== "近藤") assert.ok(!c4.some((e) => !e.deleted && e.title.startsWith(was.n + " ") && /早番(?!.*日勤)/.test(e.title) && e.sg && e.sg.wstart === "06:00"), "外した人（" + was.n + "）の早番は消える");
+    { const m2 = (await admin.call("kv.get", "v2:master")).value, sh4 = (await admin.call("kv.get", "v2:sheet:" + D4)).value, kd = m2 && m2.staff.find((s) => s.name === "近藤");
+      if (kd) { const ov = (sh4.staffOv || {})[kd.id] || {}; assert.ok(/^0?6:00$/.test(ov.start) && /^0?9:00$/.test(ov.end) && ov.workToday, "シフト表の勤務が送迎表に入る（近藤 水曜は基本休み＝休日出勤 6:00〜9:00） " + JSON.stringify(ov)); }
+      else assert.ok(Object.keys(sh4.calApplied || {}).some((k) => /^shm20261104_/.test(k)), "送迎表に反映の記録 " + JSON.stringify(Object.keys(sh4.calApplied || {}))); }
     const sk = (await admin.call("docs.query", { col: "days", from: "2026-11-02", to: "2026-11-02" })); assert.ok(sk.length >= 1);
     // 同じ内容で保存し直しても、カレンダーは書き直さない（変わった日だけ）
     const revBefore = JSON.stringify((await admin.call("docs.query", { col: "days", from: "2026-11-01", to: "2026-11-30" })).map((d) => d.date + d.shard + Object.values(d.events).map((e) => e.rev).join()));
