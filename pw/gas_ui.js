@@ -998,7 +998,9 @@ const D = path.join(__dirname, "../gas/out");
       await A.pg.click(`.cell[data-day="${D20}"]`); await A.pg.waitForTimeout(500);
       const bx = await A.pg.evaluate(() => [...document.querySelectorAll("[data-leave-box]")].filter((b) => b.offsetParent).map((b) => ({ n: b.getAttribute("data-leave-box"), rows: [...b.querySelectorAll("[data-ev]")].map((r) => r.textContent), head: b.querySelector(".lv-head").textContent, out: [...b.closest("ul").querySelectorAll(":scope > li > [data-ev]")].map((r) => r.textContent) })));
       assert.ok(bx.length === 1 && bx[0].n === "3" && bx[0].rows.length === 3 && bx[0].rows.every((t) => /白戸|安部/.test(t)) && /職員の休み.*3件/.test(bx[0].head), "休み3件が1つの枠に " + JSON.stringify(bx));
-      assert.ok(bx[0].out.some((t) => /八壁|窪田|日野/.test(t)) && !bx[0].out.some((t) => /白戸 中抜け|安部 PM休み/.test(t)), "休み以外は枠の外");
+      const wk = await A.pg.evaluate(() => [...document.querySelectorAll('[data-box="work"]')].filter((b) => b.offsetParent).map((b) => [...b.querySelectorAll("[data-ev]")].map((r) => r.textContent)));
+      assert.ok(wk.length === 1 && wk[0].some((t) => /八壁/.test(t)) && wk[0].some((t) => /日野/.test(t)) && !wk[0].some((t) => /白戸|安部/.test(t)), "時間変更は「職員の勤務」の枠（休みとは別） " + JSON.stringify(wk));
+      assert.ok(await A.pg.evaluate(() => [...document.querySelectorAll("[data-ev]")].filter((r) => r.offsetParent).every((r) => r.closest(".lv-box"))), "どの予定もどれかの枠の中");
       await A.pg.locator("[data-leave-box]").filter({ visible: true }).first().screenshot({ path: "g_leavebox.png" });
       if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
       console.log("職員の休みの枠 OK"); }
