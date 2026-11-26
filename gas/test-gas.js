@@ -738,6 +738,19 @@ async function bootstrap() {
     await admin.call("shift.save", Object.assign({ kind: "month", base: cur3, baseKnown: true, mine: nx3 }, q));
     const revAfter = JSON.stringify((await admin.call("docs.query", { col: "days", from: "2026-11-01", to: "2026-11-30" })).map((d) => d.date + d.shard + Object.values(d.events).map((e) => e.rev).join()));
     assert.strictEqual(revAfter, revBefore, "勤務が変わらなければカレンダーはそのまま");
+    assert.strictEqual((await admin.call("shift.get", q)).calLeft, 0, "書き直すものが無ければ開いても何もしない");
+    { // 2026-11-26 依頼者「カレンダー職員のシフトその他のまま変わってない」：以前の書き方（職員その他・題名だけ覚えていた）のままの月は、開いただけで書き直す
+      const lp = "shift/m/2026-11/cal", ix = g.ctx.docIndex_(), ld = g.ctx.docGet_(lp, ix), old = {};
+      Object.keys(ld.value).forEach((k) => { old[k] = JSON.parse(ld.value[k])[0]; });
+      g.ctx.docSet_(lp, old, ld.rev + 1, { k: lp }, ix);
+      const D2 = "2026-11-02", dp = Object.values((await admin.call("docs.query", { col: "days", from: D2, to: D2 }))).find((d) => Object.keys(d.events).some((k) => /^shm20261102_/.test(k)));
+      const ix2 = g.ctx.docIndex_(), p2 = g.ctx.TCCore.dayPath(D2, Object.keys(dp.events).find((k) => /^shm20261102_/.test(k))), raw = g.ctx.docGet_(p2, ix2);
+      assert.ok(raw && raw.value && raw.value.events, "その日の文書 " + p2); if (raw) { const v = JSON.parse(JSON.stringify(raw.value)); for (const k of Object.keys(v.events || {})) if (/^shm/.test(k)) { v.events[k].label = "sother"; delete v.events[k].sg; v.events[k].title = v.events[k].title.replace("遅番", "遅番①"); } g.ctx.docSet_(p2, v, raw.rev + 1, {}, ix2); }
+      const gr = await admin.call("shift.get", q); assert.strictEqual(gr.calLeft, 1, "以前の書き方のままなら開いたときに知らせる");
+      let n = 0; while ((await admin.call("shift.syncCal", q)).left > 0 && n < 20) n++;
+      assert.strictEqual((await admin.call("shift.get", q)).calLeft, 0, "書き直したあとは何もしない");
+      const hb3 = (await calOf(D2)).find((e) => /^宮永 /.test(e.title) && !e.deleted);
+      assert.ok(hb3 && hb3.label === "hwork" && hb3.sg && hb3.sg.type === "hwork" && hb3.title === "宮永 遅番(16~22)", "職員その他・①つきの予定が書き直される " + JSON.stringify(hb3 && { l: hb3.label, t: hb3.title, sg: hb3.sg && hb3.sg.type }) + " raw=" + !!raw); }
     // 表の職員：自分の希望だけ。ほかの欄・ほかの人の希望は送っても使わない
     const cur = (await yoko.call("shift.get", q)).month.value;
     const evil = JSON.parse(JSON.stringify(cur)); evil.days = {}; evil.wish = Object.assign({}, cur.wish, { "横田": { "2026-11-08": "休" }, "秋山": Object.assign({}, (cur.wish || {})["秋山"], { "2026-11-10": "休" }) }); evil.wishNote = { "横田": "8日 休みたい" };

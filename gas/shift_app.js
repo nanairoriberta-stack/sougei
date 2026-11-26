@@ -37,6 +37,7 @@
       // まだ当てていない希望（新しい版の前に入った希望など）に合わせて枠を空ける。組む人の画面で開いたときだけ（2026-11-11 依頼者「きえてないよ」）
       if (S.canEdit && !pm && S.month && !S.month.hidden) { const f = X.fitPending(S.month, S.ym); if (f !== S.month) { S.month = f; changed("month"); } }
       if (!S.resent) { S.resent = true; setTimeout(resendAll, 1500); }
+      if (r.calLeft > 0) calSync(S.group, S.ym);   // カレンダーの予定が以前の書き方・今の表とちがえば、開いただけで書き直す（2026-11-26）
     } catch (e) { S.err = (e && e.message) || "読み込めませんでした。通信を確かめて、もう一度開いてください"; S.loaded = false; }
     render();
   }

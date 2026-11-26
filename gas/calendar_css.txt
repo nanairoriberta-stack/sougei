@@ -442,3 +442,14 @@ html[data-biz] .daysheet .ds-row:hover,html[data-biz] .daysheet .ds-row:active{b
 
 /* 時間変更・休日出勤の出勤〜退勤（ラベルの下。2026-11-23） */
 .ev-row .wt,.ds-row .ds-wt{display:block;font-size:12px;font-weight:700;color:#1d4ed8;margin-top:2px}
+
+/* 職員の休みの枠（2026-11-26 依頼者「職員の休みだけで枠を囲むような」） */
+:root{--lv-bd:#f2577a;--lv-bg:#fff1f4;--lv-ink:#be123c}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--lv-bd:#fb7190;--lv-bg:#2a1219;--lv-ink:#fda4b8}}
+:root[data-theme="dark"]{--lv-bd:#fb7190;--lv-bg:#2a1219;--lv-ink:#fda4b8}
+.lv-box{list-style:none;border:2px solid var(--lv-bd);background:var(--lv-bg);border-radius:12px;padding:8px 8px 8px;margin:2px 0}
+.lv-head{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;color:var(--lv-ink);padding:0 4px 6px}
+.lv-head .lv-n{margin-left:auto;font-size:12px;font-weight:700;background:var(--lv-bd);color:#fff;border-radius:999px;padding:1px 8px}
+.lv-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.lv-box .ev-row,.lv-box .ds-row{background:var(--surface)}
+.ds-list>.lv-box{margin:4px 0 6px}

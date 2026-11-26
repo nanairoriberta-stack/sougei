@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.26a',
+  VERSION: '2026.11.26b',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -1130,8 +1130,11 @@ function shiftGet_(me, a) {
   var mine = shiftMemberName_(cfg, me.name), member = !!mine;
   if (!canEdit && !member) throw { code: 'invalid_argument', message: 'このシフト表を見る権限がありません（「職員ID」シートG列か、表の職員に入っている人だけ）' };
   // その月がまだ保存されていなければ、紙から写した最初の中身（SGShift.monthOf。2026年11月・男性）
-  var mv = SGShift.monthOf(q.group, q.ym, m ? m.value : null);
-  return { cfg: { rev: c ? c.rev : 0, value: c ? c.value : null }, month: { rev: m ? m.rev : 0, value: canEdit ? mv : shiftHide_(mv, q.ym) }, canEdit: canEdit, member: member, myName: mine || me.name };
+  var mv = SGShift.monthOf(q.group, q.ym, m ? m.value : null), calLeft = 0;
+  // カレンダーに書いた予定が今の表・今の書き方とちがえば、画面に続けて書いてもらう（2026-11-26 依頼者「カレンダーが職員その他のまま変わってない」＝
+  // 以前の書き方の予定は保存しないと書き直されなかった。開いただけで直す）
+  try { calLeft = shiftCalStale_(q.group, q.ym, mv, idx) ? 1 : 0; } catch (e) {}
+  return { cfg: { rev: c ? c.rev : 0, value: c ? c.value : null }, month: { rev: m ? m.rev : 0, value: canEdit ? mv : shiftHide_(mv, q.ym) }, canEdit: canEdit, member: member, myName: mine || me.name, calLeft: calLeft };
 }
 // 確定していない月は、組む人（管理者など）だけが勤務を見られる。表の職員には希望だけ渡す（2026-11-07 依頼者）
 function shiftHide_(v, ym) {
@@ -1180,14 +1183,24 @@ function shCalId_(pre, date, name) {
   for (var k = 0; k < 200; k++) { var id = k ? base + 'x' + k : base; if (/_2$/.test(TCCore.dayPath(date, id))) return id; }
   return base;
 }
-var SH_SYNC_MAX = 8;   // 1回に書き直す日の文書の数（はじめての月は何回かに分けて書く。残りは画面が続けて頼む shift.syncCal）
-function shiftSyncCal_(group, ym, month, idx) {
-  // 確定するまではカレンダーに出さない（確定を取り消したら消す。2026-11-07 依頼者）
+// カレンダーに書くべき予定（id → 中身）
+function shiftCalWant_(group, ym, month, idx) {
   var cd = docGet_('shift/' + group + '/cfg', idx), items = SGShift.isFixed(month, ym) ? SGShift.calItems(month || {}, ym, SGShift.cfgOf(group, cd ? cd.value : null)) : [], pre = 'sh' + group + ym.replace('-', '');
   var want = {};
   // 送迎表に反映する中身（職員時間変更・休日出勤・職員休み。2026-11-26 依頼者「その他予定になっているが、勤務変更にしといてもらわないと送迎表に反映されない」）。
-  // 前回書いた内容は題名だけでなく中身ごと覚える（sig。以前の「職員その他」で書いた分は、次の保存で書き直す）
+  // 前回書いた内容は題名だけでなく中身ごと覚える（sig。以前の「職員その他」で書いた分は書き直す）
   items.forEach(function (it) { var c = SGShift.calSgOf(it); if (!c) return; it.c = c; it.sig = JSON.stringify([it.title, c.label, c.allDay, c.start, c.end, c.sg]); want[shCalId_(pre, it.date, it.name)] = it; });
+  return { want: want, pre: pre };
+}
+// 前回書いた内容と今の表がちがうか（開いたときに見る。書くのは shift.syncCal）
+function shiftCalStale_(group, ym, month, idx) {
+  var w = shiftCalWant_(group, ym, month, idx).want, lastDoc = docGet_('shift/' + group + '/' + ym + '/cal', idx), last = (lastDoc && lastDoc.value) || {};
+  return Object.keys(w).some(function (id) { return last[id] !== w[id].sig; }) || Object.keys(last).some(function (id) { return !w[id]; });
+}
+var SH_SYNC_MAX = 8;   // 1回に書き直す日の文書の数（はじめての月は何回かに分けて書く。残りは画面が続けて頼む shift.syncCal）
+function shiftSyncCal_(group, ym, month, idx) {
+  // 確定するまではカレンダーに出さない（確定を取り消したら消す。2026-11-07 依頼者）
+  var W = shiftCalWant_(group, ym, month, idx), want = W.want, pre = W.pre;
   var lastPath = 'shift/' + group + '/' + ym + '/cal', lastDoc = docGet_(lastPath, idx), last = (lastDoc && lastDoc.value) || {};
   var byPath = {}, touch = function (id, date) { var p = TCCore.dayPath(date, id); (byPath[p] = byPath[p] || { date: date, ids: [] }).ids.push(id); };
   Object.keys(want).forEach(function (id) { if (last[id] !== want[id].sig) touch(id, want[id].date); });

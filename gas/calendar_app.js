@@ -145,6 +145,12 @@ function renderGrid(vis){
     html+=`<div class="${cls}" role="button" tabindex="0" data-day="${k}" aria-label="${d.getMonth()+1}月${d.getDate()}日 ${evs.length}件"><div class="cell-head"><span class="num">${d.getDate()}</span>${hol?`<span class="hol-name">${hol}</span>`:""}${S.biz==="mansion"&&mfOn(k).length?`<span class="mf-dot" data-mf-dot="${k}" title="活動計画書 ${mfOn(k).length}件">📄</span>`:""}<button type="button" class="cell-add" data-add-cell="${k}" tabindex="-1" aria-label="${d.getMonth()+1}月${d.getDate()}日に予定を追加" title="この日に予定を追加">＋</button></div>${(n=>evs.length>n?evs.slice(0,Math.max(1,n-1)).map(chip).join("")+`<span class="more">他${evs.length-Math.max(1,n-1)}件</span>`:evs.map(chip).join(""))(MAXC())}</div>`}
   $("grid").innerHTML=html;
 }
+/* 職員の休みは1つの枠でまとめて囲む（2026-11-26 依頼者「カレンダーの項目をもう少し直感的に分かりやすく。職員の休みだけで枠を囲むような。3個あれば3個の外側に囲むように」）。
+   枠は1つ目の休みの場所に。日の欄（パソコン）・日の一覧（スマホ）・リスト */
+function leaveBoxed(evs,row){const lv=evs.filter(e=>e.label==="leave");if(!lv.length)return evs.map(row).join("");let out="",done=false;
+  for(const e of evs){if(e.label!=="leave"){out+=row(e);continue}if(done)continue;done=true;
+    out+=`<li class="lv-box" data-leave-box="${lv.length}"><div class="lv-head"><span class="lv-ic" aria-hidden="true">🏖</span>職員の休み<span class="lv-n">${lv.length}件</span></div><ul class="lv-list">${lv.map(row).join("")}</ul></li>`}
+  return out}
 function evRow(e,ps){
   const av=e.members.slice(0,6).map(id=>ps[id]?`<img src="${esc(ps[id].avatarUrl)}" alt="${esc(ps[id].name||"メンバー")}" title="${esc(ps[id].name||"メンバー")}">`:"").join("");
   return`<li><button class="ev-row g-${grpOf(e.label).k}" data-grp="${grpOf(e.label).k}" data-ev="${esc(e.id)}" style="--c:var(--l-${lab(e.label)})"><span class="stripe"></span><span><div class="t">${misTag(e)}${bizTag(e)}${esc(ttl(e))}</div><div class="meta"><span class="time">${timeText(e)}</span><span>${esc(LMAP[e.label]?.n||"その他")}</span>${e.place?`<span>${esc(e.place)}</span>`:""}${(e.tanto||[]).length?`<span>担当：${esc(e.tanto.join("・"))}</span>`:""}${(e.users||[]).length?`<span>利用者：${esc(e.users.join("・"))}</span>`:""}${e.pending?`<span class="tag-pend">未送信</span>`:""}${e.sg?`<span class="tag-sg">${esc(sgText(e.sg))}</span>`:""}</div>${workTimeHtml(e)}${av?`<div class="avatars">${av}</div>`:""}</span></button></li>`}
@@ -228,7 +234,7 @@ function renderPanel(vis,ps){
   let body;
   if(!S.loaded&&S.dbState==="connecting")body=`<div class="empty">予定を読み込んでいます…</div>`;
   else if(!evs.length)body=`<div class="empty">この日の予定はまだありません。${can?"<br>「この日に追加」から登録できます。":""}</div>`;
-  else body=`<ul class="ev-list">${evs.map(e=>evRow(e,ps)).join("")}</ul>`;
+  else body=`<ul class="ev-list">${leaveBoxed(evs,e=>evRow(e,ps))}</ul>`;
   $("panel").innerHTML=`<div class="pn-page"><div class="panel-head"><button class="ds-step" data-day-step="-1" aria-label="前の日">‹</button><div class="panel-date">${d.getMonth()+1}月${d.getDate()}日（${WD[d.getDay()]}）<small>${hol?esc(hol)+" · ":""}${evs.length}件の予定</small></div><button class="ds-step" data-day-step="1" aria-label="次の日">›</button><button class="primary" data-add-day ${can?"":"disabled"}>この日に追加</button></div>${body}${mfSection(S.sel)}</div>`;
   slideIn($("panel").querySelector(".pn-page"));
 }
@@ -276,7 +282,7 @@ function renderDay(vis){
   pg.dataset.pgDay=S.sel;   // data-day は日のマスの印なので使わない
   pg.innerHTML=`<div class="ds-head"><button class="ds-step" data-day-step="-1" aria-label="前の日">‹</button><h2>${d.getMonth()+1}月${d.getDate()}日 ${WD[d.getDay()]}曜日${hol?`<small>${esc(hol)}</small>`:""}</h2><button class="ds-step" data-day-step="1" aria-label="次の日">›</button>
       <button class="ds-add" data-add-day aria-label="この日に予定を追加" ${can?"":"disabled"}>＋</button><button class="icon-btn" data-day-close aria-label="閉じる">×</button></div>
-    ${evs.length?`<ul class="ds-list">${evs.map(dsRow).join("")}</ul>`:`<div class="empty">${S.loaded?"この日の予定はまだありません。":"予定を読み込んでいます…"}${can&&S.loaded?"<br>右上の＋から入れられます。":""}</div>`}
+    ${evs.length?`<ul class="ds-list">${leaveBoxed(evs,dsRow)}</ul>`:`<div class="empty">${S.loaded?"この日の予定はまだありません。":"予定を読み込んでいます…"}${can&&S.loaded?"<br>右上の＋から入れられます。":""}</div>`}
     ${S.biz==="mansion"?`<div class="ds-mf">${mfSection(S.sel)}</div>`:""}`;
   const l=pg.querySelector(".ds-list");if(l)l.scrollTop=keep;
   slideIn(pg);
@@ -394,7 +400,7 @@ function renderList(vis,ps){
   const{start}=gridRange();const tm=S.cursor.getMonth();let html="";
   for(let i=0;i<42;i++){const d=addDays(start,i);if(d.getMonth()!==tm)continue;const k=ymd(d),evs=on(vis,k);if(!evs.length)continue;
     const c=[d.getDay()===0&&"su",d.getDay()===6&&"sa",HOL[k]&&"hol"].filter(Boolean).join(" ");
-    html+=`<div class="ag-day"><div class="ag-date ${c}">${d.getMonth()+1}/${d.getDate()}<small>${WD[d.getDay()]}曜${HOL[k]?" · "+HOL[k]:""}</small></div><ul class="ev-list">${evs.map(e=>evRow(e,ps)).join("")}</ul></div>`}
+    html+=`<div class="ag-day"><div class="ag-date ${c}">${d.getMonth()+1}/${d.getDate()}<small>${WD[d.getDay()]}曜${HOL[k]?" · "+HOL[k]:""}</small></div><ul class="ev-list">${leaveBoxed(evs,e=>evRow(e,ps))}</ul></div>`}
   $("listView").innerHTML=html||`<div class="empty" style="margin-top:8px">${S.loaded?"この月の予定はありません。":"予定を読み込んでいます…"}</div>`;
 }
 function renderTrash(){

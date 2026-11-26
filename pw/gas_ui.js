@@ -994,6 +994,14 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(kb && kb.sg.noRide && kb.sg.wstart === "06:00" && kb.sg.wend === "22:00" && kb.sg.afrom === "09:00" && kb.sg.ato === "17:00", "早遅ﾏﾝｼｮﾝ：送迎なし・中抜け9:00〜17:00 " + JSON.stringify(kb && kb.sg));
     assert.ok(by("日野 早番") && !by("日野 早番").sg.noRide && by("日野 早番").sg.wstart === "07:00", "早番は送迎あり・時刻は直せる");
     assert.ok(by("白戸 中抜け") && by("白戸 2時間休み") && by("安部 PM休み"), "中抜け・時間休み・PM休みの題名 " + evs.map((e) => e.title).join(","));
+    { // 職員の休みは1つの枠で囲む（2026-11-26 依頼者「職員の休みだけで枠を囲むような。3個あれば3個の外側に」）
+      await A.pg.click(`.cell[data-day="${D20}"]`); await A.pg.waitForTimeout(500);
+      const bx = await A.pg.evaluate(() => [...document.querySelectorAll("[data-leave-box]")].filter((b) => b.offsetParent).map((b) => ({ n: b.getAttribute("data-leave-box"), rows: [...b.querySelectorAll("[data-ev]")].map((r) => r.textContent), head: b.querySelector(".lv-head").textContent, out: [...b.closest("ul").querySelectorAll(":scope > li > [data-ev]")].map((r) => r.textContent) })));
+      assert.ok(bx.length === 1 && bx[0].n === "3" && bx[0].rows.length === 3 && bx[0].rows.every((t) => /白戸|安部/.test(t)) && /職員の休み.*3件/.test(bx[0].head), "休み3件が1つの枠に " + JSON.stringify(bx));
+      assert.ok(bx[0].out.some((t) => /八壁|窪田|日野/.test(t)) && !bx[0].out.some((t) => /白戸 中抜け|安部 PM休み/.test(t)), "休み以外は枠の外");
+      await A.pg.locator("[data-leave-box]").filter({ visible: true }).first().screenshot({ path: "g_leavebox.png" });
+      if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
+      console.log("職員の休みの枠 OK"); }
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300);   // 選んでいる日を元に戻す
     console.log("勤務・休みの題名:", evs.map((e) => e.title).join(" / ")); }
   { // 職員時間変更「中抜け」（2026-11-05 依頼者：新見さん 9:30〜14:00と16:00〜19:00）：いつもの時間が入り、この日だけ直せる
