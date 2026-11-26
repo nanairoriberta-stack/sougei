@@ -408,6 +408,7 @@ var HANDLERS = {
   'shift.get': function (me, a) { return shiftGet_(me, a[0] || {}); },
   'shift.save': function (me, a) { return shiftSave_(me, a[0] || {}); },
   'shift.syncCal': function (me, a) { return shiftSyncCalApi_(me, a[0] || {}); },
+  'shift.calFix': function (me, a) { return shiftCalFix_(me, a[0] || {}); },
   'sg.attendance': function (me, a) { return attendance_(me, a[0] || {}); },
   'sg.linkReqs': function (me, a) { return linkReqsOf_(String(a[0] || '')); },   // 生活介護の画面に、りんく・ぷれいす版からの依頼を出す（表示だけ）
   'docs.query': function (me, a) { return docsQuery_(a[0] || {}); },
@@ -1241,6 +1242,17 @@ function shiftSyncCal_(group, ym, month, idx) {
 function shiftSyncCalApi_(me, a) {
   var q = shiftArgs_(a);
   if (shiftGroups_(me).indexOf(q.group) < 0 && !isShiftMember_(me.name)) throw { code: 'invalid_argument', message: 'このシフト表に入れる権限がありません' };
+  return withLock_(function () {
+    var idx = docIndex_(), cur = docGet_(q.monthPath, idx), month = cur ? cur.value : SGShift.monthOf(q.group, q.ym, null);
+    return { left: shiftSyncCal_(q.group, q.ym, month, idx) };
+  });
+}
+/* カレンダーから：シフト表から入った予定が以前の書き方（職員その他・①②③つき）のままのとき、書き直してもらう（2026-11-26 依頼者「変わってない」＝
+   シフト表を開かないと書き直されなかった。11月は男性の表を開いても12月から出るので書き直されていなかった）。
+   だれが頼んでもよい（書くのはサーバーがシフト表から作った中身だけ。画面から中身は受け取らない）。書くことが無ければ何もしない */
+function shiftCalFix_(me, a) {
+  var q = shiftArgs_(a), idx0 = docIndex_(), cur0 = docGet_(q.monthPath, idx0), m0 = cur0 ? cur0.value : SGShift.monthOf(q.group, q.ym, null);
+  if (!shiftCalStale_(q.group, q.ym, m0, idx0)) return { left: 0 };
   return withLock_(function () {
     var idx = docIndex_(), cur = docGet_(q.monthPath, idx), month = cur ? cur.value : SGShift.monthOf(q.group, q.ym, null);
     return { left: shiftSyncCal_(q.group, q.ym, month, idx) };

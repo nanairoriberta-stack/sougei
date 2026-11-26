@@ -1004,6 +1004,15 @@ const D = path.join(__dirname, "../gas/out");
       await A.pg.locator("[data-leave-box]").filter({ visible: true }).first().screenshot({ path: "g_leavebox.png" });
       if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
       console.log("職員の休みの枠 OK"); }
+    { // シフト表の予定が以前の書き方（職員その他・①つき）のままなら、カレンダーを見ただけで書き直す（2026-11-26 依頼者「変わってない」12/4）
+      const r0 = api(t, "cal.apply", [{ kind: "upsert", opId: "op_shold01", id: "shm20261103_old1", baseRev: null, ev: { title: "余村慎 早番③(6~9)", date: "2026-11-03", endDate: "2026-11-03", allDay: true, start: "", end: "", label: "sother", place: "", memo: "", members: [], tanto: ["余村慎"] } }]);
+      assert.ok(r0.ok !== false, "以前の書き方の予定を入れる " + JSON.stringify(r0).slice(0, 200));
+      const conv = () => Object.values(api(t, "docs.query", [{ col: "days", from: "2026-11-03", to: "2026-11-03" }]).data.reduce((a2, d) => Object.assign(a2, d.events), {})).filter((e) => /^shm20261103_/.test(e.id) && !e.deleted && e.sg);
+      assert.strictEqual(conv().length, 0, "まだ書き直していない");
+      await A.pg.evaluate(() => SGHost.pollOnce()); let ok = false;
+      for (let i = 0; i < 40 && !ok; i++) { await A.pg.waitForTimeout(500); ok = conv().some((e) => e.title === "余村慎 早番(6~9)" && e.label === "shift" && e.sg.type === "shift"); }
+      assert.ok(ok, "カレンダーを見ただけでシフト表の予定が職員時間変更に書き直される " + JSON.stringify(conv().map((e) => [e.title, e.label])));
+      console.log("シフトの予定の書き直し（カレンダーから）OK", conv().length); }
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300);   // 選んでいる日を元に戻す
     console.log("勤務・休みの題名:", evs.map((e) => e.title).join(" / ")); }
   { // 職員時間変更「中抜け」（2026-11-05 依頼者：新見さん 9:30〜14:00と16:00〜19:00）：いつもの時間が入り、この日だけ直せる

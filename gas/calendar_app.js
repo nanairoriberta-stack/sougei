@@ -438,6 +438,14 @@ function prefetch(){
     if(c&&Date.now()-c.at<60000)continue;
     try{db.collection("days").where("maxEnd",">=",ymd(r.start)).where("date","<=",ymd(r.end)).limit(1000).get().then(snap=>{const docs=snap.docs.map(d=>d.data());docs.from=ymd(r.start);docs.to=ymd(r.end);if(!MC.has(k)||MC.get(k).at<Date.now()-1000)mcPut(k,docs);offlineSnap()}).catch(()=>{})}catch{}}
 }
+/* シフト表から入った予定（ID sh[m|f]年月日_）が以前の書き方（職員その他・①②③つき・送迎表への反映なし）のままなら、
+   サーバーに書き直してもらう（2026-11-26 依頼者「変わってない」。シフト表を開かなくても、カレンダーを見ただけで直る）。1つの月は1回だけ頼む */
+const SHFIX=new Set();
+function shFixCheck(){const H=window.SGHost;if(!H||!H.call||!S.server)return;const want=new Set();
+  for(const e of Object.values(S.server)){if(!e||e.deleted)continue;const m=/^sh([mf])(\d{4})(\d{2})\d{2}_/.exec(String(e.id||""));if(!m)continue;
+    if(e.label==="sother"||!e.sg||/[①②③]/.test(e.title||""))want.add(`${m[1]}|${m[2]}-${m[3]}`)}
+  for(const k of want){if(SHFIX.has(k))continue;SHFIX.add(k);const[g,ym]=k.split("|");
+    (async()=>{try{for(let i=0;i<10;i++){const r=await H.call("shift.calFix",{group:g,ym});if(!r||!(r.left>0))break}if(H.pollOnce)H.pollOnce()}catch(e){}})()}}
 let pfT;
 function subscribe(){
   if(!db)return;unsub?.();S.loaded=false;
@@ -447,7 +455,7 @@ function subscribe(){
   try{
     unsub=db.collection("days").where("maxEnd",">=",ymd(start)).where("date","<=",ymd(end)).limit(1000)
       .onSnapshot(snap=>{const docs=snap.docs.map(d=>d.data());docs.from=ymd(start);docs.to=ymd(end);mcPut(k,docs);setDocs(docs);S.loaded=true;if(S.dbState==="error")S.dbState="ok";render();
-          bootSave(k,docs);clearTimeout(pfT);pfT=setTimeout(prefetch,800);offlineSnap()},
+          bootSave(k,docs);clearTimeout(pfT);pfT=setTimeout(prefetch,800);offlineSnap();shFixCheck()},
         ()=>{S.dbState="error";render()});
   }catch{S.dbState="error";render()}
 }

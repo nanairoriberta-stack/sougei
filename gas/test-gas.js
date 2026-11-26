@@ -747,7 +747,10 @@ async function bootstrap() {
       const ix2 = g.ctx.docIndex_(), p2 = g.ctx.TCCore.dayPath(D2, Object.keys(dp.events).find((k) => /^shm20261102_/.test(k))), raw = g.ctx.docGet_(p2, ix2);
       assert.ok(raw && raw.value && raw.value.events, "その日の文書 " + p2); if (raw) { const v = JSON.parse(JSON.stringify(raw.value)); for (const k of Object.keys(v.events || {})) if (/^shm/.test(k)) { v.events[k].label = "sother"; delete v.events[k].sg; v.events[k].title = v.events[k].title.replace("遅番", "遅番①"); } g.ctx.docSet_(p2, v, raw.rev + 1, {}, ix2); }
       const gr = await admin.call("shift.get", q); assert.strictEqual(gr.calLeft, 1, "以前の書き方のままなら開いたときに知らせる");
-      let n = 0; while ((await admin.call("shift.syncCal", q)).left > 0 && n < 20) n++;
+      await nobody.call("shift.calFix", { group: "m", ym: "bad" }).then(() => assert.fail("年月の形"), (e) => assert.strictEqual(e.code, "invalid_argument"));
+      // カレンダーを見ている人（シフト表の権限のない一般の職員）が頼んでも書き直す（2026-11-26 依頼者「変わってない」）
+      let n = 0; while ((await nobody.call("shift.calFix", q)).left > 0 && n < 20) n++;
+      assert.deepStrictEqual(await nobody.call("shift.calFix", q), { left: 0 }, "書くことが無ければ何もしない");
       assert.strictEqual((await admin.call("shift.get", q)).calLeft, 0, "書き直したあとは何もしない");
       const hb3 = (await calOf(D2)).find((e) => /^宮永 /.test(e.title) && !e.deleted);
       assert.ok(hb3 && hb3.label === "hwork" && hb3.sg && hb3.sg.type === "hwork" && hb3.title === "宮永 遅番(16~22)", "職員その他・①つきの予定が書き直される " + JSON.stringify(hb3 && { l: hb3.label, t: hb3.title, sg: hb3.sg && hb3.sg.type }) + " raw=" + !!raw); }
