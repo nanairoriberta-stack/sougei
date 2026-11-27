@@ -8,7 +8,7 @@ const api = async (m, a) => (await (await fetch(dev.api, { method: "POST", body:
   await pg.exposeFunction("__gasApi", async (tk, m, a) => (await (await fetch(dev.api, { method: "POST", body: JSON.stringify({ tk, m, a }) })).json()));
   await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { setTimeout(() => window.__gasApi(tk, m, a).then((r) => s && s(r), (e) => f && f(e)), 30); } }; })() } }; });
   await pg.route("https://**/*", async (r) => { const u = r.request().url(); for (const k in LOC) if (u.endsWith(k)) return r.fulfill({ path: LOC[k], contentType: "application/javascript" }); return r.abort(); });
-  const html = fs.readFileSync(path.join(D, "sougei.html"), "utf8").replace("/*__BOOT__*/", `window.__SG_EDITION="v1";window.__SG_BASE="https://x/exec";window.__SG_DATE="${dev.date}";`);
+  const html = fs.readFileSync(path.join(D, "sougei.html"), "utf8").replace("/*__BOOT__*/", `window.__SG_EDITION="v1";window.__SG_BASE="https://x/exec";window.__SG_DATE="${dev.date}";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"${dev.date}",at:Date.now()}))}catch(e){}`);
   fs.writeFileSync(path.join(__dirname, "c_sougei.html"), html);
   await pg.goto("file://" + path.join(__dirname, "c_sougei.html")); await pg.waitForTimeout(600);
   await pg.fill("#sghNo", "000"); await pg.fill("#sghPin", "5829"); await pg.click("#sghGo"); await pg.waitForTimeout(5000);

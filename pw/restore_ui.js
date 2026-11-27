@@ -40,7 +40,7 @@ const D = path.join(__dirname, "../gas/out");
   const evs = [["tt20261112_01", "2026-11-12", "", "", "石原休み"], ["tt20261112_07", "2026-11-12", "10:00", "12:00", "松浦通院"], ["tt20261113_11", "2026-11-13", "09:30", "10:30", "山崎　９時30分更生センターお迎え"]]
     .map(([id, date, start, end, title]) => C.normEvent({ title, date, start, end, allDay: !start, label: "other", memo: "TimeTreeから写しました", rev: 1 }, id, 0));
   const buf = Buffer.from(JSON.stringify({ app: "team-calendar", schema: C.SCHEMA, events: evs, comments: {} }));
-  const boot = 'window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-12";';
+  const boot = 'window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-12";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"2026-11-12",at:Date.now()}))}catch(e){}';
   { // 送迎表のルール⑪（送迎なしの理由）を変えておく → カレンダーの「送迎」の選択肢に出る
     const m2 = api(t, "kv.get", ["v2:master"]).data.value;
     api(t, "kv.merge", [{ key: "v2:master", base: m2, baseKnown: true, mine: { ...m2, rules: { ...(m2.rules || {}), noRideReasons: [{ kind: "meet", text: "家族送り" }, { kind: "meet", text: "母送り" }, { kind: "send", text: "家族迎え" }, { kind: "send", text: "ショートへ" }] } } }]);

@@ -83,7 +83,7 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await W2.pg.evaluate(() => SGHost.url("?page=shift")), "https://script.google.com/macros/s/TEST/exec?page=shift", "おかしな入口は使わない");
     await W.pg.context().close(); await W2.pg.context().close(); console.log("入口のページのリンク OK"); }
   // スマホ：余村慎がログインして AM休 を押す
-  const boot = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${date}";`;
+  const boot = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${date}";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"${date}",at:Date.now()}))}catch(e){}`;
   const { pg, errs } = await open("calendar.html", { width: 390, height: 844 }, boot);
   await pg.waitForTimeout(800); await pg.screenshot({ path: "g_login.png" });
   await pg.fill("#sghNo", yo[0]); await pg.fill("#sghPin", String(yo[3])); await pg.click("#sghGo"); await pg.waitForTimeout(800);
@@ -474,14 +474,14 @@ const D = path.join(__dirname, "../gas/out");
     const D5 = "2026-10-01", m3 = api(t, "kv.get", ["v3:master"]).data.value;
     assert.ok(!api(t, "kv.get", ["sheet:" + D5]).data.value, "生活介護（現体制版）の10/1はまだ無い");
     api(t, "kv.cas", [{ key: "v3:sheet:" + D5, rev: 0, value: { runs: [{ id: "rqNEW", kind: "meet", time: "9:00", staffId: "__req__", vehicleId: "", userIds: [m3.users[0].id], staffRiderIds: [], note: "" }], blocks: [], staffOv: {} } }]);
-    const W = await open("sougei.html", { width: 1400, height: 900 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${D5}";`, "sougei_v1_1001.html");
+    const W = await open("sougei.html", { width: 1400, height: 900 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${D5}";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"${D5}",at:Date.now()}))}catch(e){}`, "sougei_v1_1001.html");
     await W.pg.waitForTimeout(500); await W.pg.fill("#sghNo", "000"); await W.pg.fill("#sghPin", "5829"); await W.pg.click("#sghGo"); await W.pg.waitForTimeout(5000);
     assert.strictEqual(await W.pg.locator('[data-link-cell] [data-item-id="lk_rqNEW"]').count(), 1, "まだ保存されていない日でも依頼が出る");
     assert.ok((await W.pg.locator('[data-item-id="lk_rqNEW"]').innerText()).includes("りんく依頼"));
     await W.pg.screenshot({ path: "g_link_unsaved.png" });
     assert.deepStrictEqual(real(W.errs), []); await W.pg.context().close(); console.log("まだ無い日のりんく依頼: OK"); }
   { // シフト表（マンション職員・男性/女性）：基本パターンで下書き → 空き → LINE文、枠の入れ替え、希望休、設定、表の職員は自分の希望だけ（2026-11-02）
-    const sb = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-02";`;
+    const sb = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-02";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"2026-11-02",at:Date.now()}))}catch(e){}`;
     const T = await open("shift.html", { width: 1400, height: 1000 }, sb, "shift.html");
     await T.pg.waitForTimeout(500); await T.pg.fill("#sghNo", "000"); await T.pg.fill("#sghPin", "5829"); await T.pg.click("#sghGo"); await T.pg.waitForTimeout(2500);
     assert.ok((await T.pg.locator(".sh-title").innerText()).includes("男性職員"), "男性の表");
@@ -1477,7 +1477,7 @@ const D = path.join(__dirname, "../gas/out");
   assert.deepStrictEqual(real(P.errs), []);
   // 開いたときに公開URLが届かなくても（実機で起きた）、ログイン後にサーバーへ聞いて、メニューのリンクは公開URLになる
   {
-    const N = await open("calendar.html", { width: 1200, height: 800 }, `window.__SG_EDITION="v1";window.__SG_BASE="";window.__SG_DATE="${date}";`);
+    const N = await open("calendar.html", { width: 1200, height: 800 }, `window.__SG_EDITION="v1";window.__SG_BASE="";window.__SG_DATE="${date}";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"${date}",at:Date.now()}))}catch(e){}`);
     await N.pg.waitForTimeout(500); await N.pg.fill("#sghNo", "000"); await N.pg.fill("#sghPin", "5829"); await N.pg.click("#sghGo"); await N.pg.waitForTimeout(2500);
     await N.pg.click(".sgh-chip"); await N.pg.waitForTimeout(300);
     const hrefs = await N.pg.$$eval(".sgh-menu a", (a) => a.map((x) => x.getAttribute("href")));

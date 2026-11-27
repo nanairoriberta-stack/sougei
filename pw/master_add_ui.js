@@ -34,7 +34,7 @@ const D = path.join(__dirname, "../gas/out");
     await pg.goto("file://" + path.join(__dirname, out)); return { pg, errs };
   }
   // 職員・車両・利用者の「＋ ○○を追加」：足した行はいちばん下（ボタンのすぐ上）に出て、名前の欄に入れる（2026-11-03 依頼者「利用者を追加ボタンが効かない」）
-  const boot = 'window.__SG_EDITION="v2";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-02";';
+  const boot = 'window.__SG_EDITION="v2";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-02";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"2026-11-02",at:Date.now()}))}catch(e){}';
   // カレンダーの予定（特記事項の自動の欄を見るため。2026-11-03 依頼者）
   const mv2 = api(t, "kv.get", ["v2:master"]).data.value, uN = mv2.users[0].name, pS = mv2.staff.find((x) => x.emp === "パート" && !x.hideInPartList) || mv2.staff[0];
   const putEv = (id, ev) => { const r = api(t, "cal.apply", [{ kind: "upsert", opId: "op_" + id, id, baseRev: null, ev: Object.assign({ date: "2026-11-02", endDate: "2026-11-02", allDay: true, start: "", end: "", label: "other", place: "", memo: "", members: [] }, ev) }]); assert.ok(r && r.ok !== false && !r.error, "予定を入れる " + JSON.stringify(r).slice(0, 200)); };
@@ -353,13 +353,20 @@ const D = path.join(__dirname, "../gas/out");
   // 送迎表を開くときの手直し（中抜けの初期値）が書き込みの失敗で止まっても、「読み込み中…」のままにしないで開く（2026-11-09 依頼者「読み込みがすごい時間かかってる」）
   { const m1 = api(t, "kv.get", ["master"]).data.value, r1 = api(t, "kv.get", ["master"]).data.rev; const { away1, ...noFlag } = m1;
     api(t, "kv.cas", [{ key: "master", rev: r1, value: noFlag }]); failCas = true;
-    const L = await open("sougei.html", { width: 1200, height: 800 }, 'window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-02";', "loading_v1.html");
+    const L = await open("sougei.html", { width: 1200, height: 800 }, 'window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-02";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"2026-11-02",at:Date.now()}))}catch(e){}', "loading_v1.html");
     await L.pg.waitForTimeout(500); await L.pg.fill("#sghNo", "000"); await L.pg.fill("#sghPin", "5829"); await L.pg.click("#sghGo");
     await L.pg.waitForSelector("[data-loading-step]", { timeout: 5000 }).then(async () => assert.match(await L.pg.locator("[data-loading-step]").innerText(), /を読んでいます（\d+秒）/), () => {});
     await L.pg.waitForTimeout(6000);
     assert.strictEqual(await L.pg.locator("[data-loading]").count(), 0, "手直しが失敗しても送迎表が開く");
     assert.ok(await L.pg.locator('button:text-is("職員")').count() > 0, "送迎表の画面");
     failCas = false; await L.pg.context().close(); console.log("読み込み：手直しが失敗しても開く OK"); }
+  { // ブックマーク・ホーム画面に残った日付つきのアドレス（&d=2026-11-13）で開いても当日（2026-11-27 依頼者「今ひらくと毎回11/13になっている。前みたいに当日が出るように」）
+    const today = (() => { const x = new Date(); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; })();
+    const O = await open("sougei.html", { width: 1200, height: 800 }, 'window.__SG_EDITION="v2";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-13";', "olddate_v2.html");
+    await O.pg.waitForTimeout(500); if (await O.pg.locator("#sghNo").count()) { await O.pg.fill("#sghNo", "000"); await O.pg.fill("#sghPin", "5829"); await O.pg.click("#sghGo"); }
+    await O.pg.waitForFunction(() => /^\d{4}-\d{2}-\d{2}$/.test(window.__sgCurDate || ""), null, { timeout: 20000 });
+    assert.strictEqual(await O.pg.evaluate(() => window.__sgCurDate), today, "アドレスに古い日付があっても当日で開く");
+    await O.pg.context().close(); console.log("古い日付のアドレスでも当日 OK", today); }
   console.log("画面エラー: []");
   await b.close();
 })().catch((e) => { console.error(e); process.exit(1); });

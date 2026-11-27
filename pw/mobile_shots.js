@@ -36,7 +36,7 @@ const OUT = process.argv[2] || __dirname;
     await pg.exposeFunction("__gasApi", (tk, mm, a) => api(tk, mm, a));
     await pg.addInitScript(() => { window.google = { script: { run: (function mk(s, f) { return { withSuccessHandler: (x) => mk(x, f), withFailureHandler: (x) => mk(s, x), api: (tk, m, a) => { setTimeout(() => window.__gasApi(tk, m, a).then((r) => s && s(r), (e) => f && f(e)), 20); } }; })() } }; });
     await pg.route("https://**/*", async (r) => { const u = r.request().url(); for (const k in LOC) if (u.endsWith(k)) return r.fulfill({ path: LOC[k], contentType: "application/javascript" }); return r.abort(); });
-    const boot = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${date}";`;
+    const boot = `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="${date}";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"${date}",at:Date.now()}))}catch(e){}`;
     const html = fs.readFileSync(path.join(D, "calendar.html"), "utf8").replace("/*__BOOT__*/", boot);
     fs.writeFileSync(path.join(__dirname, "m_calendar.html"), html);
     await pg.goto("file://" + path.join(__dirname, "m_calendar.html")); await pg.waitForTimeout(600);

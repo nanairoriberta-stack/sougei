@@ -41,7 +41,7 @@ const D = path.join(__dirname, "../gas/out");
   assert.ok(r0.ok, "以前の書き方（職員その他・①つき）の予定を入れる");
   const ev3 = () => Object.values(api(t, "docs.query", [{ col: "days", from: "2026-11-03", to: "2026-11-03" }]).data.reduce((a2, d) => Object.assign(a2, d.events), {})).filter((e) => /^shm/.test(e.id)).map((e) => [e.id, e.title, e.label, !!e.sg, e.deleted]);
   assert.ok(!ev3().some((e) => e[3]), "まだ書き直していない");
-  const A = await open("calendar.html", { width: 1280, height: 900 }, 'window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-03";', "cal_shfix.html");
+  const A = await open("calendar.html", { width: 1280, height: 900 }, 'window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_DATE="2026-11-03";try{localStorage.setItem("sg:dGo",JSON.stringify({d:"2026-11-03",at:Date.now()}))}catch(e){}', "cal_shfix.html");
   await A.pg.waitForTimeout(800); if (await A.pg.locator("#sghNo").count()) { await A.pg.fill("#sghNo", "000"); await A.pg.fill("#sghPin", "5829"); await A.pg.click("#sghGo"); }
   await A.pg.waitForTimeout(8000);
   let ok = false; for (let i = 0; i < 30 && !ok; i++) { ok = ev3().some((e) => e[1] === "余村慎 早番(6~9)" && e[2] === "shift" && e[3] && !e[4]); if (!ok) await A.pg.waitForTimeout(500); }

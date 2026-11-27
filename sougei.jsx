@@ -665,6 +665,11 @@ const toStr = (min) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, "
 const to24 = (t) => { const m2 = toMin(t); return m2 == null ? "" : `${String(Math.floor(m2 / 60)).padStart(2, "0")}:${String(m2 % 60).padStart(2, "0")}`; };
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+// ---------- アドレスの日付（&d=）はアプリの中で移ったときだけ（2026-11-27） ----------
+// 移る前に「この日付で開く」印を端末に残し（10分）、開いた画面はその印があるときだけアドレスの日付を使う。印は1回で消す
+const DGO_KEY = "sg:dGo";
+function markDateGo(d) { try { localStorage.setItem(DGO_KEY, JSON.stringify({ d, at: Date.now() })); } catch (e) {} }
+function takeDateGo(d) { try { const v = JSON.parse(localStorage.getItem(DGO_KEY) || "null"); localStorage.removeItem(DGO_KEY); return !!v && v.d === d && Date.now() - v.at < 600000; } catch (e) { return false; } }
 // ---------- ドラッグ&ドロップ ----------
 // dataTransferはdrop時しか読めないため、モジュール変数で共有する
 let DRAG = null;
@@ -9943,7 +9948,7 @@ function EditionSwitcher() {
   // 公開URL（…/exec）はログイン後に教わったもの（SGHost.url）を使う。開いたときの __SG_BASE は本物のGoogleで届かないことがあり、
   // そのままだと中身用のアドレス（googleusercontent…/userCodeAppPanel）へ飛んで真っ白になった（2026-10-31 実機）
   // 送迎表の版を切り替えても、見ている日付のまま開く（2026-10-31 依頼者：本日に戻ってしまっていた）
-  const withDate = (q) => (/^\?page=sougei/.test(q) || q === "?page=calendar") && /^\d{4}-\d{2}-\d{2}$/.test(window.__sgCurDate || "") ? q + "&d=" + window.__sgCurDate : q;
+  const withDate = (q) => (/^\?page=sougei/.test(q) || q === "?page=calendar") && /^\d{4}-\d{2}-\d{2}$/.test(window.__sgCurDate || "") ? (markDateGo(window.__sgCurDate), q + "&d=" + window.__sgCurDate) : q;
   const go = (q0) => {
     const q = withDate(q0);
     const href = typeof window !== "undefined" && window.SGHost && window.SGHost.url ? window.SGHost.url(q) : (/\/exec$/.test((typeof window !== "undefined" && window.__SG_BASE) || "") ? window.__SG_BASE + q : "");
@@ -10010,7 +10015,9 @@ function AppInner() {
   const claudeProps = useClaudeProposals();
   const [date, setDate] = useState(() => {
     // 新体制版は開始日(11/1)より前に開いたらその日を表示。カレンダーから日付付きで開いたらその日
-    const d0 = typeof window !== "undefined" && /^\d{4}-\d{2}-\d{2}$/.test(window.__SG_DATE || "") ? window.__SG_DATE : "";
+    // アドレスの日付（&d=）は、アプリの中で版の切替・メニューから移ったとき（10分以内の印 sg:dGo）だけ使う。
+    // ブックマーク・ホーム画面に日付つきのアドレスが残っていても、開くといつも当日（2026-11-27 依頼者「今ひらくと毎回11/13になっている。前みたいに当日が出るように」）
+    const d0 = typeof window !== "undefined" && /^\d{4}-\d{2}-\d{2}$/.test(window.__SG_DATE || "") && takeDateGo(window.__SG_DATE) ? window.__SG_DATE : "";
     if (d0) return d0;
     const t = todayStr();
     return EDITION_START && t < EDITION_START ? EDITION_START : t;

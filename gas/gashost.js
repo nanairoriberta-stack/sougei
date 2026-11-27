@@ -203,6 +203,8 @@ function toggleMenu() {
   const links = [];
   // 送迎表から開くときは、見ている日付のまま（2026-10-31 依頼者）
   const dq = page === "sougei" && /^\d{4}-\d{2}-\d{2}$/.test(G.__sgCurDate || "") ? "&d=" + G.__sgCurDate : "";
+  // 送迎表は、アプリの中で移ったときだけアドレスの日付を使う（sougei.jsx の takeDateGo。2026-11-27 依頼者「毎回11/13になっている」）
+  if (dq) try { localStorage.setItem("sg:dGo", JSON.stringify({ d: G.__sgCurDate, at: Date.now() })); } catch (e) {}
   if (!isExec(BASE)) links.push(`<small style="color:#9a6a00">送迎表・カレンダーをメニューから開くには、スプレッドシートの「設定」シートのB2に公開URL（最後が /exec）を貼ってください</small>`);
   else if (page !== "calendar") links.push(`<a href="${esc(url("?page=calendar" + dq))}" target="_top">📅 カレンダー</a>`);
   if (isExec(BASE) && page !== "shift") links.push(`<a href="${esc(url("?page=shift"))}" target="_top">🗓 シフト表（希望休）</a>`);   // マンション職員の早番・遅番（2026-11-02）
