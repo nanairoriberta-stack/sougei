@@ -121,7 +121,7 @@ function askNewPin(first, oldPin) {
   };
 }
 function setMe(m) { me = m; store.set(MK, JSON.stringify(m)); renderChip(); }
-function done() { keepTok(); hideOverlay(); renderChip(); readyResolve(me); for (const f of listeners) { try { f(me); } catch (e) {} } loadDirectory(); learnBase(); pushAsk(false); }
+function done() { tokOk(); keepTok(); hideOverlay(); renderChip(); readyResolve(me); for (const f of listeners) { try { f(me); } catch (e) {} } loadDirectory(); learnBase(); pushAsk(false); }
 // ---- スマホの通知（入口のページの中で開いているときだけ。2026-11-16 依頼者「通知機能・全員・予定が入った時と今日の予定」） ----
 // 入口のページに「通知を受け取りますか」と頼み、登録できたら（push-sub）サーバーに覚えてもらう。止めたら（push-unsub）消してもらう
 let pushKey = "";
@@ -339,11 +339,25 @@ async function pollOnce() {
 }
 function startPolling(ms) { setInterval(pollOnce, ms); document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pollOnce(); }); G.addEventListener("focus", pollOnce); G.addEventListener("online", pollOnce); }
 
+/* ---------- 先読み（2026-11-27 依頼者「スマホでの表示時間を早くしてほしい」） ----------
+   ログインの確認（auth.me）が終わるのを待たずに、ログインの鍵が分かった時点で最初の月の予定を読み始める（iPhoneのホーム画面から開くと毎回 確認→読む の順に待っていた）。
+   先に読んだ分は最初の1回だけ使う（fetchDocs）。失敗したらふつうに読み直す */
+let tokOk, tokenReady = new Promise((r) => { tokOk = r; });
+const EARLY = new Map();
+function prefetchDocs(q) {
+  const k = q.col + "|" + q.from + "|" + q.to;
+  return tokenReady.then(() => { if (!EARLY.has(k)) EARLY.set(k, { at: Date.now(), p: rawCall("docs.query", [q]) }); });
+}
 /* ---------- カレンダー用のデータ窓口（読み取りはサーバー、書込は操作単位でサーバーへ） ---------- */
 function makeQuery(col, filters) {
   const range = () => { let from = "", to = ""; for (const [f, op, v] of filters) { if (op === ">=") from = from && from > v ? from : v; if (op === "<=") to = to < v ? to : v; } return { col, from, to }; };
   const local = (docs) => docs.filter((d) => filters.every(([f, op, v]) => op === ">=" ? d[f] >= v : op === "<=" ? d[f] <= v : op === "<" ? d[f] < v : op === "==" ? d[f] === v : true));
-  const fetchDocs = async () => local(await call("docs.query", range())).map((d, i) => ({ id: String(i), exists: true, data: () => d, metadata: {} }));
+  const fetchDocs = async () => {
+    const q = range(), k = q.col + "|" + q.from + "|" + q.to, e = EARLY.get(k); let raw = null;
+    if (e) { EARLY.delete(k); if (Date.now() - e.at < 60000) { try { raw = await e.p; } catch (x) { raw = null; } } }   // 先に読んだ分（1分以内）
+    if (!raw) raw = await call("docs.query", q);
+    return local(raw).map((d, i) => ({ id: String(i), exists: true, data: () => d, metadata: {} }));
+  };
   return {
     where: (f, op, v) => makeQuery(col, filters.concat([[f, op, v]])), orderBy() { return this; }, limit() { return this; },
     get: async () => { const docs = await fetchDocs(); return { docs, size: docs.length, empty: !docs.length, docChanges: () => [], metadata: {} }; },
@@ -376,10 +390,11 @@ const sampleShim = Object.assign(async (input, opts) => {
 }, { limits: async () => ({ images: false }) });
 G.claude = { use: async (n) => { await ready; return { db: dbShim, user: userShim, downloads: downloadsShim, sample: sampleShim }[n] || null; } };
 
-G.SGHost = { ready, call, store, loadExcelJs, get me() { return me; }, edition: ED, wrap: WRAP, get base() { return BASE; }, url, onLogin: (f) => listeners.add(f), startPolling, pollOnce, refreshCalendar: () => Promise.all([...calSubs].map((f) => f())), runOp: async (op) => { const r = await call("cal.apply", op); if (r && r.status === "ok") { let done = false; try { done = !!(r.docs && r.docs.length && G.__calPatch && G.__calPatch(r.docs)); } catch (e) {} if (!done) { try { await Promise.all([...calSubs].map((f) => f())); } catch (e) {} } } return r; }, toast: toastHost, directory: () => directory, loadDirectory };
+G.SGHost = { ready, call, store, loadExcelJs, get me() { return me; }, edition: ED, wrap: WRAP, get base() { return BASE; }, url, onLogin: (f) => listeners.add(f), startPolling, pollOnce, prefetchDocs, refreshCalendar: () => Promise.all([...calSubs].map((f) => f())), runOp: async (op) => { const r = await call("cal.apply", op); if (r && r.status === "ok") { let done = false; try { done = !!(r.docs && r.docs.length && G.__calPatch && G.__calPatch(r.docs)); } catch (e) {} if (!done) { try { await Promise.all([...calSubs].map((f) => f())); } catch (e) {} } } return r; }, toast: toastHost, directory: () => directory, loadDirectory };
 
 /* ---------- 起動：保存済みのログインがあれば、通信できなくてもそのまま使える（未送信は端末に保存） ---------- */
 function boot() {
+  if (token) tokOk();   // 端末・鍵のアドレスにログインがあれば、確認を待たずに先読みを始める
   if (token && me && !me.mustChange) { done(); call("auth.me").then((m) => setMe(Object.assign({}, m))).catch(() => {}); }
   else if (token && !me && token === KEY) {   // 鍵のアドレスで開いた（端末にログインの記録が無い）：鍵でログインできるか聞く
     call("auth.me").then((m) => { store.set(TK, token); setMe(Object.assign({}, m)); if (m.mustChange) askNewPin(true); else done(); })
@@ -394,7 +409,7 @@ function boot() {
     new Promise((res) => { tokWait = res; try { G.top.postMessage({ sg: "need-token" }, WRAP); } catch (e) { res(""); } setTimeout(() => { if (tokWait === res) { tokWait = null; res(""); } }, 1500); })
       .then((t) => {
         if (!t) return needLogin();
-        token = t;
+        token = t; tokOk();   // 入口のページに覚えたログイン：確認（auth.me）と同時に先読み
         call("auth.me").then((m) => { store.set(TK, token); setMe(Object.assign({}, m)); if (m.mustChange) askNewPin(true); else done(); })
           .catch(() => { token = ""; try { G.top.postMessage({ sg: "keep-token-clear" }, WRAP); } catch (e) {} needLogin(); });
       });

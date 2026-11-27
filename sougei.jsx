@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import * as THREE from "three";
+// 3Dの部品（three.js、約600KB）は 3D の画面を開いたときだけ読む（2026-11-27 依頼者「アプリを開いてから画面が見れるまでにかなり時間かかる」。以前は開くたびに読んでいた）
+const THREE = new Proxy({}, { get: (_, k) => (typeof window !== "undefined" && window.THREE ? window.THREE[k] : undefined) });
+let threeP = null;
+function loadThree() {
+  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
+  if (window.THREE) return Promise.resolve(window.THREE);
+  return threeP || (threeP = new Promise((ok, ng) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"; sc.onload = () => ok(window.THREE); sc.onerror = () => { threeP = null; ng(new Error("3Dの部品を読み込めませんでした")); }; document.head.appendChild(sc); }));
+}
 
 /* ============================================================
    介護事業所 送迎表アプリ v2
@@ -7757,6 +7764,8 @@ function Sim3D({ master, data, weekday, height, compact, widthHint }) {
     (async () => {
       let scene, camera;
       try {
+        await loadThree();
+        if (!alive) return;
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       } catch (e) { setWebglNg(true); return; }
       if (!alive) return;

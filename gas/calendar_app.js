@@ -1212,6 +1212,9 @@ window.addEventListener("message",e=>{
 $("ver").textContent="v"+appVer();try{window.SGHost&&SGHost.onLogin&&SGHost.onLogin(()=>{$("ver").textContent="v"+appVer()})}catch{}
 render();
 (async()=>{
+  if(/^\d{4}-\d{2}-\d{2}$/.test(window.__SG_DATE||"")){S.sel=window.__SG_DATE;const d=parse(S.sel);S.cursor=new Date(d.getFullYear(),d.getMonth(),1)}
+  // ログインの確認を待たずに、最初に出す月の予定を読み始める（2026-11-27 依頼者「スマホでの表示時間を早くしてほしい」。subscribe が同じ範囲を先に読んだ分から使う）
+  try{const r=gridRange();window.SGHost.prefetchDocs&&window.SGHost.prefetchDocs({col:"days",from:ymd(r.start),to:ymd(r.end)})}catch{}
   await window.SGHost.ready;
   if(/^\d{4}-\d{2}-\d{2}$/.test(window.__SG_DATE||"")){S.sel=window.__SG_DATE;const d=parse(S.sel);S.cursor=new Date(d.getFullYear(),d.getMonth(),1);if(window.__SG_EMBED&&isMob())S.dayOpen=true}   // 送迎表の右では、その日の一覧を開いておく
   try{user=await window.claude.use("user")}catch{user=null}

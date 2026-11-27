@@ -55,7 +55,6 @@ sg_html = f'''<!DOCTYPE html>
 <script>window.__sgRun=[];</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>{runjs('calcore.js')}</script>
 <script>{runjs('kvsync.js')}</script>
 <script>{runjs('calsync.js')}</script>
