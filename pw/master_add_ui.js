@@ -203,6 +203,15 @@ const D = path.join(__dirname, "../gas/out");
     await P.pg.click(`[data-staff-col="${all[0]}"] >> nth=0`); await P.pg.waitForTimeout(400);
     assert.ok(/基本部署：/.test(await P.pg.textContent("[data-base-dept]")), "基本部署は表示だけ");
     assert.strictEqual(await P.pg.locator('text=基本部署の変更').count(), 0, "基本部署の変更の選択はない");
+    { // 時刻は全角で打っても半角の 9:00 に（2026-11-27 依頼者「毎回全角で打って、半角に直して打ち直すのがめんどくさい」）
+      const st = P.pg.locator('input[placeholder="例:10:00"]').first(), en = P.pg.locator('input[placeholder="例:15:00"]').first();
+      await st.fill("１０：３０"); await en.click(); await P.pg.waitForTimeout(200);
+      assert.strictEqual(await st.inputValue(), "10:30", "全角の１０：３０ → 10:30");
+      await en.fill("１５３０"); await st.click(); await P.pg.waitForTimeout(200);
+      assert.strictEqual(await en.inputValue(), "15:30", "数字だけの１５３０（時刻の欄）→ 15:30");
+      const r = await P.pg.evaluate(() => [["９時", true], ["9.15", true], ["900", false], ["９：００", false], ["25:00", true], ["14:00", true]].map(([v, t]) => SGTime.fix(v, t)));
+      assert.deepStrictEqual(r, ["9:00", "9:15", null, "9:00", null, null], "直し方");
+      console.log("時刻の全角→半角 OK"); }
     await P.pg.click('button:text-is("キャンセル")'); await P.pg.waitForTimeout(300);
     { // ﾘﾍﾞﾙﾀのみ（2026-11-23 依頼者）：職員のタブのチェック → 送迎表のその人の出勤の時刻のマスのいちばん上に「ﾘﾍﾞﾙﾀのみ」のコマ
       await P.pg.click('button:text-is("職員")'); await P.pg.waitForTimeout(500);

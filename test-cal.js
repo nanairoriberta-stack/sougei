@@ -414,6 +414,16 @@ console.log('extra OK');
   const s2 = Object.assign({}, sheet, { blocks: [{ id: 'm1', kind: 'help', time: '10:00', label: '森井ヘルプ', staffId: S('日野').id }, { id: 'm2', kind: 'help', time: '11:00', label: '森ヘルプ', staffId: S('日野').id }] });
   const r2 = C.reconcile(m, s2, [{ id: 'evhc2', rev: 1, date: D, endDate: D, allDay: true, title: '森 ヘルプキャンセル', sg: T.normSg({ type: 'help_cancel', users: ['森'] }) }], D);
   assert.deepStrictEqual(r2.blocks.map((b) => b.label), ['森井ヘルプ'], '森井さんのヘルプは残す');
+  // いくつかの時刻をまとめて（ats。2026-11-27 依頼者「1日に2回ヘルプがデフォルトで入っている人のヘルプキャンセルをまとめて」）
+  const s3 = Object.assign({}, sheet, { blocks: [{ id: 'n1', kind: 'help', time: '8:00', label: '中村ヘルプ', staffId: S('日野').id }, { id: 'n2', kind: 'help', time: '12:00', label: '中村（通院）', staffId: S('日野').id }, { id: 'n3', kind: 'help', time: '16:00', label: '中村入浴', staffId: S('日野').id }] });
+  const sg3 = T.normSg({ type: 'help_cancel', users: ['中村'], ats: ['08:00', '16:00', 'x'] });
+  assert.deepStrictEqual(sg3.ats, ['08:00', '16:00'], 'ats は時刻の形だけ残す');
+  assert.ok(!('ats' in T.normSg({ type: 'help', users: ['中村'], ats: ['08:00'] })), 'ats はキャンセルだけ');
+  const r3 = C.reconcile(m, s3, [{ id: 'evhc3', rev: 1, date: D, endDate: D, allDay: true, title: '中村 8:00・16:00のヘルプキャンセル', sg: sg3 }], D);
+  assert.deepStrictEqual(r3.blocks.map((b) => b.label), ['中村（通院）'], '選んだ2つ（8:00・16:00）だけなし');
+  assert.ok(/08:00・16:00のヘルプをなしに（2件）|8:00・16:00のヘルプをなしに（2件）/.test(C.summary(m, r3, [{ id: 'evhc3', rev: 1, date: D, endDate: D, allDay: true, title: 'x', sg: sg3 }], D)[0].time), '反映中の説明');
+  assert.deepStrictEqual(C.reconcile(m, r3, [], D).blocks.map((b) => b.label).sort(), ['中村ヘルプ', '中村入浴', '中村（通院）'].sort(), '予定を消すと2つとも戻る');
+  assert.ok(C.helpOfUser('中村入浴', '中村') && !C.helpOfUser('森井ヘルプ', '森'), 'その人のヘルプか');
   console.log('help cancel OK', nm, mine.length + '件');
 }
 // ===== リベルタ利用（ﾏﾝｼｮﾝの泊まり なし/あり。〇日の夜から〜〇日の朝。2026-11-07 依頼者） =====

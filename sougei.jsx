@@ -190,7 +190,7 @@ const weekdayOf = (dateStr) => {
 };
 const toMin = (t) => {
   if (!t) return null;
-  const m = String(t).match(/(\d{1,2})[:：](\d{1,2})/);
+  const m = String(t).replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).match(/(\d{1,2})[:：](\d{1,2})/);   // 全角の数字でも読む（2026-11-27）
   if (!m) return null;
   return Number(m[1]) * 60 + Number(m[2]);
 };

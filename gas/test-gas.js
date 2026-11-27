@@ -231,6 +231,13 @@ async function bootstrap() {
     assert.deepStrictEqual(s.staffOv[S("八壁")], { workToday: true, start: "9:00", end: "15:00", deptId: m.departments.find((d) => d.name === "津田").id }, "休日出勤（時間）＋勤務時間変更（退勤）");
     assert.strictEqual(s.runs.length, p.runs.length, "便はそのまま");
     const names = await sg.call("names.list"); assert.ok(names.depts.includes("津田") && names.users.length, "部署・利用者の一覧");
+    { // いつものヘルプ（週間パターン）を名前・曜日ごとに（カレンダーのヘルプキャンセルで見せる。2026-11-27 依頼者）
+      const E2 = engFor("v2"), m2 = await admin.kv().get("v2:master"), p1 = E2.resolveSeedPattern(m2, E2.SEED_PATTERNS.mon), cur = await admin.call("kv.get", "v2:pattern:1");
+      await admin.call("kv.cas", { key: "v2:pattern:1", rev: cur ? cur.rev : 0, value: p1 }); g.ctx.CacheService.getScriptCache().remove("names9");
+      const nh = await sg.call("names.list"), ku = (nh.helps["黒田"] || {})["1"] || [];
+      const want = p1.blocks.filter((b) => b.kind === "help" && g.ctx.SGCal.helpOfUser(b.label, "黒田")).map((b) => b.time);
+      assert.ok(ku.length >= 2 && want.every((t) => ku.some((x) => x.t === t)), "黒田さんの月曜のいつものヘルプ " + JSON.stringify(ku) + " / " + JSON.stringify(want));
+      assert.ok(ku.every((x, i) => !i || g.ctx.toMinG_(ku[i - 1].t) <= g.ctx.toMinG_(x.t)) && ku.every((x) => /黒田/.test(x.l)), "時刻の順・名前つき"); }
     // モニタリング・支援会議・その他予定：ほかの職員を対応者・担当にできる（2026-10-31〜 一般職員も）
     const mon = (who, extra) => ev("モニタリング（森）", "monitor", { type: "staff_plan", staff: who, users: ["森"] }, ["13:30", "14:30"], Object.assign({ place: "自宅" }, extra));
     await sg.call("cal.apply", { kind: "upsert", opId: "op_mon00001", id: "ev_mon00001", baseRev: null, ev: mon(["日野"]) });

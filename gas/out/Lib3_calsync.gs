@@ -80,7 +80,7 @@ function specsFor(master, events, date) {
     out.push({ id: ev.id, rev: ev.rev, type: sg0.type, koma: !ev.sg, title: title0, whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(sg0.meet), send: appTime(sg0.send), noMeet: sg0.noMeet || "", noSend: sg0.noSend || "", missing,
       reason: sg0.reason || "", note: sg0.note || "", deptId: dept ? dept.id : "",
-      goMeet: !!sg0.goMeet, goSend: !!sg0.goSend, wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, libOnly: !!sg0.libOnly, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, tbd: !!sg0.tbd, at: appTime(sg0.at),
+      goMeet: !!sg0.goMeet, goSend: !!sg0.goSend, wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, libOnly: !!sg0.libOnly, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, tbd: !!sg0.tbd, at: appTime(sg0.at), ats: (sg0.ats || []).map(appTime).filter(Boolean),
       memo: memoOf(ev), missUsers: missingUsers, lib: sg0.lib || "off", libParts: sg0.type === "liberta" ? libParts(ev, date) : null });
   }
   return out;
@@ -215,14 +215,16 @@ function revert(next, rec, selfId) {
    消したコマは記録して、予定を消したら元に戻す。パターン読込などでまた入ったら、また消す（heal） */
 const HC_SEP = /^(ヘルプ|入浴|家事|通院|トイレ|対応|付き?添い?|受診|[（(・･\s　]|$)/;
 function helpCancelHits(sheet, spec) {
-  const names = spec.users.map((u) => u.name).filter(Boolean), at = toMinX(spec.at);
+  // 時刻はいくつか選べる（ats。2026-11-27 依頼者「1日に2回ヘルプがある人のヘルプキャンセルをまとめて」）。何も選んでいなければその日のこの人のヘルプ全部
+  const names = spec.users.map((u) => u.name).filter(Boolean), ats = new Set([...(spec.ats || []), spec.at].map(toMinX).filter((x) => x != null));
   return (sheet.blocks || []).filter((b) => {
     if (!b || b.kind !== "help" || /^(cal_|lk_)/.test(String(b.id || ""))) return false;
-    if (at != null && toMinX(b.time) !== at) return false;
-    const lb = String(b.label || "").trim();
-    return names.some((n) => lb.startsWith(n) && HC_SEP.test(lb.slice(n.length)));
+    if (ats.size && !ats.has(toMinX(b.time))) return false;
+    return names.some((n) => helpOfUser(b.label, n));
   });
 }
+// ヘルプの名前がその利用者のものか（「中村ヘルプ」「中村入浴」「中村（通院）」。森と森井は混ぜない）
+function helpOfUser(label, name) { const lb = String(label || "").trim(); return !!name && lb.startsWith(name) && HC_SEP.test(lb.slice(name.length)); }
 const hcKey = (b) => `${String(b.label || "").trim()}@${toMinX(b.time)}`;
 /* リベルタ（ﾏﾝｼｮﾝ）の泊まり：その日に当たるのは朝（迎え）・夜（送り）のどちらか（2026-11-07 依頼者「〇日の夜から〜〇日の朝がいない」）。
    開始日は「朝から」なら朝・夜、「夜から」なら夜だけ。終了日は「夜まで」なら朝・夜、「朝まで」なら朝だけ。間の日は朝・夜 */
@@ -476,7 +478,7 @@ function summary0(master, sheet, events, date) {
       s.type === "help" ? `${s.from}〜${s.note ? `・${s.note}` : ""}${s.staff.length ? "" : "・担当は未定（保留欄）"}` :
       s.type === "shift" ? [s.tbd && `${s.note ? s.note + "後" : "用事が済み次第"}出勤（時刻未定）`, s.wstart && `${s.tbd ? "見込み" : "出勤"}${s.wstart}`, s.wend && `退勤${s.wend}`, s.afrom && `中抜け${s.afrom}〜${s.ato}`, s.noAway && "中抜けなし", s.noRide && "送迎なし", s.libOnly && "ﾘﾍﾞﾙﾀのみ"].filter(Boolean).join("・") || "部署の変更" :
       s.type === "liberta" ? `リベルタ${[s.libParts && s.libParts.am && "朝", s.libParts && s.libParts.pm && "夜"].filter(Boolean).join("・")}${s.lib === "on" ? "あり" : "なし"}` :
-      s.type === "help_cancel" ? `${s.at ? s.at + "の" : "その日の"}ヘルプをなしに${(() => { const r = ((sheet && sheet.calApplied) || {})[s.id]; const n = ((r && r.cancelled) || []).length; return n ? `（${n}件）` : "（送迎表にまだ無い）"; })()}` :
+      s.type === "help_cancel" ? `${(s.ats || []).length ? s.ats.join("・") + "の" : s.at ? s.at + "の" : "その日の"}ヘルプをなしに${(() => { const r = ((sheet && sheet.calApplied) || {})[s.id]; const n = ((r && r.cancelled) || []).length; return n ? `（${n}件）` : "（送迎表にまだ無い）"; })()}` :
       s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) + (s.libOnly ? "・ﾘﾍﾞﾙﾀのみ" : "") : s.type === "user_time" || s.type === "user_extra" ? [s.type === "user_extra" ? "今日だけ利用" : "", s.goMeet && "こちらから迎える", s.goSend && "こちらから送る", s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
 }
 
@@ -579,6 +581,6 @@ function peopleWithPast(master) {
   return o;
 }
 
-const API = { peopleAt, peopleWithPast, reconcile, specsFor, komaSg, summary, TYPE_LABEL, appTime, REQ_ID, linkReqs, linkApply, linkStatus, exportSnapOf, exportChanges };
+const API = { helpOfUser, peopleAt, peopleWithPast, reconcile, specsFor, komaSg, summary, TYPE_LABEL, appTime, REQ_ID, linkReqs, linkApply, linkStatus, exportSnapOf, exportChanges };
 if (typeof module !== "undefined" && module.exports) module.exports = API; else G.SGCal = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);

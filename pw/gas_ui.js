@@ -1145,13 +1145,31 @@ const D = path.join(__dirname, "../gas/out");
     const D25 = "2026-11-27";
     await add("hcancel"); await A.pg.fill("#f-date", D25); await A.pg.fill("#f-enddate", D25);
     assert.strictEqual(await A.pg.evaluate(() => document.querySelector('input[name="f-grp"]:checked').value), "user", "利用者の中");
-    await pick("users", "中村"); await A.pg.check('input[name="w-hc"][value="time"]'); await A.pg.waitForTimeout(300);
-    await save(600); assert.match(await A.pg.locator("#f-err").textContent(), /時刻を入れて/, "時刻を選ぶなら時刻が要る");
+    await pick("users", "中村"); await A.pg.check('input[name="w-hc"][value="pick"]'); await A.pg.waitForTimeout(300);
+    await save(600); assert.match(await A.pg.locator("#f-err").textContent(), /なしにするヘルプを選んで/, "選ぶなら時刻が要る");
     await A.pg.fill("#w-hct", "16:00"); await save(2000);
     const ev = Object.values(api(t, "docs.query", [{ col: "days", from: D25, to: D25 }]).data.reduce((a, d) => Object.assign(a, d.events), {})).find((e) => e.label === "hcancel");
     assert.ok(ev && ev.title === "中村 16:00のヘルプキャンセル" && ev.sg.type === "help_cancel" && ev.sg.at === "16:00" && ev.allDay, "ヘルプキャンセルの予定 " + JSON.stringify(ev && { t: ev.title, sg: ev.sg }));
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
     console.log("ヘルプキャンセル:", ev.title); }
+  { // いつものヘルプが見えて、いくつか選んでまとめてなしにできる（2026-11-27 依頼者「1日に2回ヘルプがデフォルトで入っている人のヘルプキャンセルをまとめて」「デフォルトのヘルプが目視できるか選択できるように」）
+    const D30 = "2026-11-30";   // 月曜（週間パターンが入っている曜日）
+    await add("hcancel"); await A.pg.fill("#f-date", D30); await A.pg.fill("#f-enddate", D30); await A.pg.waitForTimeout(200);
+    await pick("users", "黒田"); await A.pg.waitForTimeout(300);
+    const defs = await A.pg.$$eval("[data-hc-def] .hc-def li", (l) => l.map((x) => x.textContent));
+    assert.ok(defs.length >= 2 && defs.every((x) => /黒田/.test(x)) && /月曜日/.test(await A.pg.textContent("[data-hc-def]")), "いつものヘルプ（月曜日）が見える " + JSON.stringify(defs));
+    assert.ok(new RegExp(`いつもは${defs.length}回`).test(await A.pg.textContent("#sgArea")), "全部の回数");
+    await A.pg.check('input[name="w-hc"][value="pick"]'); await A.pg.waitForTimeout(300);
+    const picks = await A.pg.$$eval("[data-hc-pick]", (l) => l.map((x) => x.getAttribute("data-hc-pick")));
+    assert.strictEqual(picks.length, defs.length, "いつものヘルプを選べる");
+    await A.pg.check(`[data-hc-pick="${picks[0]}"] input`); await A.pg.check(`[data-hc-pick="${picks[picks.length - 1]}"] input`); await save(2000);
+    const ev2 = Object.values(api(t, "docs.query", [{ col: "days", from: D30, to: D30 }]).data.reduce((a, d) => Object.assign(a, d.events), {})).find((e) => e.label === "hcancel" && !e.deleted);
+    const hm = (x) => x.replace(/^0/, "");
+    assert.ok(ev2 && JSON.stringify(ev2.sg.ats) === JSON.stringify([picks[0], picks[picks.length - 1]]) && ev2.title === `黒田 ${hm(picks[0])}・${hm(picks[picks.length - 1])}のヘルプキャンセル`, "2つまとめて " + JSON.stringify(ev2 && { t: ev2.title, sg: ev2.sg }));
+    await A.pg.locator(".ev-row, .ds-row", { hasText: ev2.title }).first().evaluate((x) => x.click()).catch(() => {}); await A.pg.waitForTimeout(500);
+    if (await A.pg.locator("[data-hc-pick]").count()) { const ck = await A.pg.$$eval('[data-hc-pick] input:checked', (l) => l.map((x) => x.value)); assert.deepStrictEqual(ck, [picks[0], picks[picks.length - 1]], "開き直しても選んだまま"); await A.pg.click("[data-close]"); await A.pg.waitForTimeout(300); }
+    await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
+    console.log("ヘルプキャンセル（いつものヘルプから選ぶ）:", ev2.title); }
   { // リベルタ利用（なし/あり・〇日の夜から〜〇日の朝。2026-11-07 依頼者）。名前の候補はリベルタの利用者だけ
     await add("liberta"); await A.pg.fill("#f-sgq-users", ""); await A.pg.focus("#f-sgq-users"); await A.pg.waitForTimeout(200);
     { const cands = await A.pg.$$eval('[data-sgpick="users"]', (o) => o.map((x) => x.dataset.name)), nl = api(t, "names.list", []).data.users;

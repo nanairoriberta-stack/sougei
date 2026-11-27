@@ -399,5 +399,27 @@ function boot() {
   }
   else needLogin();
 }
+/* 時刻の欄は全角で打っても半角の「9:00」に直す（2026-11-27 依頼者「時刻の入力を送迎表の職員の時間変更などもすべて9:00みたいに打てるように。毎回全角で打って、半角に直して打ち直すのがめんどくさい」）。
+   打ち終わったとき（欄を出る・Enter）に直す（変換の途中では直さない）。どの画面（送迎表・カレンダー・シフト表）の文字の欄でも。
+   時刻の欄（見本が「8:30」のような欄・data-time）では「900」「0900」「9時」「9時30分」「9」「9.30」も 9:00・9:30 に。ほかの欄は全角の「９：００」だけ直す */
+const Z2H = (s) => String(s).replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[：︰﹕]/g, ":").replace(/[．。]/g, ".").replace(/[\s　]/g, "");
+function timeFix(raw, timeish) {
+  raw = String(raw == null ? "" : raw); if (!raw || /^\d{1,2}:\d{2}$/.test(raw)) return null;
+  const s = Z2H(raw); let m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m && timeish) m = /^(\d{1,2})[.;](\d{2})$/.exec(s) || /^(\d{1,2})時(\d{1,2})分?$/.exec(s) || /^(\d{1,2})(\d{2})$/.exec(s) || ((m = /^(\d{1,2})時?$/.exec(s)) ? [m[0], m[1], "0"] : null);
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]); if (h > 24 || mi > 59) return null;
+  const out = h + ":" + String(mi).padStart(2, "0"); return out === raw ? null : out;
+}
+const isTimeish = (el) => el.hasAttribute("data-time") || /\d{1,2}[:：]\d{2}/.test(el.getAttribute("placeholder") || "");
+function fixTimeInput(el) {
+  if (!el || el.tagName !== "INPUT" || (el.type && el.type !== "text" && el.type !== "search") || el.readOnly || el.disabled) return;
+  const v = timeFix(el.value, isTimeish(el)); if (v == null) return;
+  const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set; set.call(el, v);   // React の欄にも届くように
+  el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+document.addEventListener("focusout", (e) => fixTimeInput(e.target), true);
+document.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) fixTimeInput(e.target); }, true);
+G.SGTime = { fix: timeFix };
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })(typeof globalThis !== "undefined" ? globalThis : this);
