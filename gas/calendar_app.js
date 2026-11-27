@@ -443,7 +443,7 @@ function prefetch(){
 const SHFIX=new Set();
 function shFixCheck(){const H=window.SGHost;if(!H||!H.call||!S.server)return;const want=new Set();
   for(const e of Object.values(S.server)){if(!e||e.deleted)continue;const m=/^sh([mf])(\d{4})(\d{2})\d{2}_/.exec(String(e.id||""));if(!m)continue;
-    if(e.label==="sother"||!e.sg||/[①②③]/.test(e.title||""))want.add(`${m[1]}|${m[2]}-${m[3]}`)}
+    want.add(`${m[1]}|${m[2]}-${m[3]}`)}   // 書き方や時刻（日勤の時刻など）が変わったときも直るよう、シフト表の予定がある月は1回聞く（書くことが無ければサーバーは何もしない。2026-11-27）
   for(const k of want){if(SHFIX.has(k))continue;SHFIX.add(k);const[g,ym]=k.split("|");
     (async()=>{try{for(let i=0;i<10;i++){const r=await H.call("shift.calFix",{group:g,ym});if(!r||!(r.left>0))break}if(H.pollOnce)H.pollOnce()}catch(e){}})()}}
 let pfT;

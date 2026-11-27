@@ -199,7 +199,12 @@ console.log("shift OK", S.holes(dr, cfg, ym).length, "の穴が下書きのあ�
   assert.ok(hb2.sg.wstart === "06:00" && hb2.sg.wend === "22:00" && !hb2.sg.afrom && hb2.sg.reason === "早番・遅番", "早番＋遅番（間が空かなければ中抜けなし＝いつもの中抜けのまま） " + JSON.stringify(hb2.sg));
   const n9 = S.calSgOf({ name: "余村慎", duty: [{ k: "l", t: "" }] }); assert.ok(n9.sg.wstart === "13:00" && n9.sg.wend === "22:00", "9時間の人の遅番");
   const hw = S.calSgOf({ name: "長島", hwork: true, duty: [{ k: "d", t: "~13" }] });
-  assert.ok(hw.label === "hwork" && hw.sg.type === "hwork" && !hw.allDay && hw.start === "08:30" && hw.end === "13:00", "基本では休みの曜日＝休日出勤 " + JSON.stringify(hw));
+  assert.ok(hw.label === "hwork" && hw.sg.type === "hwork" && !hw.allDay && hw.start === "09:00" && hw.end === "13:00", "基本では休みの曜日＝休日出勤 " + JSON.stringify(hw));
+  // 日勤は 9:00〜18:00、嘱託の宮永さんは 9:00〜17:30（2026-11-27 依頼者）
+  assert.deepStrictEqual(S.dutyTimes("近藤", "d", ""), ["09:00", "18:00"], "ﾘﾍﾞﾙﾀの日勤");
+  assert.deepStrictEqual(S.dutyTimes("宮永", "d", ""), ["09:00", "17:30"], "宮永さんの日勤");
+  assert.deepStrictEqual(S.dutyTimes("宮永", "d", "~13"), ["09:00", "13:00"], "時間の補足はその時刻");
+  const sat = S.calSgOf({ name: "秋山", duty: [{ k: "d", t: "" }] }); assert.ok(sat.sg.wstart === "09:00" && sat.sg.wend === "18:00", "職員時間変更の日勤 " + JSON.stringify(sat.sg));
   const away = S.calSgOf({ name: "野津", duty: [{ k: "e", t: "6~9" }, { k: "l", t: "17~22" }] });
   assert.ok(away.sg.wstart === "06:00" && away.sg.wend === "22:00" && away.sg.afrom === "09:00" && away.sg.ato === "17:00", "早番と遅番の間は中抜け");
   const sun = diff.filter((x) => x.hwork); assert.ok(sun.every((x) => S.calSgOf(x).label === "hwork"));
