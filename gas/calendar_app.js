@@ -964,7 +964,9 @@ function dupOf(ev){
   const key=e=>[lab(e.label),bizOf(e),e.sg?e.sg.type:"",e.sg?e.sg.half||"":"",e.allDay?"":e.start].join("|");
   const who=e=>new Set([...((e.sg&&e.sg.staff)||[]),...((e.sg&&e.sg.users)||[])]);
   const k=key(ev),w=who(ev);
-  return allEvents().find(e=>!e.deleted&&e.date<=ev.endDate&&e.endDate>=ev.date&&key(e)===k&&(w.size?[...w].some(n=>who(e).has(n)):e.title===ev.title));
+  // 宿直は始まる日がちがえば別の予定（15日の宿直明けの16日の夜にまた宿直、など。2026-11-27 依頼者「2重で登録できるように」）
+  const shk=e=>!!(e&&e.sg&&e.sg.type==="hwork"&&e.sg.shuku);
+  return allEvents().find(e=>!e.deleted&&e.date<=ev.endDate&&e.endDate>=ev.date&&key(e)===k&&!((shk(e)||shk(ev))&&e.date!==ev.date)&&(w.size?[...w].some(n=>who(e).has(n)):e.title===ev.title));
 }
 function save(){
   readForm();const d=ed.d;
