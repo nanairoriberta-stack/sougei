@@ -1207,6 +1207,15 @@ const D = path.join(__dirname, "../gas/out");
     const o25 = (api(t, "kv.get", ["v2:sheet:2026-11-25"]).data.value.staffOv || {})[hino.id] || {}, o26 = (api(t, "kv.get", ["v2:sheet:2026-11-26"]).data.value.staffOv || {})[hino.id] || {};
     assert.ok(o25.workToday && o25.start === "17:00", "泊まる日（11/25）の送迎表に出勤 " + JSON.stringify(o25));
     assert.ok(!o26.workToday, "翌日（11/26）の送迎表には出さない " + JSON.stringify(o26));
+    { // カレンダーの次の日（2026-11-27 依頼者「6:00までの場合は次の日に表示しない。6:00以降が終了なら次の日も表示、表記は宿直開け残業」）
+      const rows = async (k) => { await A.pg.click(`.cell[data-day="${k}"]`); await A.pg.waitForTimeout(300); const r = await A.pg.locator("#panel .ev-row, #dayOv .ds-row").allInnerTexts(); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(200); } return r; };
+      const r26 = await rows("2026-11-26");
+      assert.ok(r26.some((x) => /日野 宿直開け残業/.test(x) && /〜09:00/.test(x)) && !r26.some((x) => /日野 休日出勤（宿直）/.test(x)), "9:00まで → 次の日は「宿直開け残業」 " + JSON.stringify(r26));
+      api(t, "cal.apply", [{ kind: "upsert", opId: "op_shk00002", id: "ev_shk00002", baseRev: null, ev: { title: "白戸 休日出勤（宿直）", date: "2026-11-27", endDate: "2026-11-28", allDay: false, start: "22:00", end: "06:00", label: "hwork", place: "", memo: "", members: [], sg: { type: "hwork", staff: ["白戸"], shuku: true } } }]);
+      await A.pg.evaluate(() => SGHost.refreshCalendar()); await A.pg.waitForTimeout(800);
+      assert.ok((await rows("2026-11-27")).some((x) => /白戸 休日出勤（宿直）/.test(x)), "宿直の日は出る");
+      assert.ok(!(await rows("2026-11-28")).some((x) => /白戸/.test(x)), "6:00まで → 次の日には出さない");
+      await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); } }
     console.log("宿直:", sk.title); }
   { // リベルタ利用（なし/あり・〇日の夜から〜〇日の朝。2026-11-07 依頼者）。名前の候補はリベルタの利用者だけ
     await add("liberta"); await A.pg.fill("#f-sgq-users", ""); await A.pg.focus("#f-sgq-users"); await A.pg.waitForTimeout(200);

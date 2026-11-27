@@ -76,8 +76,12 @@ function isMine(e){const nm=(window.SGHost&&window.SGHost.me||{}).name;return!!(
 /* 予定の並び：ラベルの順（ヘルプ・送迎・利用者休み…その他予定）→ 何日も続く予定 → 終日 → 開始時刻 → タイトル。予定が入るたびにこの順で並び直る */
 const LORDER=Object.fromEntries(LABELS.map((l,i)=>[l.k,i]));
 function cmp(a,b){const la=LORDER[lab(a.label)]??99,lb=LORDER[lab(b.label)]??99;if(la!==lb)return la-lb;const sa=a.date!==a.endDate,sb=b.date!==b.endDate;if(sa!==sb)return sa?-1:1;if(a.allDay!==b.allDay)return a.allDay?-1:1;return(a.start||"").localeCompare(b.start||"")||a.title.localeCompare(b.title)}
-function on(list,day){return list.filter(e=>e.date<=day&&e.endDate>=day).sort(cmp)}
+/* 宿直（休日出勤の泊まり）の次の日（2026-11-27 依頼者「15に宿直なら16は6:00までの場合は16にカレンダー表示しない。6:00以降が終了の場合は16も表示。ただし表記を宿直開け残業として」） */
+const shukuNext=(e,day)=>!!(e&&e.sg&&e.sg.type==="hwork"&&e.sg.shuku&&!e.allDay&&day>e.date&&day===e.endDate);
+function on(list,day){return list.filter(e=>e.date<=day&&e.endDate>=day&&!(shukuNext(e,day)&&String(e.end||"")<="06:00"))
+  .map(e=>shukuNext(e,day)?Object.assign({},e,{title:`${(e.sg.staff||[])[0]||""} 宿直開け残業`,ake:true}):e).sort(cmp)}
 function timeText(e){const md=s=>{const d=parse(s);return`${d.getMonth()+1}/${d.getDate()}`};
+  if(e.ake)return`〜${e.end}`;   // 宿直開け残業（宿直の次の日）
   if(e.date!==e.endDate)return e.allDay?`${md(e.date)}–${md(e.endDate)}`:`${md(e.date)} ${e.start}–${md(e.endDate)} ${e.end}`;return e.allDay?"終日":`${e.start}–${e.end}`}
 async function profiles(ids){if(!user||!ids.length)return{};try{return await user.profiles([...new Set(ids)])}catch{return{}}}
 let tt;function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3200)}
