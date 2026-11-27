@@ -250,9 +250,31 @@ const D = path.join(__dirname, "../gas/out");
     assert.ok(/^送迎表_(11月2日|2026-11-02)\(月\)_.*\.xlsx$/.test(nm), "すぐ出る " + nm);
     assert.strictEqual(await P.pg.locator("text=/出力前チェック 1\\//").count(), 0, "出力前の確認は出ない");
     console.log("確認なしで出力 OK", nm); }
+  { // 前週・翌週（2026-11-27 依頼者「前週、翌週のボタンをつくってほしい」）：同じ曜日の1週間前・後
+    const d0 = await P.pg.evaluate(() => window.__sgCurDate);
+    const add = (d, n) => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+    await P.pg.click('[data-week-step="1"]'); await P.pg.waitForTimeout(1500);
+    assert.strictEqual(await P.pg.evaluate(() => window.__sgCurDate), add(d0, 7), "翌週");
+    await P.pg.click('[data-week-step="-1"]'); await P.pg.click('[data-week-step="-1"]'); await P.pg.waitForTimeout(1500);
+    assert.strictEqual(await P.pg.evaluate(() => window.__sgCurDate), add(d0, -7), "前週");
+    await P.pg.click('[data-week-step="1"]'); await P.pg.waitForTimeout(1500);
+    assert.strictEqual(await P.pg.evaluate(() => window.__sgCurDate), d0, "元の日");
+    console.log("前週・翌週 OK", d0); }
   { // 週間パターンを印刷（Excel）・ヘルプ表は週間パターンとは別（2026-11-06 依頼者）
     await P.pg.click('button:text-is("週間パターン")'); await P.pg.waitForTimeout(1200);
     await P.pg.click('button:text-is("月")'); await P.pg.waitForTimeout(1200);
+    { // 週間パターンにも未割当（2026-11-27 依頼者「週間パターンに未割当パネルだしてほしい」）
+      await P.pg.waitForSelector("[data-pattern-unasg]", { timeout: 10000 });
+      assert.match(await P.pg.textContent("[data-pattern-side]"), /未割当（月曜日）/, "曜日の未割当");
+      const pv = api(t, "kv.get", ["v2:pattern:1"]).data.value, mv = api(t, "kv.get", ["v2:master"]).data.value;
+      const inMeet = new Set(((pv && pv.runs) || []).filter((r) => r.kind === "meet").flatMap((r) => r.userIds || []));
+      const shown = await P.pg.$$eval('[data-pattern-unasg] [data-unasg="meet"] button', (l) => l.map((x) => x.textContent));
+      for (const txt of shown) { const u = mv.users.find((x) => txt.startsWith(x.name)); assert.ok(u && (u.days || []).includes(1) && !inMeet.has(u.id), "月曜の利用者で迎えの便に入っていない人だけ " + txt); }
+      assert.strictEqual(await P.pg.locator("[data-pattern-unasg] >> text=本日欠席").count(), 0, "欠席などその日のことは出さない");
+      await P.pg.locator("[data-pattern-side] button", { hasText: "閉じる" }).click(); await P.pg.waitForTimeout(300);
+      assert.strictEqual(await P.pg.locator("[data-pattern-unasg]").count(), 0, "閉じられる");
+      await P.pg.click("[data-pattern-side-open]"); await P.pg.waitForSelector("[data-pattern-unasg]");
+      console.log("週間パターンの未割当 OK", shown.length + "人（迎え）"); }
     // ダウンロードは画面の中で受け取る（ファイル名と中身）
     await P.pg.evaluate(() => { window.__dl = null; const o = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) { window.__dl = { name: this.download, href: this.href }; return; } return o.call(this); }; });
     await P.pg.click("[data-pattern-print]");

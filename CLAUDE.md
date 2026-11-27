@@ -541,6 +541,10 @@ Excel出力の前の確認（`exportCheck`）の2つめ以降に「← 前のチ
   見る（`mfView`）：Excel（.xlsx は ExcelJS で表に。`SGHost.loadExcelJs`）・Word（.docx は mammoth 1.8.0 を jsdelivr から読み、文に。`mfClean` で動くもの・外へのリンクを外す）・PDF・画像・CSV/文字。古い .xls/.doc は「保存」して開く。電波がないときは送れない（その場で「送れませんでした」と出す。端末には残さない＝大きいため）
 - テスト `gas/test-gas.js`・`test-cal.js`・`pw/gas_ui.js`（pw に mammoth を入れた。`pw/node_modules` に playwright は入れない＝/opt の入っているものを使う）
 
+## 週間パターンの未割当・前週／翌週（2026-11-27 依頼者「週間パターンに未割当パネルだしてほしい」「前週、翌週のボタンをつくってほしい」→ 送迎表（日別）の日付）
+- 週間パターンの画面の右に「📋 未割当（月曜日）」（`data-pattern-side`、日別と同じ開け閉め `sidePanel`、閉じたら「📋 未割当パネル」`data-pattern-side-open`）。中身は `UnassignedPanel` の `pattern`（`data-pattern-unasg`）：利用者のタブでその曜日に利用する人で、その曜日のパターンの迎え・送りの便に入っていない人（いつもの家族送り・家族迎え `noRideDefaults` は除く）。表の便へドラッグで入る・便からここへドラッグで外す。欠席・今日だけ利用などその日のことは出さない
+- 送迎表（日別）の日付の左右に「« 前週」「翌週 »」（`data-week-step`、`shiftDate(±7)`＝同じ曜日の1週間前・後）。テスト `pw/master_add_ui.js`
+
 ## 時刻の欄は全角でも半角の 9:00 に（2026-11-27 依頼者「時刻の入力を送迎表の職員の時間変更などもすべて9:00みたいにhとmを○○:○○で打てるように。毎回全角で打って、半角に直して打ち直すのがめんどくさい」）
 - `gas/gashost.js` の `fixTimeInput`（どの画面も：送迎表・カレンダー・シフト表）：文字の欄を出たとき（focusout）・Enter（変換中は除く）に `timeFix`。全角の数字・コロン「９：００」はどの文字の欄でも 9:00 に。時刻の欄（見本 placeholder が「8:30」「例:10:00」のような形、または `data-time`）では「900」「0900」「9時」「9時30分」「9」「9.30」も。24時・59分を超えるものはさわらない。React の欄にも届くよう値をネイティブの setter で入れて input/change を送る。`SGTime.fix`
 - 送迎表の `toMin` も全角の数字を読む（念のため）。type="time" の欄（カレンダーなど）は端末の時刻選びのまま。テスト `pw/master_add_ui.js`（職員の変更の画面で「１０：３０」→10:30、「１５３０」→15:30）

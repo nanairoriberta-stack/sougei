@@ -8619,7 +8619,7 @@ function LibertaZone({ master, weekday, libertaOff, libertaOn, onToggle }) {
   );
 }
 
-function UnassignedPanel({ master, data, weekday, onPick, onToggleAbsent, extraUse, onToggleExtraUse, onRemoveUserFromRun, onSetUserDept, onSetNoRide, onToggleLiberta, onSetUserTime }) {
+function UnassignedPanel({ master, data, weekday, onPick, onToggleAbsent, extraUse, onToggleExtraUse, onRemoveUserFromRun, onSetUserDept, onSetNoRide, onToggleLiberta, onSetUserTime, pattern }) {
   const [over, setOver] = useState(false);
   const noRide = data.noRide || {};
   const assigned = { meet: new Set(), send: new Set() };
@@ -8630,7 +8630,7 @@ function UnassignedPanel({ master, data, weekday, onPick, onToggleAbsent, extraU
   const absent = data.userAbsent || {};
   const row = (kind, label) => (
     <div className="mb-2">
-      <div className="text-xs font-bold text-stone-500 mb-1">{label}が未割当(本日利用予定の人 / {onPick ? "クリックでAI調整 / " : ""}表の便へドラッグでも可)</div>
+      <div className="text-xs font-bold text-stone-500 mb-1">{label}が未割当({pattern ? `${DAYS[weekday]}曜日に利用する人 / 表の便へドラッグ` : `本日利用予定の人 / ${onPick ? "クリックでAI調整 / " : ""}表の便へドラッグでも可`})</div>
       <div className="flex flex-wrap gap-1" data-unasg={kind}>
         {master.departments.map((d, di) => {
           const c = (DEPT_COLORS[di % DEPT_COLORS.length] || DEPT_COLORS[0]);
@@ -8655,6 +8655,17 @@ function UnassignedPanel({ master, data, weekday, onPick, onToggleAbsent, extraU
     </div>
   );
   const absentList = master.users.filter((u) => absent[u.id]);
+  // 週間パターンの画面（2026-11-27 依頼者「週間パターンに未割当パネルだしてほしい」）：迎え・送りの未割当だけ（欠席・今日だけ利用などその日のことは出さない）
+  if (pattern) return (
+    <div data-pattern-unasg className={`bg-white border rounded-lg p-3 ${over ? "border-sky-500 border-2 bg-sky-50" : "border-stone-300"}`}
+      onDragOver={(e) => { if (DRAG && DRAG.t === "user" && DRAG.fromRunId) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (!over) setOver(true); } }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget)) setOver(false); }}
+      onDrop={(e) => { if (DRAG && DRAG.t === "user" && DRAG.fromRunId) { e.preventDefault(); onRemoveUserFromRun(DRAG); DRAG = null; } setOver(false); }}>
+      <div className="text-[11px] text-stone-400 mb-2">利用者のタブで{DAYS[weekday]}曜日に利用する人のうち、この曜日のパターンの便に入っていない人です（いつもの家族送り・家族迎えの人は出しません）。便から利用者をここへドラッグすると便から外せます。</div>
+      {row("meet", "迎え")}
+      {row("send", "送り")}
+    </div>
+  );
   return (
     <div
       className={`bg-white border rounded-lg p-3 ${over ? "border-sky-500 border-2 bg-sky-50" : "border-stone-300"}`}
@@ -11275,9 +11286,12 @@ function AppInner() {
             {/* 操作バー(1行) */}
             <div className="flex items-center gap-1.5 mb-3 flex-wrap">
               <button className={`${btnSec} px-2`} onClick={() => setDate(todayStr())} title="今日に移動">今日</button>
+              {/* 前週・翌週（同じ曜日の1週間前・後。2026-11-27 依頼者「前週、翌週のボタンをつくってほしい」） */}
+              <button className={`${btnSec} px-2`} data-week-step="-1" onClick={() => shiftDate(-7)} title="1週間前（同じ曜日）">« 前週</button>
               <button className={`${btnSec} px-2`} onClick={() => shiftDate(-1)} title="前日">←</button>
               <DatePop date={date} setDate={setDate} />
               <button className={`${btnSec} px-2`} onClick={() => shiftDate(1)} title="翌日">→</button>
+              <button className={`${btnSec} px-2`} data-week-step="1" onClick={() => shiftDate(7)} title="1週間後（同じ曜日）">翌週 »</button>
               <span className="inline-flex items-center gap-0.5 mr-1 pl-1 border-l border-stone-300">
                 <button
                   className={`${btnSec} px-2 ${canUndo() ? "" : "opacity-30 cursor-not-allowed"}`}
@@ -11863,6 +11877,7 @@ function AppInner() {
                   {/* ヘルプ可の職員だけの列（2026-11-11 依頼者「一番右にヘルプ可の人だけ表示されるボタン」。職員のタブの「ヘルプ可」） */}
                   <span data-help-filter className={`text-xs px-2.5 py-1 rounded-full border cursor-pointer select-none ${deptFilter === HELP_OK_FILTER ? "bg-emerald-700 text-white border-emerald-700 font-bold" : "bg-white border-emerald-400 text-emerald-800 hover:bg-emerald-50"}`} onClick={() => setDeptFilter(deptFilter === HELP_OK_FILTER ? "all" : HELP_OK_FILTER)}>🆘 ヘルプ可</span>
                 </div>
+              <div className="flex gap-3 items-start"><div className="flex-1 min-w-0">
               <TimeGrid
                 searchQ={searchQ}
                 activeSearchId={activeSearchId} searchSeq={searchIdx}
@@ -11895,6 +11910,24 @@ function AppInner() {
                 onDropVehicleOnRun={dropVehicleOnRun}
                 onDropVehicleOnCell={dropVehicleOnCell}
               />
+              </div>
+              {/* 右：未割当（2026-11-27 依頼者「週間パターンに未割当パネルだしてほしい」。日別と同じ開け閉め sidePanel） */}
+              {sidePanel ? (
+                <div className="w-72 shrink-0 sticky top-20 hidden md:block" data-pattern-side>
+                  <div className="bg-stone-50 border border-stone-300 rounded-lg shadow-md flex flex-col" style={{ maxHeight: "calc(100vh - 90px)" }}>
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-stone-300 bg-white rounded-t-lg">
+                      <div className="text-sm font-bold text-stone-700">📋 未割当（{DAYS[weekday]}曜日）</div>
+                      <button className="text-xs text-stone-500 hover:text-stone-800 border border-stone-300 rounded px-2 py-1 bg-white" onClick={() => setSidePanel(false)}>✕ 閉じる</button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2">
+                      <UnassignedPanel pattern master={patternMaster} data={dataForGrid} weekday={weekday} onRemoveUserFromRun={removeUserFromRun} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button className={`${btnSec} shrink-0 hidden md:block`} data-pattern-side-open onClick={() => setSidePanel(true)}>📋 未割当パネル</button>
+              )}
+              </div>
               </>
             )}
           </div>
