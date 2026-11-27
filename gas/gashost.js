@@ -346,7 +346,8 @@ let tokOk, tokenReady = new Promise((r) => { tokOk = r; });
 const EARLY = new Map();
 function prefetchDocs(q) {
   const k = q.col + "|" + q.from + "|" + q.to;
-  return tokenReady.then(() => { if (!EARLY.has(k)) EARLY.set(k, { at: Date.now(), p: rawCall("docs.query", [q]) }); });
+  // 失敗（ログインが使えないなど）は黙って捨て、あとでふつうに読む
+  return tokenReady.then(() => { if (!EARLY.has(k)) EARLY.set(k, { at: Date.now(), p: rawCall("docs.query", [q]).catch(() => null) }); });
 }
 /* ---------- カレンダー用のデータ窓口（読み取りはサーバー、書込は操作単位でサーバーへ） ---------- */
 function makeQuery(col, filters) {
