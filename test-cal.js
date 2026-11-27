@@ -436,6 +436,15 @@ console.log('extra OK');
   const D2n = (() => { const x = new Date(D + 'T00:00:00'); x.setDate(x.getDate() + 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; })();
   assert.ok(!C.reconcile(m, s3, [ikEv], D2n).blocks.some((b) => b.id === 'cal_evik0001_hold'), '帰る日（泊まる日の次の日）にはコマを作らない');
   assert.ok(!C.reconcile(m, rk, [], D).blocks.some((b) => b.id === 'cal_evik0001_hold'), '予定を消すとコマも消える');
+  // 宿直（休日出勤の泊まり。2026-11-27 依頼者「泊まる日の送迎表には表示するけど翌日には表示しない」）
+  { const hino = S('日野'), sh = { id: 'evshk001', rev: 1, date: D, endDate: D2n, allDay: false, start: '17:00', end: '09:00', title: '日野 休日出勤（宿直）', label: 'hwork', sg: T.normSg({ type: 'hwork', staff: ['日野'], shuku: true }) };
+  assert.strictEqual(sh.sg.shuku, true, 'shuku を残す');
+  assert.ok(!('shuku' in T.normSg({ type: 'shift', staff: ['日野'], shuku: true })), '宿直は休日出勤だけ');
+  const sk1 = C.reconcile(m, sheet, [sh], D), o1 = (sk1.staffOv || {})[hino.id] || {};
+  assert.ok(o1.workToday && o1.start === '17:00' && o1.end === '23:59', '泊まる日は出勤（17:00〜） ' + JSON.stringify(o1));
+  const sk2 = C.reconcile(m, sheet, [sh], D2n);
+  assert.ok(!((sk2.staffOv || {})[hino.id] || {}).workToday && !(sk2.calApplied || {}).evshk001, '翌日には出さない ' + JSON.stringify((sk2.staffOv || {})[hino.id]));
+  assert.ok(/宿直/.test(C.summary(m, sk1, [sh], D)[0].time), '反映中に宿直'); }
 }
 // ===== リベルタ利用（ﾏﾝｼｮﾝの泊まり なし/あり。〇日の夜から〜〇日の朝。2026-11-07 依頼者） =====
 {

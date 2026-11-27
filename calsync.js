@@ -57,6 +57,8 @@ function specsFor(master, events, date) {
     const sg0 = ev && ev.biz !== "mansion" && (ev.sg || komaSg(master, ev));   // マンションの予定は送迎表に出さない
     if (!ev || ev.deleted || !sg0 || !sg0.type) continue;
     if (!(ev.date <= date && ev.endDate >= date)) continue;
+    // 宿直（休日出勤の泊まり）：送迎表は泊まる日（出勤した日）だけ。翌日には出さない（2026-11-27 依頼者「職員の休日出勤に宿直のチェックボタン。泊まる日の送迎表には表示するけど翌日には表示しない」）
+    if (sg0.type === "hwork" && sg0.shuku && date !== ev.date) continue;
     // ほかの事業の予定は入れない（2026-11-25 依頼者「生活介護のカレンダーの予定がりんくぷれいす版にも表示されている」＝名前が同じ職員（白戸・小瀧など両方にいる人）で入っていた）。
     // ただし職員の休み・休日出勤・時間変更はその人の出勤のことなので、両方にいる職員なら両方の送迎表に入れる（CROSS_BIZ_TYPES）
     if ((ev.biz === "houkago" ? "houkago" : "seikatsu") !== (master && master.linkSeed2 ? "houkago" : "seikatsu") && !CROSS_BIZ_TYPES[sg0.type]) continue;
@@ -81,7 +83,7 @@ function specsFor(master, events, date) {
     out.push({ id: ev.id, rev: ev.rev, type: sg0.type, koma: !ev.sg, title: title0, whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(sg0.meet), send: appTime(sg0.send), noMeet: sg0.noMeet || "", noSend: sg0.noSend || "", missing,
       reason: sg0.reason || "", note: sg0.note || "", deptId: dept ? dept.id : "",
-      goMeet: !!sg0.goMeet, goSend: !!sg0.goSend, wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, libOnly: !!sg0.libOnly, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, tbd: !!sg0.tbd, kAt: appTime(sg0.kAt), at: appTime(sg0.at), ats: (sg0.ats || []).map(appTime).filter(Boolean),
+      goMeet: !!sg0.goMeet, goSend: !!sg0.goSend, wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, libOnly: !!sg0.libOnly, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, shuku: !!sg0.shuku, tbd: !!sg0.tbd, kAt: appTime(sg0.kAt), at: appTime(sg0.at), ats: (sg0.ats || []).map(appTime).filter(Boolean),
       memo: memoOf(ev), missUsers: missingUsers, lib: sg0.lib || "off", libParts: sg0.type === "liberta" ? libParts(ev, date) : null });
   }
   return out;
@@ -480,7 +482,7 @@ function summary0(master, sheet, events, date) {
       s.type === "shift" ? [s.tbd && `${s.note ? s.note + "後" : "用事が済み次第"}出勤（時刻未定）`, s.wstart && `${s.tbd ? "見込み" : "出勤"}${s.wstart}`, s.wend && `退勤${s.wend}`, s.afrom && `中抜け${s.afrom}〜${s.ato}`, s.noAway && "中抜けなし", s.noRide && "送迎なし", s.libOnly && "ﾘﾍﾞﾙﾀのみ"].filter(Boolean).join("・") || "部署の変更" :
       s.type === "liberta" ? `リベルタ${[s.libParts && s.libParts.am && "朝", s.libParts && s.libParts.pm && "夜"].filter(Boolean).join("・")}${s.lib === "on" ? "あり" : "なし"}` :
       s.type === "help_cancel" ? `${(s.ats || []).length ? s.ats.join("・") + "の" : s.at ? s.at + "の" : "その日の"}ヘルプをなしに${(() => { const r = ((sheet && sheet.calApplied) || {})[s.id]; const n = ((r && r.cancelled) || []).length; return n ? `（${n}件）` : "（送迎表にまだ無い）"; })()}` :
-      s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) + (s.libOnly ? "・ﾘﾍﾞﾙﾀのみ" : "") : s.type === "user_time" || s.type === "user_extra" ? [s.type === "user_extra" ? "今日だけ利用" : "", s.goMeet && "こちらから迎える", s.goSend && "こちらから送る", s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
+      s.type === "hwork" ? (s.whole ? "いつもの勤務時間" : `${s.from}〜${s.to}`) + (s.libOnly ? "・ﾘﾍﾞﾙﾀのみ" : "") + (s.shuku ? "・宿直" : "") : s.type === "user_time" || s.type === "user_extra" ? [s.type === "user_extra" ? "今日だけ利用" : "", s.goMeet && "こちらから迎える", s.goSend && "こちらから送る", s.meet && `迎え${s.meet}`, s.meetPlace && `迎え先:${s.meetPlace}`, s.send && `送り${s.send}`, s.sendPlace && `送り先:${s.sendPlace}`, s.noMeet && `迎えなし(${s.noMeet})`, s.noSend && `送りなし(${s.noSend})`].filter(Boolean).join("・") : s.type === "user_absent" || s.whole ? "終日" : `${s.from}〜${s.to}` }));
 }
 
 /* ===== りんく・ぷれいす版（放課後デイ）→ 生活介護への送迎の依頼 =====

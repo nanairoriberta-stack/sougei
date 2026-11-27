@@ -598,7 +598,7 @@ function workOf(d){
     lt:sg.type==="shift"?sg.wstart||"":"",ltm:sg.type==="shift"&&sg.tbd?"tbd":"time",ltr:sg.type==="shift"&&sg.tbd?sg.note||"":"",et:sg.type==="shift"?sg.wend||"":"",
     nrmt:nrSplit(sg.noMeet)[1],nrst:nrSplit(sg.noSend)[1],
     awM:sg.afrom?"time":sg.noAway?"none":"same",afrom:sg.afrom||"",ato:sg.ato||"",
-    plan:sg.type==="staff_plan",libOnly:!!sg.libOnly,wsM:sg.wstart?"time":"same",weM:sg.wend?"time":"same",wstart:sg.wstart||"",wend:sg.wend||"",
+    plan:sg.type==="staff_plan",libOnly:!!sg.libOnly,shuku:!!sg.shuku,wsM:sg.wstart?"time":"same",weM:sg.wend?"time":"same",wstart:sg.wstart||"",wend:sg.wend||"",
     ...helpDurOf(sg,d)};   // ヘルプの時間（分）。決まった長さでなければ「終わりの時刻で」（2026-11-19 依頼者「2時間までしか入れられない。制限とって」）
 }
 const HELP_DURS=["30","60","90","120","180","240"];
@@ -622,7 +622,7 @@ function sgOf(label,w,d){
   if(label==="liberta")return Object.assign(base,{type:"liberta",staff:[],lib:w.lib==="on"?"on":"off",lfrom:w.lf==="pm"?"pm":"am",lto:w.lto==="am"?"am":"pm"});
   if(label==="hcancel"){const ts=hcTimes(w);return Object.assign(base,{type:"help_cancel",staff:[]},ts.length===1?{at:ts[0]}:ts.length?{ats:ts}:{})}
   if(label==="hwork")return Object.assign(base,{type:"hwork",users:[],dept:w.dept},   // 休日出勤の中抜け（2026-11-10 依頼者「6:00〜9:00と17:00〜22:00のときは9:00〜17:00が不在の網掛けに」）
-    w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{},w.libOnly?{libOnly:true}:{});
+    w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{},w.libOnly?{libOnly:true}:{},w.shuku?{shuku:true}:{});
   if(label==="shift")return Object.assign(base,{type:"shift",users:[],dept:w.dept,reason:[w.kinmu,w.reason].filter(Boolean).join("・"),wstart:w.wsM==="time"?w.wstart:"",wend:w.weM==="time"?w.wend:""},KINMU_NORIDE.has(w.kinmu)?{noRide:true}:{},
     w.awM==="time"&&w.afrom&&w.ato?{afrom:w.afrom,ato:w.ato}:{},w.awM==="none"?{noAway:true}:{},w.libOnly&&!KINMU_NORIDE.has(w.kinmu)?{libOnly:true}:{});
   if(PLAN_LABELS.includes(label))return Object.assign(base,{type:"staff_plan"});
@@ -724,6 +724,9 @@ function drawSg(){
   else if(L==="user")h=who("users","利用者","利用者の名前で検索")+text("w-reason",w.reason,"例：通院",PICK.user,"理由（任意）")
     +hint("送迎表でその日は欠席になります。何日も続くときは終了日を変えてください。迎え・送りだけ変わるときは「送迎」のラベルを使ってください。");
   else if(L==="hwork")h=(staffSelf(d)?self:who("staff","出勤する職員","職員の名前で検索"))+dept()+awayRow(d,w)+libOnlyRow(w,dis)
+    // 宿直（泊まり。2026-11-27 依頼者「職員の休日出勤に宿直のチェックボタン。泊まる日の送迎表には表示するけど翌日には表示しない」）
+    +`<label class="check"><input type="checkbox" id="w-shuku" data-shuku ${w.shuku?"checked":""} ${dis}>宿直（泊まり）</label>`
+    +(w.shuku?hint("終了日は翌日、退勤は翌朝の時刻を入れてください。送迎表には泊まる日（出勤した日）だけ出て、翌日には出ません。"):"")
     +hint("下の開始・終了の時刻で、送迎表のその日の出勤者に入ります（固定休の日でも）。");
   else if(L==="shift")h=(staffSelf(d)?self:who("staff","職員","職員の名前で検索"))
     +`<div class="sgsub"><span class="lbl2">勤務</span>${radios("w-kinmu",w.kinmu||"",[["","時刻で変える"],...KINMU.map(k=>[k,k])])}</div>`
@@ -793,6 +796,7 @@ function readSg(pick){
   for(const[id,k]of[["w-dest","dest"],["w-mplace","mplace"],["w-splace","splace"],["w-reason","reason"],["w-meett","meet"],["w-sendt","send"],["w-dept","dept"],["w-wst","wstart"],["w-wet","wend"],["w-awf","afrom"],["w-awt","ato"],["w-lt","lt"],["w-ltr","ltr"],["w-et","et"],["w-nrmt","nrmt"],["w-nrst","nrst"],["w-nrmo","nrmo"],["w-nrso","nrso"],["w-hct","hct"],["w-hend","hend"]]){const v=iv(id);if(v!=null)w[k]=v}
   if($("w-plan"))w.plan=$("w-plan").checked;
   if($("w-libonly"))w.libOnly=$("w-libonly").checked;
+  if($("w-shuku"))w.shuku=$("w-shuku").checked;
   if($("w-dept")&&w.dept&&w.dept===usualDept((w.staff||[])[0],ed.d.date,bizOf(ed.d)))w.dept="";   // いつもの部署のままなら「変更なし」
   if($("f-place"))ed.d.place=$("f-place").value.trim();   // 場所が項目の中にあるラベル（モニタリング・支援会議）でも書きかけを残す
 }
@@ -807,7 +811,7 @@ function autoTitle(label,sg,d){
   if(sg.type==="user_extra")return`${nm(sg.users)} 利用日外利用${[sg.noMeet,sg.noSend].filter(Boolean).map(x=>`・${x}`).join("")}`;
   if(sg.type==="user_time")return`${nm(sg.users)} ${[sg.goMeet&&`こちらから迎え${sg.meet||""}`,sg.goSend&&`こちらから送り${sg.send||""}`,!sg.goMeet&&sg.meet&&`迎え${sg.meet}`,sg.noMeet,sg.meetPlace&&`迎え先${sg.meetPlace}`,!sg.goSend&&sg.send&&`送り${sg.send}`,sg.noSend,sg.sendPlace&&`送り先${sg.sendPlace}`].filter(Boolean).join("・")}`;
   if(sg.type==="help")return`${nm(sg.users)} ヘルプ${sg.note?`（${sg.note}）`:""}`;
-  if(sg.type==="hwork")return`${nm(sg.staff)} 休日出勤${sg.afrom&&sg.ato?`（中抜け${sg.afrom}〜${sg.ato}）`:""}`;
+  if(sg.type==="hwork")return`${nm(sg.staff)} 休日出勤${sg.shuku?"（宿直）":""}${sg.afrom&&sg.ato?`（中抜け${sg.afrom}〜${sg.ato}）`:""}`;
   if(sg.type==="liberta"){const nd=sg.lib==="on"?"あり":"なし",dd=x=>`${Number(String(x).slice(8))}日`;
     if(!d||d.date===d.endDate){const p=[sg.lfrom==="am"&&"朝",(sg.lfrom==="pm"||sg.lto==="pm")&&"夜"].filter(Boolean);return`${nm(sg.users)} リベルタ${p.map(x=>x+nd).join("・")}`}
     return`${nm(sg.users)} リベルタ${nd}（${dd(d.date)}${sg.lfrom==="pm"?"夜":"朝"}〜${dd(d.endDate)}${sg.lto==="am"?"朝":"夜"}）`}
@@ -1160,6 +1164,7 @@ document.addEventListener("change",e=>{if(ed&&e.target.name==="f-biz"){ed.d.biz=
   // ラベル・休みの形などを変えたら、入力欄を作り直す（入力済みの値は残す）
   if(e.target.name==="w-kinmu"){readForm();ed.d.w.kinmu=e.target.value;applyKinmu(ed.d.w,ed.d);drawSheet();draftSave();return}   // 勤務を選ぶと出勤・退勤の時刻が入る
   if(e.target.name==="f-grp"){readForm();const g=GRP.find(x=>x.k===e.target.value);if(g&&grpOf(ed.d.label).k!==g.k){ed.lastIn=ed.lastIn||{};ed.lastIn[grpOf(ed.d.label).k]=ed.d.label;ed.d.label=ed.lastIn[g.k]||g.ls[0][0];fixTimes(ed.d)}drawSheet();draftSave();return}   // 1段目：その中で前に選んだラベル（無ければ最初）
+  if(e.target.id==="w-shuku"){readForm();const d=ed.d;if(d.w.shuku&&d.endDate<=d.date){{const t=parse(d.date);t.setDate(t.getDate()+1);d.endDate=ymd(t)}if(!d.end||d.end>"12:00")d.end="09:00"}drawSheet();draftSave();return}   // 宿直：終了日を翌日・退勤を翌朝に
   if(e.target.name==="f-label"||e.target.id==="w-plan"||e.target.id==="w-libonly"||["w-leave","w-meet","w-send","w-ws","w-we","w-hdur","w-aw","w-hc","w-lib","w-lf","w-lto","w-ltm"].includes(e.target.name)){
     readForm();drawSheet();draftSave();return}
   if(e.target.id==="f-allday"){$("w-start").hidden=$("w-end").hidden=e.target.checked}

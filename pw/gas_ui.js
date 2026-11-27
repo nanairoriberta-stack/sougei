@@ -1192,6 +1192,22 @@ const D = path.join(__dirname, "../gas/out");
     if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
     console.log("いきいき:", ik.title, ik.date, "〜", ik.endDate); }
+  { // 休日出勤の宿直（2026-11-27 依頼者「休日出勤に宿直のチェックボタン。泊まる日の送迎表には表示するけど翌日には表示しない」）
+    await add("hwork"); await A.pg.waitForTimeout(200);
+    await A.pg.fill("#f-date", "2026-11-25"); await A.pg.fill("#f-enddate", "2026-11-25"); await A.pg.fill("#f-start", "17:00"); await A.pg.fill("#f-end", "21:00");
+    await pick("staff", "日野"); await A.pg.check("[data-shuku]"); await A.pg.waitForTimeout(300);
+    assert.deepStrictEqual(await A.pg.evaluate(() => [document.getElementById("f-enddate").value, document.getElementById("f-end").value]), ["2026-11-26", "09:00"], "宿直にすると終了日は翌日・退勤は翌朝");
+    await save(2000);
+    const sk = Object.values(api(t, "docs.query", [{ col: "days", from: "2026-11-25", to: "2026-11-26" }]).data.reduce((a, d) => Object.assign(a, d.events), {})).find((e) => e.label === "hwork" && e.sg && e.sg.shuku && !e.deleted);
+    assert.ok(sk && sk.title === "日野 休日出勤（宿直）" && sk.date === "2026-11-25" && sk.endDate === "2026-11-26", "宿直の予定 " + JSON.stringify(sk && { t: sk.title, d: sk.date, e: sk.endDate }));
+    const mv = api(t, "kv.get", ["v2:master"]).data.value, hino = mv.staff.find((x) => x.name === "日野");
+    for (const d0 of ["2026-11-26"]) { const cur = api(t, "kv.get", ["v2:sheet:" + d0]).data; if (!cur || !cur.value) api(t, "kv.cas", [{ key: "v2:sheet:" + d0, rev: 0, value: engFor("v2").emptySheet() }]); }
+    await A.pg.evaluate(() => SGHost.pollOnce()); await A.pg.waitForTimeout(500);
+    api(t, "kv.merge", [{ key: "v2:sheet:2026-11-26", base: api(t, "kv.get", ["v2:sheet:2026-11-26"]).data.value, mine: Object.assign({}, api(t, "kv.get", ["v2:sheet:2026-11-26"]).data.value, { notes: "x" }), baseKnown: true }]);   // 保存のたびに反映し直す
+    const o25 = (api(t, "kv.get", ["v2:sheet:2026-11-25"]).data.value.staffOv || {})[hino.id] || {}, o26 = (api(t, "kv.get", ["v2:sheet:2026-11-26"]).data.value.staffOv || {})[hino.id] || {};
+    assert.ok(o25.workToday && o25.start === "17:00", "泊まる日（11/25）の送迎表に出勤 " + JSON.stringify(o25));
+    assert.ok(!o26.workToday, "翌日（11/26）の送迎表には出さない " + JSON.stringify(o26));
+    console.log("宿直:", sk.title); }
   { // リベルタ利用（なし/あり・〇日の夜から〜〇日の朝。2026-11-07 依頼者）。名前の候補はリベルタの利用者だけ
     await add("liberta"); await A.pg.fill("#f-sgq-users", ""); await A.pg.focus("#f-sgq-users"); await A.pg.waitForTimeout(200);
     { const cands = await A.pg.$$eval('[data-sgpick="users"]', (o) => o.map((x) => x.dataset.name)), nl = api(t, "names.list", []).data.users;

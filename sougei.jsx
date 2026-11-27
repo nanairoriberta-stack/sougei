@@ -1486,7 +1486,7 @@ function calNoteLines(master, events, date, edition) {
   const userOnly = users.filter((n) => !staff.includes(n));   // 職員にも同じ名前がいる人（八壁・森など）は職員として見る
   const hm = (t) => String(t || "").replace(/^0(\d:)/, "$1");
   const myBiz = (edition || EDITION) === "v3" ? "houkago" : "seikatsu";
-  const evs = events.filter((e) => e && !e.deleted && e.biz !== "mansion" && e.date <= date && (e.endDate || e.date) >= date)   // マンションの予定は送迎表に出さない（2026-11-17）
+  const evs = events.filter((e) => e && !e.deleted && e.biz !== "mansion" && e.date <= date && (e.endDate || e.date) >= date && !(e.sg && e.sg.type === "hwork" && e.sg.shuku && date !== e.date))   // マンションの予定は送迎表に出さない（2026-11-17）。宿直は翌日には出さない（2026-11-27）
     .sort((a, b) => (a.allDay ? 0 : 1) - (b.allDay ? 0 : 1) || String(a.start || "").localeCompare(String(b.start || "")) || String(a.title || "").localeCompare(String(b.title || "")));
   for (const e of evs) {
     const sg = e.sg || {}, t = sg.type || "";

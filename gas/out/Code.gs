@@ -9,7 +9,7 @@
  */
 
 var APP = {
-  VERSION: '2026.11.27c',
+  VERSION: '2026.11.27d',
   SESSION_DAYS: 3650,   // ログアウトするまで出ない（2026-11-07 依頼者。以前は120日）。使っているあいだは期限をのばす（session_）
   PIN_FAIL_LIMIT: 5,
   PIN_LOCK_MIN: 15,
@@ -181,10 +181,12 @@ function iconUrl_() {
    「設定」シートB2に貼った公開URLを優先する（2026-10-28 実機：スマホでメニューの送迎表が開けなかった） */
 var APP_URL_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/;
 function appUrl_() {
+  // 画面を開くたびにスプレッドシートを読まないよう10分覚える（2026-11-27 依頼者「開いてから画面が見れるまでにかなり時間かかる」）
+  var c = null; try { c = CacheService.getScriptCache(); var hit = c.get('base1'); if (hit) return hit; } catch (e) {}
   try {
     var sh = sheet_(APP.SH.conf); var v = sh ? String(sh.getRange(2, 2).getValue()).trim() : '';
     v = v.replace(/[?#].*$/, '').replace(/\/+$/, '');   // 「…/exec?page=calendar」のように後ろに付いていても使えるように
-    if (APP_URL_RE.test(v)) return v;
+    if (APP_URL_RE.test(v)) { try { if (c) c.put('base1', v, 600); } catch (e) {} return v; }
   } catch (e) {}
   return ScriptApp.getService().getUrl();
 }
