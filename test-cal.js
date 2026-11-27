@@ -429,7 +429,13 @@ console.log('extra OK');
   const ik = T.normEvent({ title: '中村 いきいき（12/1 17:00〜12/4 9:00）', date: '2026-12-01', endDate: '2026-12-03', allDay: true, label: 'ikiiki', users: ['中村'], stay: { from: '2026-12-01', fromT: '17:00', to: '2026-12-04', toT: '09:00' } }, 'evik0001', 0);
   assert.ok(ik && ik.label === 'ikiiki' && ik.endDate === '2026-12-03' && JSON.stringify(ik.stay) === JSON.stringify({ from: '2026-12-01', fromT: '17:00', to: '2026-12-04', toT: '09:00' }), 'いきいき ' + JSON.stringify(ik));
   assert.ok(!('stay' in T.normEvent({ title: 'x', date: '2026-12-01', label: 'other', stay: { from: '2026-12-01', to: '2026-12-02' } }, 'evik0002', 0)), 'ほかのラベルに stay は付けない');
-  assert.strictEqual(C.reconcile(m, s3, [Object.assign({}, ik, { date: D, endDate: D })], D), s3, '送迎表には反映しない');
+  // 泊まる日は保留の欄の 18:00 にコマ（2026-11-27 依頼者「泊りの日は18:00〜のコマで送迎表に出るように。朝はコマつくらなくていい」）
+  const ikEv = Object.assign({}, ik, { id: 'evik0001', rev: 1, date: D, endDate: D });
+  const rk = C.reconcile(m, s3, [ikEv], D), kb = rk.blocks.find((b) => b.id === 'cal_evik0001_hold');
+  assert.ok(kb && kb.time === '18:00' && kb.staffId === '__hold__' && /中村 いきいき/.test(kb.label) && !kb.wholeDay && kb.userIds.length === 1, 'いきいきのコマ 18:00 ' + JSON.stringify(kb));
+  const D2n = (() => { const x = new Date(D + 'T00:00:00'); x.setDate(x.getDate() + 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; })();
+  assert.ok(!C.reconcile(m, s3, [ikEv], D2n).blocks.some((b) => b.id === 'cal_evik0001_hold'), '帰る日（泊まる日の次の日）にはコマを作らない');
+  assert.ok(!C.reconcile(m, rk, [], D).blocks.some((b) => b.id === 'cal_evik0001_hold'), '予定を消すとコマも消える');
 }
 // ===== リベルタ利用（ﾏﾝｼｮﾝの泊まり なし/あり。〇日の夜から〜〇日の朝。2026-11-07 依頼者） =====
 {

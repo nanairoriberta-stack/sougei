@@ -1498,7 +1498,7 @@ function calNoteLines(master, events, date, edition) {
       if (t === "staff_off" && !sg.half && e.allDay && !memo1) (out.wholeOff = out.wholeOff || []).push({ line, staff: (sg.staff || []).slice() }); } continue; }
     if (t) continue;
     // 利用者その他で時間があるものは保留の欄のコマになり、そこから特記事項に出る（二重にしない。2026-11-10）
-    if (e.label === "uother" && (e.users || []).some((n) => users.includes(n))) continue;   // 終日も（2026-11-10）
+    if ((e.label === "uother" || e.label === "ikiiki") && (e.users || []).some((n) => users.includes(n))) continue;   // 終日も（2026-11-10）。いきいきも 18:00 のコマから出る（2026-11-27）
     // 職員その他・その他予定もコマになる（担当の職員の欄・保留の欄）→ コマから特記事項に出るので、ここでは出さない（2026-11-10）
     if ((e.label === "sother" || e.label === "other") && !/^sh[mf]\d{8}_/.test(String(e.id || "")) && !(/^tt\d{8}_/.test(String(e.id || "")) && e.label === "other")) {
       const tn = (e.tanto || []).filter(Boolean);

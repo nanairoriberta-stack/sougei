@@ -1171,6 +1171,7 @@ const D = path.join(__dirname, "../gas/out");
     await A.pg.click(`.cell[data-day="${date}"]`); await A.pg.waitForTimeout(300); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(300); }
     console.log("ヘルプキャンセル（いつものヘルプから選ぶ）:", ev2.title); }
   { // いきいき（泊まり。2026-11-27 依頼者「12/1 17時〜12/4 9:00 なら 12/1・2・3 はいきいきと出て 12/4 は出ない。〇日の何時から〇日の何時までの表記はのこす」）
+    for (const d0 of ["2026-11-25", "2026-11-27"]) { const cur = api(t, "kv.get", ["v2:sheet:" + d0]).data; if (!cur || !cur.value) api(t, "kv.cas", [{ key: "v2:sheet:" + d0, rev: 0, value: engFor("v2").emptySheet() }]); }
     await add("ikiiki"); await A.pg.waitForTimeout(200);
     await A.pg.fill("#f-date", "2026-11-24"); await A.pg.fill("#f-enddate", "2026-11-27"); await A.pg.fill("#f-start", "17:00"); await A.pg.fill("#f-end", "09:00");
     assert.match(await A.pg.textContent('label[for="f-enddate"]'), /帰る日/, "帰る日の欄");
@@ -1180,6 +1181,10 @@ const D = path.join(__dirname, "../gas/out");
     const shown = async (k) => { await A.pg.click(`.cell[data-day="${k}"]`); await A.pg.waitForTimeout(300); const n = await A.pg.locator("#panel .ev-row, #dayOv .ds-row", { hasText: "いきいき" }).count(); if (await A.pg.locator("[data-day-close]").count()) { await A.pg.click("[data-day-close]"); await A.pg.waitForTimeout(200); } return n; };
     assert.ok((await shown("2026-11-24")) > 0 && (await shown("2026-11-26")) > 0, "泊まる日（11/24〜26）は出る");
     assert.strictEqual(await shown("2026-11-27"), 0, "帰る日（11/27）は出ない");
+    { // 送迎表：泊まる日は保留の欄の 18:00 にコマ・帰る日の朝はコマなし（2026-11-27 依頼者）
+      const kb = (api(t, "kv.get", ["v2:sheet:2026-11-25"]).data.value.blocks || []).find((b) => b.id === `cal_${ik.id}_hold`);
+      assert.ok(kb && kb.time === "18:00" && kb.staffId === "__hold__" && /中村 いきいき/.test(kb.label), "11/25 の送迎表に 18:00 のコマ " + JSON.stringify(kb));
+      assert.ok(!(api(t, "kv.get", ["v2:sheet:2026-11-27"]).data.value.blocks || []).some((b) => b.id === `cal_${ik.id}_hold`), "帰る日（11/27）はコマなし"); }
     await A.pg.click('.cell[data-day="2026-11-25"]'); await A.pg.waitForTimeout(300);
     await A.pg.locator(".ev-row, .ds-row", { hasText: "いきいき" }).first().evaluate((x) => x.click()); await A.pg.waitForTimeout(500);
     assert.deepStrictEqual(await A.pg.evaluate(() => [document.getElementById("f-date").value, document.getElementById("f-start").value, document.getElementById("f-enddate").value, document.getElementById("f-end").value]), ["2026-11-24", "17:00", "2026-11-27", "09:00"], "開き直すと入る日時〜帰る日時");

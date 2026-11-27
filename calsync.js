@@ -25,6 +25,8 @@ function komaSg(master, ev) {
   // ふつうの予定のID（ランダムな20文字）が偶然 sh・tt で始まると、送迎表にコマが出なかった。約4000件に1件）
   if (/^sh[mf]\d{8}_/.test(id) || (/^tt\d{8}_/.test(id) && ev.label === "other")) return null;
   if (ev.label === "uother") return (ev.users || []).length ? { type: "staff_plan", staff: [], users: ev.users } : null;
+  // いきいき（泊まり）：泊まる日（入る日〜帰る日の前の日）だけ、保留の欄の 18:00 にコマ。帰る日の朝はコマにしない（2026-11-27 依頼者「泊りの日は18:00〜のコマで送迎表に出るように。朝はコマつくらなくていい」）
+  if (ev.label === "ikiiki") return (ev.users || []).length ? { type: "staff_plan", staff: [], users: ev.users, kAt: "18:00" } : null;
   if (ev.label !== "sother" && ev.label !== "other") return null;
   const names = new Set(((master && master.staff) || []).map((s) => s.name));
   const tanto = (ev.tanto || []).filter(Boolean);
@@ -79,7 +81,7 @@ function specsFor(master, events, date) {
     out.push({ id: ev.id, rev: ev.rev, type: sg0.type, koma: !ev.sg, title: title0, whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(sg0.meet), send: appTime(sg0.send), noMeet: sg0.noMeet || "", noSend: sg0.noSend || "", missing,
       reason: sg0.reason || "", note: sg0.note || "", deptId: dept ? dept.id : "",
-      goMeet: !!sg0.goMeet, goSend: !!sg0.goSend, wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, libOnly: !!sg0.libOnly, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, tbd: !!sg0.tbd, at: appTime(sg0.at), ats: (sg0.ats || []).map(appTime).filter(Boolean),
+      goMeet: !!sg0.goMeet, goSend: !!sg0.goSend, wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, libOnly: !!sg0.libOnly, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, tbd: !!sg0.tbd, kAt: appTime(sg0.kAt), at: appTime(sg0.at), ats: (sg0.ats || []).map(appTime).filter(Boolean),
       memo: memoOf(ev), missUsers: missingUsers, lib: sg0.lib || "off", libParts: sg0.type === "liberta" ? libParts(ev, date) : null });
   }
   return out;
@@ -113,9 +115,9 @@ function blocksOf(spec) {
   // モニタリング・支援会議などで対応者が決まっていない（利用者だけ）：保留の欄に1つ（2026-11-05 依頼者「職員は誰が入るかわからないので保留に」）。担当は送迎表で決める（同じIDなので職員の欄へ動かしても残る）
   if (spec.type === "staff_plan" && !spec.staff.length) {
     if (!spec.users.length && !spec.koma) return [];
-    const from = spec.whole ? "8:30" : spec.from;   // 終日は 8:30（2026-11-10 依頼者）
-    const dur = spec.whole ? 60 : Math.max(15, (toMinX(spec.to) ?? toMinX(from) + 60) - toMinX(from));
-    return [Object.assign({ id: `cal_${spec.id}_hold`, kind: "block", time: from, durMin: dur, staffId: HOLD_ID, label: spec.title, userIds: spec.users.map((u) => u.id), calId: spec.id }, spec.whole ? { wholeDay: true } : {}, spec.memo ? { note: spec.memo } : {})];
+    const from = spec.kAt || (spec.whole ? "8:30" : spec.from);   // 終日は 8:30（2026-11-10 依頼者）。いきいきは 18:00（kAt）
+    const dur = spec.whole || spec.kAt ? 60 : Math.max(15, (toMinX(spec.to) ?? toMinX(from) + 60) - toMinX(from));
+    return [Object.assign({ id: `cal_${spec.id}_hold`, kind: "block", time: from, durMin: dur, staffId: HOLD_ID, label: spec.title, userIds: spec.users.map((u) => u.id), calId: spec.id }, spec.whole && !spec.kAt ? { wholeDay: true } : {}, spec.memo ? { note: spec.memo } : {})];
   }
   return spec.staff.map((s) => {
     // その他の予定から作るコマ（koma）の終日は 8:30 から1時間（利用者その他と同じ。勤務時間いっぱいのコマにしない）
