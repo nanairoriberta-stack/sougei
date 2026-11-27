@@ -1494,7 +1494,8 @@ function calNoteLines(master, events, date, edition) {
     const nm0 = e.label === "sother" ? (e.tanto || [])[0] : e.label === "uother" ? (e.users || [])[0] : "", t0 = String(e.title || "").trim();
     const title = nm0 && !(t0 === nm0 || t0.startsWith(nm0 + " ") || t0.startsWith(nm0 + "　")) ? `${nm0} ${t0}` : t0;
     // カレンダーのメモも付ける（2026-11-10 依頼者「カレンダーのメモの部分は送迎表に出るように」）
-    const memo = String(e.memo || "").replace(/\s+/g, " ").trim(), memo1 = memo.length > 200 ? memo.slice(0, 200) + "…" : memo;
+    // シフト表から入った予定（sh…）のメモ「シフト表から自動で入った予定です…」は出さない（2026-11-27 依頼者「このカッコ内の文言はエクセルで表示させないで」）
+    const memo = /^sh[mf]\d{8}_/.test(String(e.id || "")) ? "" : String(e.memo || "").replace(/\s+/g, " ").trim(), memo1 = memo.length > 200 ? memo.slice(0, 200) + "…" : memo;
     const line = title + (e.allDay || !e.start ? "" : ` ${hm(e.date === date ? e.start : "0:00")}〜${hm((e.endDate || e.date) === date ? e.end : "24:00")}`) + (memo1 ? `（${memo1}）` : "");
     if (!title || t === "help" || t === "staff_plan" || t === "user_absent") continue;
     // ほかの事業の予定は出さない（2026-11-25 依頼者「生活介護のカレンダーの予定がりんくぷれいす版にも表示されている」）。職員の休み・休日出勤・時間変更だけは、その職員がこの版にいれば出す

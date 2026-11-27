@@ -394,6 +394,10 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     assert.ok(b2 && b2.note === "着替え持参" && b4 && b4.note === "松江で", "その他のコマにメモ " + JSON.stringify([b2, b4]));
     const mn = E9.calNoteLines(m, mv, date, "v1");
     assert.deepStrictEqual(mn.user, ["中村 受診後来所（母が送る）"], "特記事項の行にメモ " + JSON.stringify(mn));
+    // シフト表から入った予定（sh…）のメモは出さない（2026-11-27 依頼者「このカッコ内の文言はエクセルで表示させないで」）
+    const shv = [Object.assign(ev("shm20261102_ab", "宮永 遅番", { label: "shift", tanto: ["宮永"] }), { memo: "シフト表から自動で入った予定です。直すときはシフト表で直してください（ここで直しても、次にシフト表を保存すると戻ります）", sg: { type: "shift", staff: ["宮永"], users: [], wstart: "14:00", wend: "22:00" } })];
+    const shn = E9.calNoteLines(m, shv, date, "v1"), allL = [...shn.user, ...shn.staff, ...shn.biz];
+    assert.ok(allL.some((x) => /^宮永 遅番/.test(x)) && !allL.some((x) => /シフト表から自動/.test(x)), "シフト表の予定のメモは出さない " + JSON.stringify(allL));
     const an3 = E9.buildAutoNotes(m, ms2.blocks);
     assert.ok(an3.userNotes.includes("中村 入浴（着替え持参） 13:00〜14:00") && an3.staffNotes.includes("三島 研修（松江で）"), "コマから特記事項にメモ " + JSON.stringify(an3)); }
   // 終日の予定から入ったコマ（8:30）は、特記事項に時刻を出さない。コマだけ消しても同じ（2026-11-11 依頼者）。送迎表で別の時刻へ動かしたらその時刻
