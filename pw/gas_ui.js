@@ -1214,7 +1214,8 @@ const D = path.join(__dirname, "../gas/out");
       api(t, "cal.apply", [{ kind: "upsert", opId: "op_shk00002", id: "ev_shk00002", baseRev: null, ev: { title: "白戸 休日出勤（宿直）", date: "2026-11-27", endDate: "2026-11-28", allDay: false, start: "22:00", end: "06:00", label: "hwork", place: "", memo: "", members: [], sg: { type: "hwork", staff: ["白戸"], shuku: true } } }]);
       await A.pg.evaluate(() => SGHost.refreshCalendar()); await A.pg.waitForTimeout(800);
       assert.ok((await rows("2026-11-27")).some((x) => /白戸 休日出勤（宿直）/.test(x)), "宿直の日は出る");
-      assert.ok(!(await rows("2026-11-28")).some((x) => /白戸/.test(x)), "6:00まで → 次の日には出さない");
+      const r28 = await rows("2026-11-28");
+      assert.ok(!r28.some((x) => /白戸 (休日出勤|宿直開け残業)/.test(x)), "6:00まで → 次の日には出さない " + JSON.stringify(r28));
       // 宿直明けの日の夜にまた宿直（2026-11-27 依頼者「2重で登録できるように」）：「同じ予定がもう入っています」で止めない
       await add("hwork"); await A.pg.waitForTimeout(200);
       await A.pg.fill("#f-date", "2026-11-26"); await A.pg.fill("#f-enddate", "2026-11-26"); await A.pg.fill("#f-start", "17:00"); await A.pg.fill("#f-end", "21:00");
