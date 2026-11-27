@@ -12,7 +12,7 @@ const LOCK_WAIT_MAX = 90000;   // ロック待ちの上限（超えたら後で�
 const MAX_BYTES = 240000;      // 1文書の上限（基盤は256KiB）
 const MAX_COMMENTS = 100;
 const TRASH_DAYS = 30;
-const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien", "extra", "sother", "uother", "late", "early", "hcancel", "liberta", "nintei", "mevent"];  // late=遅刻・early=早退（2026-11-06。中身は職員時間変更）  // sother=職員のその他・uother=利用者のその他（2026-11-05）
+const LABEL_KEYS = ["help", "ride", "leave", "user", "other", "hwork", "shift", "monitor", "shien", "extra", "sother", "uother", "late", "early", "hcancel", "liberta", "nintei", "mevent", "ikiiki"];   // ikiiki＝いきいき（泊まりのサービス。2026-11-27）  // late=遅刻・early=早退（2026-11-06。中身は職員時間変更）  // sother=職員のその他・uother=利用者のその他（2026-11-05）
   // 以前の会議・外出・締切・社内イベントは「その他予定」として表示
 const SG_TYPES = ["staff_off", "staff_plan", "user_absent", "user_time", "user_extra", "help", "hwork", "shift", "help_cancel", "liberta"];   // liberta＝リベルタ（ﾏﾝｼｮﾝ）の泊まり なし／あり（2026-11-07）   // help_cancel＝いつものヘルプをその日だけなし（2026-11-07）
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -57,6 +57,9 @@ function normEvent(r, id, depth) {
     deletedBy: typeof r.deletedBy === "string" ? r.deletedBy.slice(0, 64) : null,
     prev: null,
     sg: normSg(r.sg),
+    // いきいき（泊まり）：本当の入る日時・帰る日時（カレンダーには泊まる日＝date〜endDate だけ出す。帰る日は出さない。2026-11-27 依頼者）
+    ...(r.label === "ikiiki" && r.stay && DATE_RE.test(r.stay.from) && DATE_RE.test(r.stay.to) && r.stay.to >= r.stay.from
+      ? { stay: { from: r.stay.from, fromT: TIME_RE.test(r.stay.fromT) ? r.stay.fromT : "", to: r.stay.to, toT: TIME_RE.test(r.stay.toT) ? r.stay.toT : "" } } : {}),
   };
   if (!depth && r.prev && typeof r.prev === "object") e.prev = normEvent(r.prev, id, 1);
   return e;

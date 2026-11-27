@@ -3,9 +3,9 @@
 const APP_VERSION="2026.11.16c";   // 予備（ログインするとサーバーの版 SGHost.me.version を出す。2026-11-16〜 版を上げるのは Code.gs だけ＝依頼者の差し替えを少なく）
 const appVer=()=>{try{return(window.SGHost&&SGHost.me&&SGHost.me.version)||APP_VERSION}catch{return APP_VERSION}};
 const C=window.TCCore;
-const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"nintei",n:"認定調査"},{k:"liberta",n:"リベルタ利用"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"},{k:"mevent",n:"ﾏﾝｼｮﾝイベント"}];   // ﾏﾝｼｮﾝイベント＝マンションのタブだけ（2026-11-17）
+const LABELS=[{k:"leave",n:"職員休み"},{k:"late",n:"遅刻"},{k:"early",n:"早退"},{k:"shift",n:"職員時間変更"},{k:"hwork",n:"休日出勤"},{k:"sother",n:"職員その他"},{k:"help",n:"ヘルプ"},{k:"hcancel",n:"ヘルプキャンセル"},{k:"user",n:"利用者休み"},{k:"ride",n:"送迎変更"},{k:"extra",n:"利用日外利用"},{k:"monitor",n:"モニタリング"},{k:"shien",n:"支援会議"},{k:"nintei",n:"認定調査"},{k:"liberta",n:"リベルタ利用"},{k:"ikiiki",n:"いきいき"},{k:"uother",n:"利用者その他"},{k:"other",n:"その他予定"},{k:"mevent",n:"ﾏﾝｼｮﾝイベント"}];   // ﾏﾝｼｮﾝイベント＝マンションのタブだけ（2026-11-17）
 /* ラベルは2段（2026-11-05 依頼者）：1段目 職員／利用者／その他予定、2段目はその中のラベル（その他予定は2段目なし）。ヘルプは利用者を選んで入れるので利用者の中 */
-const GRP=[{k:"staff",n:"職員",ls:[["leave","休み"],["late","遅刻"],["early","早退"],["shift","時間変更"],["hwork","休日出勤"],["sother","その他"]]},{k:"user",n:"利用者",ls:[["help","ヘルプ"],["hcancel","ヘルプキャンセル"],["user","休み"],["ride","送迎変更"],["extra","利用日外利用"],["monitor","モニタリング"],["shien","支援会議"],["nintei","認定調査"],["liberta","リベルタ利用"],["uother","その他"]]},{k:"other",n:"その他予定",ls:[["other","その他予定"]]}];
+const GRP=[{k:"staff",n:"職員",ls:[["leave","休み"],["late","遅刻"],["early","早退"],["shift","時間変更"],["hwork","休日出勤"],["sother","その他"]]},{k:"user",n:"利用者",ls:[["help","ヘルプ"],["hcancel","ヘルプキャンセル"],["user","休み"],["ride","送迎変更"],["extra","利用日外利用"],["monitor","モニタリング"],["shien","支援会議"],["nintei","認定調査"],["liberta","リベルタ利用"],["ikiiki","いきいき"],["uother","その他"]]},{k:"other",n:"その他予定",ls:[["other","その他予定"]]}];
 const grpOf=k=>(GRP.find(g=>g.ls.some(l=>l[0]===k))||GRP[2]);
 const NAME_FIRST=k=>k==="sother"||k==="uother";   // 職員・利用者の「その他」は名前を上に、タイトル・時間・場所はその下（2026-11-07 依頼者）
 /* 一覧・月のマスに出す題名：職員・利用者の「その他」は「名前 内容」（以前に入れた「PM検診」も「横田 PM検診」と出す。2026-11-07 依頼者） */
@@ -149,8 +149,8 @@ function renderGrid(vis){
    →「ヘルプやその他の項目もある程度判断して枠つくって」）。枠はその種類の1つ目の予定の場所に。日の欄（パソコン）・日の一覧（スマホ）・リスト。色は代表のラベルの色 */
 const BOXES=[{k:"leave",n:"職員の休み",ic:"🏖",ls:["leave"]},{k:"work",n:"職員の勤務",ic:"🕘",ls:["late","early","shift","hwork"]},{k:"help",n:"ヘルプ",ic:"🆘",ls:["help","hcancel"]},
   {k:"uoff",n:"利用者の休み",ic:"🏠",ls:["user"]},{k:"ride",n:"送迎",ic:"🚐",ls:["ride","extra"]},{k:"meet",n:"面談・会議",ic:"📝",ls:["monitor","shien","nintei"]},
-  {k:"lib",n:"リベルタ",ic:"🏢",ls:["liberta"]},{k:"misc",n:"その他",ic:"📌",ls:["sother","uother","other","mevent"]}];
-const BOX_COL={leave:"#e11d48",work:"var(--l-shift)",help:"var(--l-help)",uoff:"var(--l-user)",ride:"var(--l-ride)",meet:"var(--l-monitor)",lib:"var(--l-liberta)",misc:"var(--l-other)"};
+  {k:"lib",n:"リベルタ",ic:"🏢",ls:["liberta"]},{k:"stay",n:"いきいき（泊まり）",ic:"🛏",ls:["ikiiki"]},{k:"misc",n:"その他",ic:"📌",ls:["sother","uother","other","mevent"]}];
+const BOX_COL={leave:"#e11d48",work:"var(--l-shift)",help:"var(--l-help)",uoff:"var(--l-user)",ride:"var(--l-ride)",meet:"var(--l-monitor)",lib:"var(--l-liberta)",stay:"var(--l-ikiiki)",misc:"var(--l-other)"};
 const boxOf=l=>BOXES.find(b=>b.ls.includes(l))||BOXES[BOXES.length-1];
 function boxed(evs,row){const by={};for(const e of evs)(by[boxOf(e.label).k]=by[boxOf(e.label).k]||[]).push(e);let out="";const done={};
   for(const e of evs){const b=boxOf(e.label);if(done[b.k])continue;done[b.k]=1;const l=by[b.k];
@@ -637,6 +637,7 @@ function fixTimes(d){
   if(d.label==="leave"&&w.leave==="time")w.leave="naka";   // 以前の「時間で」は中抜け
   if(d.label==="leave")d.allDay=!LEAVE_T[w.leave];
   else if(d.label==="hcancel"||d.label==="liberta")d.allDay=true;
+  else if(d.label==="ikiiki"){if(d.allDay||!d.start){d.start="17:00";d.end="09:00"}d.allDay=false}   // いきいき：入る日時〜帰る日時（2026-11-27）
   else if(d.label==="user"||d.label==="ride"||d.label==="extra"||d.label==="shift"||LE_LABELS.includes(d.label))d.allDay=true;
   else if(d.label==="help"){d.allDay=false;d.endDate=d.date;if(d.start)d.end=w.hdur==="end"?(w.hend||""):addMin(d.start,Number(w.hdur)||60)}   // ヘルプは開始時刻と時間（30分・1時間など）か、終わりの時刻
   else if(d.label==="hwork"||PLAN_LABELS.includes(d.label))d.allDay=false;
@@ -701,6 +702,8 @@ function drawSg(){
   else if(L==="leave")h=(staffSelf(d)?self:who("staff","休む職員","職員の名前で検索"))
     +`<div class="sgsub"><span class="lbl2">休みの形</span>${radios("w-leave",w.leave==="time"?"naka":w.leave,[["day","1日"],["am","AM休み"],["pm","PM休み"],["naka","中抜け"],["hours","時間休み"]])}</div>`
     +hint((w.leave==="am"?"勤務時間の真ん中＋30分から出勤として送迎表に入ります（8:30〜17:30なら13:30から）。":w.leave==="pm"?"勤務時間の真ん中−30分で退勤として送迎表に入ります（8:30〜17:30なら12:30まで）。":LEAVE_T[w.leave]||w.leave==="time"?"下の開始〜終了の時刻を、送迎表でその職員の不在として入れます。":"送迎表でその日は休みになります。何日も続く休みは終了日を変えてください。")+"休みの時間にかかる、この職員の担当の便・ヘルプは送迎表の「保留」に移ります（予定を消すと元に戻ります）。");
+  else if(L==="ikiiki")h=who("users","利用者","利用者の名前で検索")
+    +hint("下の「入る日・何時から」「帰る日・何時まで」を入れてください。例：12/1 17:00〜12/4 9:00 なら、カレンダーには 12/1・2・3 に「いきいき」と出ます（帰る日の 12/4 には出ません）。題名に日時が入ります。送迎表には反映しません。")
   else if(L==="liberta")h=who("users","利用者","利用者の名前で検索")
     +`<div class="sgsub"><span class="lbl2">リベルタに</span>${radios("w-lib",w.lib||"off",[["off","泊まらない（なし）"],["on","泊まる（あり）"]])}</div>`
     +`<div class="sgsub"><span class="lbl2">開始日の</span>${radios("w-lf",w.lf||"am",[["am","朝から"],["pm","夜から"]])}</div>`
@@ -852,6 +855,15 @@ function checkSg(d,sg){
 }
 /* ---------- 予定の編集 ---------- */
 let ed=null;
+/* いきいき（泊まり。2026-11-27 依頼者「〇日の何時から〇日の何時までという表記はのこして、カレンダーには泊まる日だけ表示され、翌日の朝の時間は表示されないように。
+   例 12/1 17時〜12/4 9:00 なら 12/1・2・3 はいきいきと出るようにして 12/4 は出ない」）。入力は入る日時〜帰る日時、保存する予定は 泊まる日（date〜帰る日の前の日）・終日、
+   本当の日時は stay={from,fromT,to,toT}・題名「中村 いきいき（12/1 17:00〜12/4 9:00）」 */
+const mdOf=x=>`${Number(String(x).slice(5,7))}/${Number(String(x).slice(8,10))}`;
+const dayBefore=x=>{const t=parse(x);t.setDate(t.getDate()-1);return ymd(t)};
+const ikTitle=d=>`${(d.w.users||[])[0]||"利用者"} いきいき（${mdOf(d.date)} ${hm1(d.start)}〜${mdOf(d.endDate)} ${hm1(d.end)}）`;
+function ikOpen(d){if(d.label==="ikiiki"&&d.stay){d.date=d.stay.from;d.endDate=d.stay.to;d.start=d.stay.fromT||"17:00";d.end=d.stay.toT||"09:00";d.allDay=false}return d}
+function ikStore(ev,d){if(d.label!=="ikiiki")return ev;
+  return Object.assign(ev,{stay:{from:d.date,fromT:d.start,to:d.endDate,toT:d.end},allDay:true,start:"",end:"",endDate:d.endDate>d.date?dayBefore(d.endDate):d.date,users:[...(d.w.users||[])]})}
 function openEditor(ev,day,draft){
   // 書きかけが残っているときに別の予定を開くと、書きかけが上書きされていた（2026-11-24 依頼者「絶対消えないように」）→ 先に書きかけを開くか聞く
   if(!draft){const od=draftGet();if(od&&od.form&&(!ev||od.id!==ev.id)){
@@ -859,7 +871,7 @@ function openEditor(ev,day,draft){
   const ro=!(db&&S.canWrite&&core);
   const base=ev||null;
   // 新しい予定は「ヘルプ」から（ヘルプを入れられない一般職員は「職員休み」から）
-  const d=draft?draft.form:ev?{...ev,members:[...ev.members]}:{title:"",date:day||S.sel,endDate:day||S.sel,allDay:false,start:"10:00",end:"11:00",label:(meInfo().canSougei||meInfo().admin)?"help":"leave",place:"",memo:"",members:S.me?[S.me]:[],sg:null,biz:newBiz()};
+  const d=draft?draft.form:ev?ikOpen({...ev,members:[...ev.members]}):{title:"",date:day||S.sel,endDate:day||S.sel,allDay:false,start:"10:00",end:"11:00",label:(meInfo().canSougei||meInfo().admin)?"help":"leave",place:"",memo:"",members:S.me?[S.me]:[],sg:null,biz:newBiz()};
   if(!ev&&!draft&&d.biz==="mansion")d.label="mevent";   // マンションのタブの新しい予定は「ﾏﾝｼｮﾝイベント」
   if(d.sg&&LABEL_OF_SG[d.sg.type]&&!(d.sg.type==="staff_plan"&&(PLAN_LABELS.includes(d.label)||d.label==="sother"))&&!(d.sg.type==="shift"&&LE_LABELS.includes(d.label)))d.label=LABEL_OF_SG[d.sg.type];
   if(!d.w)d.w=workOf(d);
@@ -900,12 +912,12 @@ function drawSheet(){
     ${isOth(d.label)?`<div class="field"><label for="f-title">タイトル</label><input class="input title-input" id="f-title" maxlength="80" value="${esc(d.title)}" placeholder="${NAME_FIRST(d.label)?"例：研修（名前は前に自動で付きます）":"例：週次定例"}" ${v()}></div>`:""}
     <label class="check" ${isOth(d.label)?"":"hidden"}><input type="checkbox" id="f-allday" ${d.allDay?"checked":""} ${ro?"disabled":""}>終日</label>
     <div class="row">
-      <div class="field"><label for="f-date">開始日</label><input class="input" type="date" id="f-date" value="${esc(d.date)}" ${v()}></div>
-      <div class="field" ${d.allDay?"hidden":""} id="w-start"><label for="f-start">${d.label==="hwork"?"出勤の時刻":"開始時刻"}</label><input class="input" type="time" id="f-start" value="${esc(d.start||"10:00")}" step="300" ${v()}></div>
+      <div class="field"><label for="f-date">${d.label==="ikiiki"?"入る日":"開始日"}</label><input class="input" type="date" id="f-date" value="${esc(d.date)}" ${v()}></div>
+      <div class="field" ${d.allDay?"hidden":""} id="w-start"><label for="f-start">${d.label==="hwork"?"出勤の時刻":d.label==="ikiiki"?"何時から":"開始時刻"}</label><input class="input" type="time" id="f-start" value="${esc(d.start||"10:00")}" step="300" ${v()}></div>
     </div>
     <div class="row">
-      <div class="field" ${d.label==="help"?"hidden":""}><label for="f-enddate">終了日</label><input class="input" type="date" id="f-enddate" value="${esc(d.endDate)}" ${v()}></div>
-      <div class="field" ${d.allDay||d.label==="help"?"hidden":""} id="w-end"><label for="f-end">${d.label==="hwork"?"退勤の時刻":"終了時刻"}</label><input class="input" type="time" id="f-end" value="${esc(d.end||"11:00")}" step="300" ${v()}></div>
+      <div class="field" ${d.label==="help"?"hidden":""}><label for="f-enddate">${d.label==="ikiiki"?"帰る日":"終了日"}</label><input class="input" type="date" id="f-enddate" value="${esc(d.endDate)}" ${v()}></div>
+      <div class="field" ${d.allDay||d.label==="help"?"hidden":""} id="w-end"><label for="f-end">${d.label==="hwork"?"退勤の時刻":d.label==="ikiiki"?"何時まで":"終了時刻"}</label><input class="input" type="time" id="f-end" value="${esc(d.end||"11:00")}" step="300" ${v()}></div>
     </div>
     ${isOth(d.label)?`<div class="field"><label for="f-place">場所</label><input class="input" id="f-place" maxlength="80" value="${esc(d.place)}" placeholder="会議室A / オンライン など" ${v()}></div>`:""}
     ${isOth(d.label)&&!NAME_FIRST(d.label)&&d.label!=="mevent"?box:""}
@@ -952,9 +964,10 @@ function save(){
   const bad=checkSg(d,d.sg);if(bad)return showErr(bad);
   if(d.label==="sother"&&!d.w.staff.length)return showErr("職員を選んでください。");
   if(d.label==="uother"&&!d.w.users.length)return showErr("利用者を選んでください。");
+  if(d.label==="ikiiki"){if(!d.w.users.length)return showErr("利用者を選んでください。");if(!d.start||!d.end)return showErr("何時から・何時までを入れてください。");if(d.endDate===d.date&&d.end<=d.start)return showErr("帰る時刻は入る時刻より後にしてください。");d.title=ikTitle(d)}
   if(!ed.base)for(const k of["staff","users"])if(oneOnly(d.label,k)&&(d.w[k]||[]).length>1)return showErr("1つの予定に1人です。ほかの人は×で外して、別の予定で入れてください。");
   // その他予定だけタイトルを入れてもらう。ほかのラベルは入力した内容から毎回付け直す（直したときに古い題名が残らない）
-  if(!isOth(d.label))d.title=autoTitle(d.label,d.sg,d)||LMAP[d.label]?.n||d.title;
+  if(!isOth(d.label)&&d.label!=="ikiiki")d.title=autoTitle(d.label,d.sg,d)||LMAP[d.label]?.n||d.title;
   // 職員・利用者の「その他」は、ほかの予定と同じ「名前 内容」の題名にする（2026-11-07 依頼者「名前 〇〇みたいに他の表示と合わせて」）
   if(NAME_FIRST(d.label)){const nm=((d.label==="sother"?d.w.staff:d.w.users)||[])[0]||"",t=String(d.title||"").trim();
     if(nm&&!(t===nm||t.startsWith(nm+" ")||t.startsWith(nm+"　")))d.title=t?`${nm} ${t}`:`${nm} その他`;}
@@ -964,6 +977,7 @@ function save(){
   if(!d.allDay&&!d.start)return showErr("開始時刻を入れてください。");
   if(!d.allDay&&d.endDate===d.date&&d.end<=d.start)return showErr("終了時刻は開始時刻より後にしてください。");
   const ev={title:d.title,date:d.date,endDate:d.endDate,allDay:d.allDay,start:d.allDay?"":d.start,end:d.allDay?"":d.end,label:lab(d.label),biz:bizOf(d),place:d.place,memo:d.memo,members:d.members,tanto:d.label==="other"||d.label==="sother"?[...d.w.staff]:[],users:d.label==="uother"?[...d.w.users]:[],sg:d.sg||null};
+  ikStore(ev,d);
   {const mm=bizMismatch(ev),sig=bizOf(ev)+"|"+mm.join(",");   // 事業の取り違えの確認（放課後デイの職員の休みを生活介護に入れる、など）
     if(mm.length&&ed.bizWarned!==sig){ed.bizWarned=sig;return showErr(`この予定は「${BIZN[bizOf(ev)]}」の予定ですが、${mm.join("・")}さんは${BIZN[otherBiz(bizOf(ev))]}の人です。このまま入れるときは、もう一度「保存」を押してください（上の「事業」で変えられます）。`)}}
   if(!ed.base){const dup=dupOf(ev);if(dup&&ed.dupWarned!==dup.id){ed.dupWarned=dup.id;return showErr(`同じ予定がもう入っています（${dup.date.slice(5).replace("-","/")}「${dup.title}」）。それでも入れるときは、もう一度「保存」を押してください。`)}}

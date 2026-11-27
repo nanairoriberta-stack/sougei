@@ -425,6 +425,11 @@ console.log('extra OK');
   assert.deepStrictEqual(C.reconcile(m, r3, [], D).blocks.map((b) => b.label).sort(), ['中村ヘルプ', '中村入浴', '中村（通院）'].sort(), '予定を消すと2つとも戻る');
   assert.ok(C.helpOfUser('中村入浴', '中村') && !C.helpOfUser('森井ヘルプ', '森'), 'その人のヘルプか');
   console.log('help cancel OK', nm, mine.length + '件');
+  // いきいき（泊まり。2026-11-27）：本当の日時は stay に残す・ほかのラベルには付けない・送迎表には反映しない
+  const ik = T.normEvent({ title: '中村 いきいき（12/1 17:00〜12/4 9:00）', date: '2026-12-01', endDate: '2026-12-03', allDay: true, label: 'ikiiki', users: ['中村'], stay: { from: '2026-12-01', fromT: '17:00', to: '2026-12-04', toT: '09:00' } }, 'evik0001', 0);
+  assert.ok(ik && ik.label === 'ikiiki' && ik.endDate === '2026-12-03' && JSON.stringify(ik.stay) === JSON.stringify({ from: '2026-12-01', fromT: '17:00', to: '2026-12-04', toT: '09:00' }), 'いきいき ' + JSON.stringify(ik));
+  assert.ok(!('stay' in T.normEvent({ title: 'x', date: '2026-12-01', label: 'other', stay: { from: '2026-12-01', to: '2026-12-02' } }, 'evik0002', 0)), 'ほかのラベルに stay は付けない');
+  assert.strictEqual(C.reconcile(m, s3, [Object.assign({}, ik, { date: D, endDate: D })], D), s3, '送迎表には反映しない');
 }
 // ===== リベルタ利用（ﾏﾝｼｮﾝの泊まり なし/あり。〇日の夜から〜〇日の朝。2026-11-07 依頼者） =====
 {
