@@ -80,7 +80,9 @@ function specsFor(master, events, date) {
     // 職員・利用者の「その他」から作るコマは「名前 内容」（題名に名前が無い以前の予定でも。2026-11-10 依頼者「利用者が消えてただのその他予定で表示」）
     const nm0 = !ev.sg && ev.label === "uother" ? (ev.users || [])[0] : !ev.sg && ev.label === "sother" ? (ev.tanto || [])[0] : "", t0 = String(ev.title || "").trim();
     const title0 = nm0 && !(t0 === nm0 || t0.startsWith(nm0 + " ") || t0.startsWith(nm0 + "　") || t0.startsWith(nm0)) ? `${nm0} ${t0 || "その他"}` : (t0 || (nm0 ? `${nm0} その他` : ""));
-    out.push({ id: ev.id, rev: ev.rev, type: sg0.type, koma: !ev.sg, title: title0, whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
+    // いきいきのコマは「中村 いきいき」だけ（日付・時刻は送迎表には出さない。2026-11-27 依頼者「いきいきサービスに日付と時間は送迎表の中には表示しないように」）
+    const titleK = ev.label === "ikiiki" ? `${(ev.users || [])[0] || ""} いきいき`.trim() : title0;
+    out.push({ id: ev.id, rev: ev.rev, type: sg0.type, koma: !ev.sg, ik: ev.label === "ikiiki", title: titleK, whole: half ? true : whole, from, to, staff, users, half, wd: wdOf(date), biz: ev.biz === "houkago" ? "houkago" : "seikatsu", missingStaff,
       meet: appTime(sg0.meet), send: appTime(sg0.send), noMeet: sg0.noMeet || "", noSend: sg0.noSend || "", missing,
       reason: sg0.reason || "", note: sg0.note || "", deptId: dept ? dept.id : "",
       goMeet: !!sg0.goMeet, goSend: !!sg0.goSend, wstart: appTime(sg0.wstart), wend: appTime(sg0.wend), meetPlace: sg0.meetPlace || "", sendPlace: sg0.sendPlace || "", noRide: !!sg0.noRide, libOnly: !!sg0.libOnly, afrom: appTime(sg0.afrom), ato: appTime(sg0.ato), noAway: !!sg0.noAway, shuku: !!sg0.shuku, tbd: !!sg0.tbd, kAt: appTime(sg0.kAt), at: appTime(sg0.at), ats: (sg0.ats || []).map(appTime).filter(Boolean),
@@ -459,6 +461,8 @@ function reconcile(master, sheet, events, date) {
     const bl = blocksOf(sp); const have = new Set(((next || sheet).blocks || []).map((b) => b.id));
     // 終日の予定から入ったコマに「終日」の印が無いもの（2026-11-11 より前に入ったコマ）は印を足す＝特記事項に 8:30〜 を出さない（2026-11-13 依頼者「コマ消したら時間消えるようになってる？」）
     for (const x of bl) if (x.wholeDay) { const old = ((next || sheet).blocks || []).find((b) => b.id === x.id); if (old && !old.wholeDay) { const n = work(), o2 = n.blocks.find((b) => b.id === x.id); o2.wholeDay = true; } }
+    // 以前に入ったいきいきのコマ（題名に日付・時刻つき）は「中村 いきいき」に直す（2026-11-27）
+    if (sp.ik) for (const x of bl) { const old = ((next || sheet).blocks || []).find((b) => b.id === x.id); if (old && old.label !== x.label && /いきいき（/.test(String(old.label || ""))) { const n = work(), o2 = n.blocks.find((b) => b.id === x.id); o2.label = x.label; } }
     if (bl.some((b) => !have.has(b.id))) { const n = work(); n.blocks = (n.blocks || []).filter((b) => !bl.some((x) => x.id === b.id)).concat(bl); }
   }
   if (next && next.calApplied && !Object.keys(next.calApplied).length) delete next.calApplied;

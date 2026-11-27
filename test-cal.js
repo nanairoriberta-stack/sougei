@@ -432,7 +432,10 @@ console.log('extra OK');
   // 泊まる日は保留の欄の 18:00 にコマ（2026-11-27 依頼者「泊りの日は18:00〜のコマで送迎表に出るように。朝はコマつくらなくていい」）
   const ikEv = Object.assign({}, ik, { id: 'evik0001', rev: 1, date: D, endDate: D });
   const rk = C.reconcile(m, s3, [ikEv], D), kb = rk.blocks.find((b) => b.id === 'cal_evik0001_hold');
-  assert.ok(kb && kb.time === '18:00' && kb.staffId === '__hold__' && /中村 いきいき/.test(kb.label) && !kb.wholeDay && kb.userIds.length === 1, 'いきいきのコマ 18:00 ' + JSON.stringify(kb));
+  assert.ok(kb && kb.time === '18:00' && kb.staffId === '__hold__' && kb.label === '中村 いきいき' && !kb.wholeDay && kb.userIds.length === 1, 'いきいきのコマ 18:00・日付と時刻は出さない ' + JSON.stringify(kb));
+  { // 以前に入った日付つきのコマも直す
+    const old = Object.assign({}, rk, { blocks: rk.blocks.map((b) => b.id === 'cal_evik0001_hold' ? Object.assign({}, b, { label: '中村 いきいき（12/1 17:00〜12/4 9:00）' }) : b) });
+    assert.strictEqual(C.reconcile(m, old, [ikEv], D).blocks.find((b) => b.id === 'cal_evik0001_hold').label, '中村 いきいき', '以前のコマの題名も直る'); }
   const D2n = (() => { const x = new Date(D + 'T00:00:00'); x.setDate(x.getDate() + 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; })();
   assert.ok(!C.reconcile(m, s3, [ikEv], D2n).blocks.some((b) => b.id === 'cal_evik0001_hold'), '帰る日（泊まる日の次の日）にはコマを作らない');
   assert.ok(!C.reconcile(m, rk, [], D).blocks.some((b) => b.id === 'cal_evik0001_hold'), '予定を消すとコマも消える');

@@ -1183,7 +1183,7 @@ const D = path.join(__dirname, "../gas/out");
     assert.strictEqual(await shown("2026-11-27"), 0, "帰る日（11/27）は出ない");
     { // 送迎表：泊まる日は保留の欄の 18:00 にコマ・帰る日の朝はコマなし（2026-11-27 依頼者）
       const kb = (api(t, "kv.get", ["v2:sheet:2026-11-25"]).data.value.blocks || []).find((b) => b.id === `cal_${ik.id}_hold`);
-      assert.ok(kb && kb.time === "18:00" && kb.staffId === "__hold__" && /中村 いきいき/.test(kb.label), "11/25 の送迎表に 18:00 のコマ " + JSON.stringify(kb));
+      assert.ok(kb && kb.time === "18:00" && kb.staffId === "__hold__" && kb.label === "中村 いきいき", "11/25 の送迎表に 18:00 のコマ（日付・時刻なし） " + JSON.stringify(kb));
       assert.ok(!(api(t, "kv.get", ["v2:sheet:2026-11-27"]).data.value.blocks || []).some((b) => b.id === `cal_${ik.id}_hold`), "帰る日（11/27）はコマなし"); }
     await A.pg.click('.cell[data-day="2026-11-25"]'); await A.pg.waitForTimeout(300);
     await A.pg.locator(".ev-row, .ds-row", { hasText: "いきいき" }).first().evaluate((x) => x.click()); await A.pg.waitForTimeout(500);

@@ -174,6 +174,19 @@ const ExcelJS = require("./pw/node_modules/exceljs");
     assert.ok(kb.some((b) => b.label === "会議" && b.vehicleId === kero.id), "会議に車が付いて戻る: " + JSON.stringify(kb));
     assert.ok(!back3.blocks.some((b) => b.staffId === yk.id && (b.label === kero.name || /^ケロ/.test(b.label))), "車の名前だけのコマはできない");
     console.log("取り込み：車つきの予定は1つのコマ OK");
+    { // 迎えなし・送りなしを分けて出す（2026-11-27 依頼者「送迎なしでひとくくりにされてますが、迎えなし、と、送りなしに分けて表示してほしい」）
+      const us = m.users.filter((u) => (u.days || []).includes(1)).slice(0, 3), [a1, a2, a3] = us;
+      const sh4 = Object.assign({}, sheet, { noRide: { [a1.id]: { meet: "家族送り" }, [a2.id]: { send: "家族迎え" }, [a3.id]: { meet: "受診後来所", send: "母迎え" } } });
+      const wb4 = E.buildWorkbook(ExcelJS, dm3, sh4, date); const b4 = new ExcelJS.Workbook(); await b4.xlsx.load(await wb4.xlsx.writeBuffer());
+      const ws4 = b4.getWorksheet("送迎表"), aoa4 = []; let txt = "";
+      ws4.eachRow({ includeEmpty: true }, (row, rn) => { const a = []; row.eachCell({ includeEmpty: true }, (c, cn) => { const v = c.value; const s = v && v.richText ? v.richText.map((x) => x.text).join("") : v; a[cn - 1] = s; if (typeof s === "string" && /■/.test(s)) txt += s + "\n"; }); aoa4[rn - 1] = a; });
+      assert.ok(!/■送迎なし/.test(txt) && /■迎えなし/.test(txt) && /■送りなし/.test(txt), "見出しが分かれる " + txt);
+      const meetPart = txt.slice(txt.indexOf("■迎えなし"), txt.indexOf("■送りなし")), sendPart = txt.slice(txt.indexOf("■送りなし")).split("────")[0];
+      assert.ok(meetPart.includes(`${a1.name}(家族送り)`) && meetPart.includes(`${a3.name}(受診後来所)`) && !meetPart.includes(a2.name + "("), "迎えなし " + meetPart);
+      assert.ok(sendPart.includes(`${a2.name}(家族迎え)`) && sendPart.includes(`${a3.name}(母迎え)`) && !sendPart.includes(a1.name + "("), "送りなし " + sendPart + " / " + [a1.name, a2.name, a3.name].join(","));
+      const back4 = E.importMondayGrid(aoa4, dm3);
+      assert.deepStrictEqual([back4.noRide[a1.id], back4.noRide[a2.id], back4.noRide[a3.id]], [{ meet: "家族送り" }, { send: "家族迎え" }, { meet: "受診後来所", send: "母迎え" }], "取り込むと迎えなし・送りなしに戻る");
+      console.log("Excel：迎えなし・送りなしを分ける OK"); }
   }
   console.log("excel OK");
 })().catch((e) => { console.error(e); process.exit(1); });

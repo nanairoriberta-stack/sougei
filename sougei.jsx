@@ -1870,7 +1870,9 @@ function importAppExport(aoa, master) {
         if (ln3 === "■利用時間変更") { sec = "time"; manual = false; continue; }
         if (ln3 === "■リベルタ泊あり(臨時)") { sec = "libOn"; manual = false; continue; }
         if (ln3 === "■リベルタ泊なし") { sec = "libOff"; manual = false; continue; }
-        if (ln3 === "■送迎なし") { sec = "noRide"; manual = false; continue; }
+        if (ln3 === "■送迎なし") { sec = "noRide"; manual = false; continue; }   // 以前の出し方（迎え・送りがひとまとめ）
+        if (ln3 === "■迎えなし") { sec = "noMeet"; manual = false; continue; }   // 2026-11-27〜 迎えなし・送りなしを分けて出す
+        if (ln3 === "■送りなし") { sec = "noSend"; manual = false; continue; }
         if (!manual && sec === "absent") {
           ln3.split(/[・、,]/).map((x) => x.trim()).filter(Boolean).forEach((nm4) => {
             const id4 = uByName[nm4] || uByName[stripParen(nm4)];
@@ -1888,6 +1890,8 @@ function importAppExport(aoa, master) {
           } else if (sec === "libOn" || sec === "libOff") {
             const o = { ...(body.includes("朝") ? { am: true } : {}), ...(body.includes("夕") ? { pm: true } : {}) };
             if (o.am || o.pm) extra[sec === "libOn" ? "libertaOn" : "libertaOff"][uid3] = o;
+          } else if (sec === "noMeet" || sec === "noSend") {
+            extra.noRide[uid3] = Object.assign({}, extra.noRide[uid3] || {}, { [sec === "noMeet" ? "meet" : "send"]: body });
           } else if (sec === "noRide") {
             // 「家族送り」=家族が施設へ送ってくる→迎えなし、「家族迎え」=家族が迎えに来る→送りなし。
             // 「迎えなし・迎え不要」等の打ち消し表記はその方向自体をなしにする。判別不能な理由は両方に設定
@@ -4241,14 +4245,11 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
 
   // ---- ゾーン: 送迎(左・3列) / 特記事項(利用者)=右端の縦長枠(送迎〜利用者をまたぐ) ----
   const noRideMap = sheet.noRide || {};
-  // 送迎なしの利用者は1人1行で「名前(迎え理由、送り理由)」に統合
-  const noRideLines = master.users
-    .filter((u) => (u.days || []).includes(wd) && !absent[u.id] && ((noRideMap[u.id] || {}).meet || (noRideMap[u.id] || {}).send))
-    .map((u) => {
-      const nr = noRideMap[u.id] || {};
-      const parts = [nr.meet, nr.send].filter(Boolean);
-      return `${u.name}(${parts.join("、")})`;
-    });
+  // 迎えなし・送りなしは分けて「■迎えなし」「■送りなし」に1人1行「名前(理由)」（2026-11-27 依頼者「送迎なしでひとくくりにされてますが、迎えなし、と、送りなしに分けて表示してほしい」。以前は「■送迎なし 名前(迎え理由、送り理由)」）
+  const nrUsers = master.users.filter((u) => (u.days || []).includes(wd) && !absent[u.id]);
+  const noMeetLines = nrUsers.filter((u) => (noRideMap[u.id] || {}).meet).map((u) => `${u.name}(${noRideMap[u.id].meet})`);
+  const noSendLines = nrUsers.filter((u) => (noRideMap[u.id] || {}).send).map((u) => `${u.name}(${noRideMap[u.id].send})`);
+  const noRideLines = [...noMeetLines, ...noSendLines];
   const libOnLines = master.users
     .filter((u) => (u.days || []).includes(wd) && !absent[u.id] && ((libOnMap[u.id] || {}).am || (libOnMap[u.id] || {}).pm))
     .map((u) => { const o = libOnMap[u.id]; return `${u.name}(${[o.am ? "朝" : "", o.pm ? "夕" : ""].filter(Boolean).join("・")})`; });
@@ -4282,7 +4283,8 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     ...(timeChangeLines.length ? ["■利用時間変更", ...timeChangeLines] : []),
     ...(libOnLines.length ? ["■リベルタ泊あり(臨時)", ...libOnLines] : []),
     ...(libOffLines.length ? ["■リベルタ泊なし", ...libOffLines] : []),
-    ...(noRideLines.length ? ["■送迎なし", ...noRideLines] : []),
+    ...(noMeetLines.length ? ["■迎えなし", ...noMeetLines] : []),
+    ...(noSendLines.length ? ["■送りなし", ...noSendLines] : []),
     ...manualNoteLines,
     ...((noRideLines.length || manualNoteLines.length) && autoNoteLines.length ? ["────"] : []),
     ...autoNoteLines,
