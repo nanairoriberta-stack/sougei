@@ -791,7 +791,7 @@ const D = path.join(__dirname, "../gas/out");
   // よみがな：送迎表の名前は「よみがな」シートに自動で並ぶ。読みを入れると、ひらがなで予測が出る
   const ys = g.sheets.get("よみがな"); assert.ok(ys && ys.data.some((r) => r[0] === "中村" && r[2] === "利用者"), "よみがなシートに利用者が並ぶ");
   ys.data.forEach((r) => { if (r[0] === "中村") r[1] = "なかむら"; if (r[0] === "日野") r[1] = "ひの"; });
-  for (const k of [...g.cache.keys()]) if (k === "names8") g.cache.delete(k);
+  for (const k of [...g.cache.keys()]) if (k === "names9") g.cache.delete(k);
   { // ヘルプで利用者の候補が出ない（2026-11-23 依頼者）：名前の一覧が読めないときは理由と「もう一度読む」。一度読めた一覧は端末に覚えて、読めないときに使う
     const key = api(t, "auth.deviceLink", []).data.key;
     const N = await open("calendar.html", { width: 390, height: 844 }, `window.__SG_EDITION="v1";window.__SG_BASE="https://script.google.com/macros/s/TEST/exec";window.__SG_KEY="${key}";`, "calendar_names.html", () => { window.__failNames = 1; });
