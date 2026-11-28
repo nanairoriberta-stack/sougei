@@ -510,8 +510,9 @@ const ExcelJS = require("./pw/node_modules/exceljs");
       const mg = Object.values(w3._merges).map((x) => x.model || x).find((x) => w3.getCell(x.top, x.left).address === cell.address);
       let H = 0; for (let r = mg.top; r <= mg.bottom; r++) H += w3.getRow(r).height || 15;
       let W = 0; for (let c = mg.left; c <= mg.right; c++) W += w3.getColumn(c).width || 9;
-      const need = E13.cellNeedH(String(cell.value), W, cell.font.size);
-      assert.ok(H + 0.5 >= need, n + "件：特記事項の枠の高さ " + H + " ≥ 要る高さ " + need.toFixed(1));
+      const need = E13.cellNeedH(String(cell.value), W, cell.font.size, false, true);   // 余裕をもった見積り（2026-11-28 依頼者「まだ切れる」：字数15%少なめ＋1行）
+      const need0 = E13.cellNeedH(String(cell.value), W, cell.font.size);
+      assert.ok(H + 0.5 >= need && need > need0, n + "件：特記事項の枠の高さ " + H + " ≥ 余裕をもった高さ " + need.toFixed(1) + "（以前の見積り " + need0.toFixed(1) + "）");
       assert.strictEqual(E13.fitRowHeights(w3), 0, n + "件：もう足りている");
       console.log("特記事項" + n + "件：枠の高さ " + H + "・文字 " + cell.font.size + "pt OK");
     }

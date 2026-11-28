@@ -4357,7 +4357,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
     const roomN = XL_MAX_ROW_H * ((hasSogei ? zoneTop + 1 : uCr) <= absRow ? absRow - (hasSogei ? zoneTop + 1 : uCr) + 1 : 1);
     const colWsum = (a, b) => { let w = 0; for (let c = a; c <= b; c++) { const cw = ws.getColumn(c).width; w += cw == null ? 9 : cw; } return w; };
     const needFor = (nc) => { const per = Math.ceil(noteLines2.length / nc) || 1, cw = Math.floor(totalN / nc); let mx = 0;
-      for (let ci = 0; ci < nc; ci++) { const cf = noteFrom + ci * cw, ct = ci === nc - 1 ? noteTo : cf + cw - 1; mx = Math.max(mx, cellNeedH(toHankakuKana(noteLines2.slice(ci * per, (ci + 1) * per).join("\n")), colWsum(cf, ct), 11)); }
+      for (let ci = 0; ci < nc; ci++) { const cf = noteFrom + ci * cw, ct = ci === nc - 1 ? noteTo : cf + cw - 1; mx = Math.max(mx, cellNeedH(toHankakuKana(noteLines2.slice(ci * per, (ci + 1) * per).join("\n")), colWsum(cf, ct), 11, false, true)); }
       return mx; };
     let ncolN = Math.max(1, Math.min(noteLines2.length > 6 ? 2 : 1, maxColN));
     while (ncolN < maxColN && needFor(ncolN) > roomN) ncolN++;
@@ -4370,7 +4370,7 @@ function buildWorkbook(ExcelJS, master, sheet, date, opts = {}) {
       const ct = ci === ncolN - 1 ? noteTo : cf + colWN - 1;
       const chunk = noteLines2.slice(ci * perN, (ci + 1) * perN).join("\n");
       chunksN.push([cf, ct, chunk]);
-      needN = Math.max(needN, calcLines(toHankakuKana(chunk), segChars(cf, ct)) * LINE_H + 3);
+      needN = Math.max(needN, calcLines(toHankakuKana(chunk), segChars(cf, ct)) * LINE_H + 3, cellNeedH(toHankakuKana(chunk), colWsum(cf, ct), 11, false, true));
     }
     let acc = 0;
     for (let rr = cTop; rr <= cBottom; rr++) acc += ws.getRow(rr).height || 17;
@@ -4555,8 +4555,9 @@ function fitRowHeights(ws) {
       let size = (cell.font && cell.font.size) || 11;
       // Excelの1行の高さは409まで。それより高く要るときは（行を高くしても切れるので）文字を小さくして収める（2026-11-18 依頼者「特記事項(利用者)の下部が文字がきれる」）
       const room = XL_MAX_ROW_H * (rg.bottom - rg.top + 1);
-      let h = cellNeedH(txt, w, size, al.wrapText === false);
-      while (h > room && size > 6) { size = Math.max(6, size - 0.5); h = cellNeedH(txt, w, size, al.wrapText === false); }
+      const safe = rg.bottom > rg.top && al.wrapText !== false;   // 縦に結合した枠（特記事項・連絡事項）は余裕をもって高くする
+      let h = cellNeedH(txt, w, size, al.wrapText === false, safe);
+      while (h > room && size > 6) { size = Math.max(6, size - 0.5); h = cellNeedH(txt, w, size, al.wrapText === false, safe); }
       if (size !== ((cell.font && cell.font.size) || 11)) cell.font = { ...(cell.font || {}), size };
       need.push([rg.bottom, rg.top, h]);
     });
@@ -4577,13 +4578,15 @@ function fitRowHeights(ws) {
 }
 const XL_MAX_ROW_H = 409;   // Excelの行の高さの上限（ポイント）
 /* 折り返したときに要る高さ（fitRowHeights と特記事項の枠で同じ見積り）。w=列の幅の合計 */
-function cellNeedH(txt, w, size, noWrap) {
+function cellNeedH(txt, w, size, noWrap, safe) {
   const dispW = (s) => [...String(s)].reduce((a, ch) => a + (/[\uFF61-\uFF9F\x20-\x7E]/.test(ch) ? 0.6 : 1), 0);
   // 列の幅1＝約7ピクセル（Excelの標準）、全角1文字＝文字の大きさ×4/3ピクセル。左右の余白の分を引く
   // 行の終わりに「〜」「)」「、」などが来ると Excel は前の文字ごと次の行へ送るので、1行に入る字数は1字少なめに見る
-  const chars = Math.max(1, Math.floor((7 * w - 8) / (size * 4 / 3)) - 1);
+  // safe＝縦に長い枠（特記事項・連絡事項）：1行に入る字数を15%少なめに見て、最後に1行分の余白（2026-11-28 依頼者「特記事項利用者の下部がエクセルだと切れる問題が解決しない」。
+  // 英数字のかたまり（8:00〜9:30 など）は途中で折り返せず早めに次の行へ送られる・印刷で小さくすると文字が相対的に大きく出る、などで見積りより行が増える）
+  const chars = Math.max(1, Math.floor(((7 * w - 8) / (size * 4 / 3)) * (safe ? 0.85 : 1)) - 1);
   const lines = noWrap ? String(txt).split("\n").length : String(txt).split("\n").reduce((a, l) => a + Math.max(1, Math.ceil(dispW(l) / chars)), 0);
-  return lines * size * 1.75 + 4;   // 游ゴシックは1行に文字の大きさの約1.7倍の高さが要る（以前の見積りは約1.54倍で、下が切れていた）
+  return (lines + (safe ? 1 : 0)) * size * 1.75 + 4;   // 游ゴシックは1行に文字の大きさの約1.7倍の高さが要る（以前の見積りは約1.54倍で、下が切れていた）
 }
 
 async function exportExcel(master, sheet, date, xo) {
